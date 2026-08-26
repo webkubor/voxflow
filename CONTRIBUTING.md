@@ -13,8 +13,8 @@ Thanks for your interest in contributing!
 ## Development Setup
 
 ```bash
-git clone https://github.com/webkubor/voice-editor.git
-cd voice-editor
+git clone https://github.com/webkubor/voxcraft.git
+cd voxcraft
 # Follow the Quick Start in README
 ```
 

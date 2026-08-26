@@ -1,6 +1,6 @@
-![logo](https://cdn.jsdelivr.net/gh/webkubor/picx-images-hosting@master/blog/projects/voice-editor/cs-token4ai-1784193620540717000.png)
+![logo](https://cdn.jsdelivr.net/gh/webkubor/picx-images-hosting@master/blog/projects/voxcraft/cs-token4ai-1784193620540717000.png)
 
-![banner](https://cdn.jsdelivr.net/gh/webkubor/picx-images-hosting@master/blog/projects/voice-editor-banner/cs-token4ai-1784198005604575000.png)
+![banner](https://cdn.jsdelivr.net/gh/webkubor/picx-images-hosting@master/blog/projects/voxcraft-banner/cs-token4ai-1784198005604575000.png)
 
 # VoxCraft 声坊
 
@@ -27,8 +27,8 @@
 ## 一分钟装好
 
 ```bash
-git clone https://github.com/webkubor/voice-editor.git
-cd voice-editor
+git clone https://github.com/webkubor/voxcraft.git
+cd voxcraft
 chmod +x install.sh && ./install.sh
 source .venv/bin/activate
 voice --help

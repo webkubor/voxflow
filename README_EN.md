@@ -24,8 +24,8 @@ VoxCraft is a local-first wrapper around **Qwen3-TTS**. The goal is simple: inst
 ## Quick Start
 
 ```bash
-git clone https://github.com/webkubor/voice-editor.git
-cd voice-editor
+git clone https://github.com/webkubor/voxcraft.git
+cd voxcraft
 chmod +x install.sh
 ./install.sh
 source .venv/bin/activate
@@ -35,8 +35,8 @@ voice --help
 ## Minimal agent bootstrap
 
 ```bash
-git clone https://github.com/webkubor/voice-editor.git
-cd voice-editor
+git clone https://github.com/webkubor/voxcraft.git
+cd voxcraft
 ./install.sh
 source .venv/bin/activate
 voice --help
@@ -65,8 +65,6 @@ python main.py dialogue
 
 ### Phase 1: Rename and cleanup
 
-- [x] Rename repository to `voice-editor`
-- [x] Rename Python package to `voice-editor`
 - [x] Rename the main CLI entry to `voice`
 - [x] Rewrite README for beginners and agents
 
