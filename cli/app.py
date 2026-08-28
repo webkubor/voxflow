@@ -28,10 +28,10 @@ def web(
 ):
     """启动 Web UI（本地浏览器操作）"""
     import uvicorn
-    typer.echo(typer.style("=" * 50, fg=typer.colors.GOLD1))
-    typer.echo(typer.style("  VoxCraft 声坊 Web UI", fg=typer.colors.GOLD1, bold=True))
+    typer.echo(typer.style("=" * 50, fg=typer.colors.BRIGHT_YELLOW))
+    typer.echo(typer.style("  VoxCraft 声坊 Web UI", fg=typer.colors.BRIGHT_YELLOW, bold=True))
     typer.echo(typer.style(f"  http://localhost:{port}", fg=typer.colors.CYAN))
-    typer.echo(typer.style("=" * 50, fg=typer.colors.GOLD1))
+    typer.echo(typer.style("=" * 50, fg=typer.colors.BRIGHT_YELLOW))
     uvicorn.run("web.app:app", host=host, port=port, reload=False)
 
 
