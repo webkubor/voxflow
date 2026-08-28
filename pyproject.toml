@@ -31,6 +31,11 @@ dependencies = [
   "onnxruntime",
   "einops",
   "pydub",
+  # Python 3.13 起标准库 audioop 被移除（PEP 594），而 pydub 仍 import 它。
+  # 不声明这条，3.13+ 上装完依赖后 `voice doctor` 第一步就崩在
+  # `ModuleNotFoundError: No module named 'pyaudioop'`，看起来像 pydub 装坏了。
+  # audioop-lts 是官方推荐的替代实现，只在需要的版本上装。
+  "audioop-lts; python_version >= '3.13'",
   "typer>=0.12",
   "rich>=13.0",
   "openai>=1.0",
