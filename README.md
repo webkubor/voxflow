@@ -1,30 +1,64 @@
-![logo](https://cdn.jsdelivr.net/gh/webkubor/picx-images-hosting@master/blog/projects/voxcraft/cs-token4ai-1784193620540717000.png)
+<p align="center">
+  <img src="assets/branding/logo-icon.png" width="132" alt="VoxCraft 声坊" />
+</p>
 
-![banner](https://cdn.jsdelivr.net/gh/webkubor/picx-images-hosting@master/blog/projects/voxcraft-banner/cs-token4ai-1784198005604575000.png)
-
-# VoxCraft 声坊
-
-> 本地运行的中文语音克隆 + 音色设计工具。  
-> 基于 **Qwen3-TTS**，一条命令出音频，无需联网、无需 API Key。  
-> 支持中文配音、声音克隆、文字设计新音色、多角色对话。给人类用，也给 AI / Agent 直接调用。
+<h1 align="center">VoxCraft 声坊</h1>
 
 <p align="center">
-  <img src="assets/branding/logo-icon.png" width="160" alt="VoxCraft 声坊 logo"/>
+  <img src="https://img.shields.io/github/license/webkubor/voxcraft?style=flat-square&color=92a8b3" alt="License" />
+  <img src="https://img.shields.io/github/stars/webkubor/voxcraft?style=flat-square&color=cc584d" alt="Stars" />
+  <img src="https://img.shields.io/badge/Python-3.10%2B-5fa8b2?style=flat-square" alt="Python 3.10+" />
+  <img src="https://img.shields.io/badge/Qwen3--TTS-1.7B-A873C4?style=flat-square" alt="Qwen3-TTS 1.7B" />
+  <img src="https://img.shields.io/badge/%E9%9F%B3%E9%A2%91-%E4%B8%8D%E5%87%BA%E6%9C%AC%E6%9C%BA-4c9a6b?style=flat-square" alt="音频不出本机" />
+  <img src="https://img.shields.io/badge/Platform-macOS%20Apple%20Silicon-1f1f1f?style=flat-square" alt="macOS Apple Silicon" />
 </p>
 
 <p align="center">
-  <img src="assets/branding/social-banner.png" width="100%" alt="VoxCraft 声坊 — AI Voice Editor for Creators"/>
+  <b>本地运行的中文语音克隆 + 音色设计工具台。</b>
+  <br />
+  一条命令出音频，<b>不联网、不要 API Key、音频永不上传</b>。
+  <br />
+  给人用，也给 AI / Agent 直接调用。
 </p>
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-green.svg)](pyproject.toml)
-[![Platform](https://img.shields.io/badge/Platform-macOS%20Apple%20Silicon-black.svg)](pyproject.toml)
+<p align="center">
+  <a href="#-一分钟装好"><strong>装</strong></a> ·
+  <a href="#-和其它方案的区别"><strong>差异对比</strong></a> ·
+  <a href="#-三种核心模式"><strong>核心模式</strong></a> ·
+  <a href="#-给-ai--agent-调用"><strong>Agent 调用</strong></a> ·
+  <a href="README_EN.md"><strong>English</strong></a>
+</p>
 
-[English README](README_EN.md) · 姊妹项目：[asr-studio](https://github.com/webkubor/asr-studio)（语音转文字）
+<p align="center">
+  <img src="assets/screenshots/web-ui-main.png" width="860" alt="VoxCraft Web UI" />
+</p>
 
 ---
 
-## 一分钟装好
+## ⚖️ 和其它方案的区别
+
+| | ElevenLabs | 云 TTS（阿里/腾讯/Azure） | 剪映配音 | **VoxCraft** |
+|---|:---:|:---:|:---:|:---:|
+| 音频上传服务器 | ✅ 要 | ✅ 要 | ✅ 要 | ❌ **全程本地** |
+| 声音克隆 | ✅ | ⚠️ 多需企业认证 | ❌ | ✅ 一段样音即可 |
+| **文字描述造音色** | ⚠️ 有限 | ❌ | ❌ | ✅ **不需要任何参考音频** |
+| 按量计费 | ✅ | ✅ | 免费但限平台内 | ❌ **一次装好，之后免费** |
+| 可脚本化 / Agent 调用 | ✅ API | ✅ API | ❌ | ✅ CLI + HTTP API |
+| 中文表现 | 良 | 优 | 优 | 优（Qwen3-TTS） |
+| 前置成本 | 注册 + 付费 | 注册 + 实名 | 装客户端 | **下 4.2GB 模型** |
+
+**最实在的差异是第一行**：克隆真人声音时，样音要不要交给别人的服务器。
+做 IP 角色音、给客户配音、处理未公开的素材时，这条往往不是偏好问题而是合规问题。
+
+**第三行是能力上的差异**：VoiceDesign 能用「低沉沙哑的中年男声」这样一句话凭空造出音色，
+不需要任何参考音频 —— 想要一个不存在的人的声音时，只有这条路。
+
+> 换个角度：如果你只是偶尔配几句、不在乎音频上传，云服务更省事。
+> VoxCraft 的价值在**批量**（不计次收费）与**私密**（音频不出本机）这两件事上。
+
+---
+
+## 📦 一分钟装好
 
 ```bash
 git clone https://github.com/webkubor/voxcraft.git
@@ -38,7 +72,7 @@ voice --help
 
 ---
 
-## 真实效果
+## ⚡ 真实效果
 
 ```bash
 # 克隆已有角色音色生成台词
@@ -60,7 +94,7 @@ voice preset run 武侠_老朽_江湖啊
 
 ---
 
-## 当前能力
+## 🧩 当前能力
 
 | 功能 | 状态 | 命令 / 入口 |
 |:---|:---:|:---|
@@ -80,7 +114,7 @@ voice preset run 武侠_老朽_江湖啊
 
 ---
 
-## Web UI
+## 🖥 Web UI
 
 ```bash
 voice web
@@ -95,7 +129,7 @@ voice web
   <img src="assets/screenshots/web-ui-voice-design.png" width="100%" alt="音色设计 + 预设配方"/>
 </p>
 
-### 三种核心模式
+### 🎛 三种核心模式
 
 | 模式 | 作用 | 典型流程 |
 |:---|:---|:---|
@@ -132,7 +166,7 @@ voice ai-polish "霜叶红于二月花" --style "更激昂"
 
 ---
 
-## 为什么选 Qwen3-TTS
+## 🧠 为什么选 Qwen3-TTS
 
 - 中文 52 种方言支持（普通话 / 粤语 / 闽南语 / 吴语…）
 - Apple Silicon MPS 加速，M 系芯片本地实时推理
@@ -140,10 +174,10 @@ voice ai-polish "霜叶红于二月花" --style "更激昂"
 
 ---
 
-## 项目结构
+## 📁 项目结构
 
 ```
-voice-editor/
+voxcraft/
 ├── cli/            # CLI 入口与子命令
 ├── core/           # 语音引擎 / 模式调度 / 音频处理
 ├── web/            # Web UI（FastAPI + 前端单页）
@@ -155,7 +189,7 @@ voice-editor/
 
 ---
 
-## 给 AI / Agent 调用
+## 🤖 给 AI / Agent 调用
 
 ### 无交互安装
 
@@ -192,7 +226,7 @@ Agent 调用前请先确认 `source .venv/bin/activate` 已执行，或使用 `.
 
 ---
 
-## 路线图
+## 🗺 路线图
 
 - [x] Phase 1 — 命名统一、README 清晰化
 - [x] Phase 2a — CLI 稳定（clone / design / voice list / preset）
@@ -203,7 +237,7 @@ Agent 调用前请先确认 `source .venv/bin/activate` 已执行，或使用 `.
 
 ---
 
-## 适合谁
+## 👤 适合谁
 
 - 本地跑中文配音的创作者（有声书 / 短剧 / 游戏 NPC）
 - 想把配音流程接给 AI 助手的开发者
@@ -211,7 +245,7 @@ Agent 调用前请先确认 `source .venv/bin/activate` 已执行，或使用 `.
 
 ---
 
-## License
+## 📄 License
 
 Apache-2.0 · 基于 Qwen3-TTS 二次开发
 
