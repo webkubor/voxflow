@@ -49,9 +49,13 @@ voice clone narrator "霜叶红于二月花，山色空蒙雨亦奇"
 voice design xiao_jing "这是一段建模短句" --tone "温柔、清晰、偏少女"
 # → voice 'xiao_jing' saved to personas.json
 
-# 多角色对白
-voice dialogue --script scripts/chapter_01.txt
-# → out/dialogue_20260421_143502/  (5 files merged)
+# 多角色对白（配置驱动，暂无 CLI 子命令）
+python main.py dialogue          # 读 configs/dialogue.json 里的 lines
+# → out/ 下按行生成并合并
+
+# 跑现成的武侠预设
+voice preset list                # 看 configs/presets/ 里有哪些
+voice preset run 武侠_老朽_江湖啊
 ```
 
 ---
@@ -62,7 +66,8 @@ voice dialogue --script scripts/chapter_01.txt
 |:---|:---:|:---|
 | 声音克隆（角色复用） | ✅ | `voice clone <persona> "台词"` / Web UI「克隆合成」 |
 | 音色设计（文字描述） | ✅ | `voice design <name> "短句" --tone` / Web UI「音色设计」 |
-| 多角色对话生成 | ✅ | `voice dialogue --script` |
+| 多角色对话生成 | ⚠️ | 功能已实现（`core/modes/dialogue.py`），但**没有 CLI 子命令**；入口是 `python main.py dialogue`，读 `configs/dialogue.json` |
+| 预设任务 | ✅ | `voice preset list` / `voice preset run <名>` |
 | 音色列表管理 | ✅ | `voice voice list` |
 | **Web UI** | ✅ | `voice web` → http://localhost:8866 |
 | 文案库（持久化常用台词） | ✅ | Web UI「克隆合成」文案 chip 条 |
@@ -190,7 +195,8 @@ Agent 调用前请先确认 `source .venv/bin/activate` 已执行，或使用 `.
 ## 路线图
 
 - [x] Phase 1 — 命名统一、README 清晰化
-- [x] Phase 2a — CLI 稳定（clone / design / dialogue / voice list）
+- [x] Phase 2a — CLI 稳定（clone / design / voice list / preset）
+- [ ] dialogue 补 CLI 子命令（功能已在 `core/modes/dialogue.py`，目前只能 `python main.py dialogue`）
 - [x] Phase 2b — `voice doctor` 环境自检
 - [x] Phase 3 — WebUI MVP（上传音频 / 试听 / 下载）
 - [x] Phase 4 — Agent 无交互安装模式
