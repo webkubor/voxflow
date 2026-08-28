@@ -398,6 +398,11 @@ app.add_middleware(
 
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
+# index.html 里的 logo 走 /assets/branding/...，但此前只挂了 /static，
+# 于是首页左上角 logo 一直是碎图（README 里的截图也就跟着碎）。
+_ASSETS_DIR = Path(__file__).parent.parent / "assets"
+if _ASSETS_DIR.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(_ASSETS_DIR)), name="assets")
 
 
 # ── 页面路由 ──────────────────────────────────────────────
