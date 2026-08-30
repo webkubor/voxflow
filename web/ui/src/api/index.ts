@@ -120,7 +120,10 @@ export const api = {
 
   // ── 文案 ──
   scripts: () => get<{ scripts: unknown[] }>('scripts'),
-  saveScript: (body: unknown) => post<{ ok: boolean }>('scripts', body),
+  // 后端 ScriptSaveRequest 的字段是 content/title（title 可空）。
+  // 之前这里不收形参、字段发成 text，请求体对不上后端，422 被吞。
+  saveScript: (p: { content: string; title?: string }) =>
+    post<{ ok: boolean; scripts: unknown[] }>('scripts', p),
   deleteScript: (id: string) => del<{ ok: boolean }>(`scripts/${id}`),
   aiGenerate: (prompt: string) => post<{ text: string }>('llm/generate', { prompt }),
   aiPolish: (text: string) => post<{ text: string }>('llm/polish', { text }),

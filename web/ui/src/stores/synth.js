@@ -33,10 +33,14 @@ export const useSynthStore = defineStore('synth', () => {
     cloneForm.text = script.content || '';
   };
 
-  const saveScript = async () => {
+  const saveScript = async (text) => {
     error.value = '';
     try {
-      const data = await api.saveScript({ text: scriptText });
+      // 后端 ScriptSaveRequest 要 {title, content}（title 可空，后端用 content
+      // 前 20 字兜底）。之前这里引用不存在的 scriptText 变量、字段又发成 text
+      // —— 请求体是 {text: undefined}，后端 422，而调用方没 await，成功 toast
+      // 照弹，草稿其实从来没存上过。
+      const data = await api.saveScript({ content: text });
       savedScripts.value = data.scripts || [];
       return data;
     } catch (cause) {
@@ -62,7 +66,10 @@ export const useSynthStore = defineStore('synth', () => {
     error.value = '';
     tasks.showLoading(loadingText);
     try {
-      const data = await (url.includes('design') ? api.design(payload) : url.includes('dialogue') ? api.dialogue(payload) : api.clone(payload));
+      // 参数名是 body —— 之前写成 payload（不存在的变量），克隆/设计/剧本
+      // 任何一路点提交都是 ReferenceError，任务根本不会建，页面还没任何提示。
+      const data = await (url.includes('design') ? api.design(body)
+        : url.includes('dialogue') ? api.dialogue(body) : api.clone(body));
       tasks.taskPanelCollapsed = false;
       tasks.showToast('任务已提交，请在右下角任务队列中关注进度', 'success');
       return data;

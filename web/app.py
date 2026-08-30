@@ -421,7 +421,10 @@ class PersonaAddRequest(BaseModel):
 
 
 class ScriptSaveRequest(BaseModel):
-    title: str
+    # title 可空 —— 下方 save_script 里 `req.title.strip() or req.content[:20]`
+    # 就是为「没填标题」兜底的，但模型里标 required 会让前端少传 title 时
+    # 直接 422，兜底逻辑永远走不到。
+    title: str = ""
     content: str
 
 

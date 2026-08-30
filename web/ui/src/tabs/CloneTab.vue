@@ -130,6 +130,7 @@
 <script setup>
 import { reactive, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
+import { toMessage } from '../api';
 import AIHelpSection from '../components/AIHelpSection.vue';
 
 import { useCapabilitiesStore } from '../stores/capabilities';
@@ -193,13 +194,18 @@ const handleSynthesize = () => {
   });
 };
 
-const saveScript = () => {
+const saveScript = async () => {
   if (!cloneForm.text.trim()) {
     tasksStore.showToast('文案内容为空，无法保存', 'warning');
     return;
   }
-  synthStore.saveScript(cloneForm.text);
-  tasksStore.showToast('已存入草稿箱', 'success');
+  try {
+    await synthStore.saveScript(cloneForm.text);
+    tasksStore.showToast('已存入草稿箱', 'success');
+  } catch (cause) {
+    // 之前不 await 直接弹成功 —— 保存失败也显示「已存入」，用户以为存上了
+    tasksStore.showToast(`保存失败：${await toMessage(cause)}`, 'error');
+  }
 };
 
 const loadScript = (script) => {
