@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "武侠-老朽-威严",
+  "commit_to_temp": false,
+  "text": "从今日起，你便是本派弟子。门规第三条，欺师灭祖者，杀无赦。",
+  "tone": "六十来岁掌门/宗师，声音低沉浑厚如洪钟，语速不疾不徐但字字千钧，尾音沉稳有力，气息绵长威严，自带震慑气场",
+  "emotion": "威严，肃穆，不容置疑，震慑",
+  "output_filename": "武侠_老朽-威严_门派规矩.wav"
+}

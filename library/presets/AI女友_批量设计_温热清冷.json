@@ -1,0 +1,36 @@
+{
+  "type": "design_batch",
+  "description": "AI女友扩展音色：温热治愈 + 清冷系（默认仅试听）",
+  "items": [
+    {
+      "name": "温热奶感·棠梨",
+      "config": "presets/AI女友_温热奶感_棠梨.json",
+      "enabled": true
+    },
+    {
+      "name": "拥抱治愈·南汐",
+      "config": "presets/AI女友_拥抱治愈_南汐_v1.json",
+      "enabled": true
+    },
+    {
+      "name": "晨光安抚·初霁",
+      "config": "presets/AI女友_晨光安抚_初霁.json",
+      "enabled": true
+    },
+    {
+      "name": "清冷月色·疏音",
+      "config": "presets/AI女友_清冷月色_疏音.json",
+      "enabled": true
+    },
+    {
+      "name": "雪夜低语·霁雪",
+      "config": "presets/AI女友_雪夜低语_霁雪_v1.json",
+      "enabled": true
+    },
+    {
+      "name": "冰川理性·凌川",
+      "config": "presets/AI女友_冰川理性_凌川_v1.json",
+      "enabled": true
+    }
+  ]
+}

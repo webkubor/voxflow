@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "雾岚_冷静御姐_v1",
+  "commit_to_temp": false,
+  "text": "别急，我在，你会稳住的。",
+  "tone": "成熟女声，偏低沉顺滑，语气克制冷静，节奏稳定，权威感与安全感并存，开头直接入字，禁止前置杂音。",
+  "emotion": "冷静，可靠，保护欲，安定",
+  "output_filename": "AI女友_冷静御姐_雾岚_试听_v1.wav"
+}

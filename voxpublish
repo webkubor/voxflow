@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # voxpublish — 批量发布打包工具（抖音/汽水音乐内容分发平台）
 #
-# 把 voxcraft/Suno 产出的歌曲，整理成平台要求的发布物料结构 + 自动填 Excel 引入模板。
+# 把 voxflow/Suno 产出的歌曲，整理成平台要求的发布物料结构 + 自动填 Excel 引入模板。
 # 平台流程（见用户提供的发布说明）：
 #   1. 申请 SFTP 账号（管理员分配）
 #   2. 上传物料到 /Audio/年月日 文件夹（音源 wav/mp3/m4a + 歌词 txt + 封面 jpg/png）
@@ -28,8 +28,8 @@
 
 set -euo pipefail
 
-VOXCRAFT_DIR="${VOXCRAFT_DIR:-$HOME/dev/github/app/voxcraft}"
-PUBLISH_ROOT="$VOXCRAFT_DIR/out/publish"
+VOXFLOW_DIR="${VOXFLOW_DIR:-$HOME/dev/github/app/voxflow}"
+PUBLISH_ROOT="$VOXFLOW_DIR/out/publish"
 TEMPLATE="/Users/webkubor/Downloads/batch_import_template.xlsx"
 SUNO_BIN="${SUNO_BIN:-}"
 if [ -z "$SUNO_BIN" ]; then
@@ -140,7 +140,7 @@ print(d.get('data',{}).get('image_large_url') or d.get('data',{}).get('image_url
   if [ -n "$cover_url" ]; then
     if curl -s -o "$song_root/Cover/封面.jpg" "$cover_url" 2>/dev/null; then
       # 放大到 1440x1440（平台要求）
-      (cd "$VOXCRAFT_DIR" && source .venv/bin/activate 2>/dev/null && python3 -c "
+      (cd "$VOXFLOW_DIR" && source .venv/bin/activate 2>/dev/null && python3 -c "
 from PIL import Image
 p = '$song_root/Cover/封面.jpg'
 img = Image.open(p).convert('RGB')
@@ -167,7 +167,7 @@ cmd_excel() {
   local song_root="$PUBLISH_ROOT/$date_dir"
   [ -d "$song_root" ] || die "目录不存在: $song_root"
 
-  cd "$VOXCRAFT_DIR" && source .venv/bin/activate 2>/dev/null || true
+  cd "$VOXFLOW_DIR" && source .venv/bin/activate 2>/dev/null || true
   python3 - "$song_root" "$TEMPLATE" "$PUBLISH_ROOT/$date_dir.xlsx" "$ARTIST_NAME" "$RELEASE_TYPE" "$MUSIC_TYPE" "$PLATFORMS" "$date_dir" <<'PYEOF'
 import sys, json, os, glob
 import openpyxl

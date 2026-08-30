@@ -9,17 +9,17 @@
     - pip install openai
 
 配置:
-    环境变量 VOXCRAFT_LLM_BASE_URL (默认 http://localhost:3001/v1)
-    环境变量 VOXCRAFT_LLM_API_KEY  (默认 freellmapi-local)
-    环境变量 VOXCRAFT_LLM_MODEL    (默认 auto, 让路由器选模型)
+    环境变量 VOXFLOW_LLM_BASE_URL (默认 http://localhost:3001/v1)
+    环境变量 VOXFLOW_LLM_API_KEY  (默认 freellmapi-local)
+    环境变量 VOXFLOW_LLM_MODEL    (默认 auto, 让路由器选模型)
 """
 
 import os
 from typing import Optional
 
-_default_base = os.environ.get("VOXCRAFT_LLM_BASE_URL", "http://localhost:3001/v1")
-_default_key = os.environ.get("VOXCRAFT_LLM_API_KEY", "freellmapi-local")
-_default_model = os.environ.get("VOXCRAFT_LLM_MODEL", "auto")
+_default_base = os.environ.get("VOXFLOW_LLM_BASE_URL", "http://localhost:3001/v1")
+_default_key = os.environ.get("VOXFLOW_LLM_API_KEY", "freellmapi-local")
+_default_model = os.environ.get("VOXFLOW_LLM_MODEL", "auto")
 
 # ── System Prompts ──────────────────────────────────────────
 

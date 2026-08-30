@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "武侠-老朽-疯癫",
+  "commit_to_temp": false,
+  "text": "哈哈哈哈！好酒！小子，看你骨骼惊奇，老夫教你一套醉拳如何？",
+  "tone": "六七十岁疯癫老者，声音沙哑忽高忽低，语速时快时慢毫无规律，常带怪笑或突兀停顿，气息凌乱，透着一股不按常理出牌的癫狂",
+  "emotion": "狂放，不羁，疯癫，随性",
+  "output_filename": "武侠_老朽-疯癫_好酒.wav"
+}

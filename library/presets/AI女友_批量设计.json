@@ -1,0 +1,31 @@
+{
+  "type": "design_batch",
+  "description": "AI女友热门风格批量设计（默认仅试听，不落库）",
+  "items": [
+    {
+      "name": "温柔治愈·小晚",
+      "config": "presets/AI女友_温柔治愈_小晚.json",
+      "enabled": true
+    },
+    {
+      "name": "暧昧撩人·星栀",
+      "config": "presets/AI女友_暧昧撩人_星栀.json",
+      "enabled": true
+    },
+    {
+      "name": "元气阳光·朝朝",
+      "config": "presets/AI女友_元气阳光_朝朝.json",
+      "enabled": true
+    },
+    {
+      "name": "冷静御姐·雾岚",
+      "config": "presets/AI女友_冷静御姐_雾岚_v1.json",
+      "enabled": true
+    },
+    {
+      "name": "午夜耳语·夜棠",
+      "config": "presets/AI女友_午夜耳语_夜棠.json",
+      "enabled": true
+    }
+  ]
+}

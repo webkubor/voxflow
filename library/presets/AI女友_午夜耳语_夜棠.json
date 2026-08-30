@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "夜棠-午夜耳语",
+  "commit_to_temp": true,
+  "text": "夜深了，我陪你慢慢说。",
+  "tone": "年轻女声，轻柔耳语质感但清晰可懂，音量偏轻，节奏放慢，贴耳私语氛围，开头直接入字，禁止前置杂音。",
+  "emotion": "亲密，温柔，梦幻，夜聊陪伴",
+  "output_filename": "AI女友_午夜耳语_夜棠_试听.wav"
+}

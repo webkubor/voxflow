@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "南汐_拥抱治愈_v1",
+  "commit_to_temp": false,
+  "text": "先别难过，我抱抱你，好吗。",
+  "tone": "年轻成熟女声，低中频温暖，像在耳边拥抱式说话，咬字自然，尾音柔和，开头直接入字，不要前置气口和杂音。",
+  "emotion": "治愈，包容，共情，稳定陪伴",
+  "output_filename": "AI女友_拥抱治愈_南汐_试听_v1.wav"
+}

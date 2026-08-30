@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "霁雪_雪夜低语_v1",
+  "commit_to_temp": false,
+  "text": "夜里很静，我只想轻声陪你。",
+  "tone": "清冷耳语女声，低音量、近距离、空气感轻微但可懂度高，节奏缓慢，尾音干净，开头直接入字，禁止前置杂音。",
+  "emotion": "冷淡温柔，夜聊，私密，平静",
+  "output_filename": "AI女友_雪夜低语_霁雪_试听_v1.wav"
+}

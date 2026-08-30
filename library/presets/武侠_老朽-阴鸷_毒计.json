@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "武侠-老朽-阴鸷",
+  "commit_to_temp": false,
+  "text": "嘿嘿嘿……这毒药，三日之后发作，到时候，整个武林都在老夫掌心之中……",
+  "tone": "六七十岁阴狠老者，声音低沉嘶哑如砂纸摩擦，语速缓慢但每个字都像是从牙缝里挤出来，尾音阴冷下沉，气息阴森，透着算计与杀意",
+  "emotion": "阴狠，毒辣，得意，算计",
+  "output_filename": "武侠_老朽-阴鸷_毒计.wav"
+}

@@ -43,7 +43,7 @@ for arg in "$@"; do
   esac
 done
 
-echo "🎙️  VoxCraft 声坊 安装向导 🎙️"
+echo "🎙️  VoxFlow 声流 安装向导 🎙️"
 echo "=========================================================================="
 if [ "$NON_INTERACTIVE" = true ]; then
   echo "[非交互模式] 跳过所有确认，全自动安装"
@@ -145,6 +145,21 @@ mkdir -p assets/temp assets/reference_audio out configs/presets
 echo ""
 echo "→ 运行环境自检..."
 python -m cli.app doctor || true
+
+# ── 9. 前端构建 ──
+if command -v npm &> /dev/null; then
+  echo ""
+  echo "→ 检测到 Node.js/npm，开始构建前端 Web UI..."
+  cd web/ui
+  npm install
+  npm run build
+  cd ../..
+  echo "✓ 前端 UI 构建完成"
+else
+  echo ""
+  echo "⚠️  未检测到 Node.js / npm，跳过前端 UI 构建。"
+  echo "   若后续需要修改或重新生成前端，请先安装 Node.js，并在 web/ui 目录下执行 npm install && npm run build"
+fi
 
 # ── 完成 ──
 echo ""

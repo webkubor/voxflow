@@ -1,0 +1,42 @@
+{
+  "type": "voice_version_index",
+  "series": "小烛",
+  "rule": "名字-风格",
+  "items": [
+    {
+      "name": "小烛-柔糯软妹",
+      "preview": "out/小烛-柔糯软妹_试听.wav",
+      "committed_to_temp": true,
+      "temp_ref": "assets/temp/当前参考_小烛-柔糯软妹.wav",
+      "generate_config": "configs/generated/小烛-柔糯软妹_generate.json"
+    },
+    {
+      "name": "小烛-傲娇大小姐",
+      "preview": "out/小烛-傲娇大小姐_试听.wav",
+      "committed_to_temp": true,
+      "temp_ref": "assets/temp/当前参考_小烛-傲娇大小姐.wav",
+      "generate_config": "configs/generated/小烛-傲娇大小姐_generate.json"
+    },
+    {
+      "name": "小烛-元气小太阳",
+      "preview": "out/小烛-元气小太阳_试听.wav",
+      "committed_to_temp": true,
+      "temp_ref": "assets/temp/当前参考_小烛-元气小太阳.wav",
+      "generate_config": "configs/generated/小烛-元气小太阳_generate.json"
+    },
+    {
+      "name": "小烛-腹黑小恶魔",
+      "preview": "out/小烛-腹黑小恶魔_试听.wav",
+      "committed_to_temp": true,
+      "temp_ref": "assets/temp/当前参考_小烛-腹黑小恶魔.wav",
+      "generate_config": "configs/generated/小烛-腹黑小恶魔_generate.json"
+    },
+    {
+      "name": "小烛-温婉白月光",
+      "preview": "out/小烛-温婉白月光_试听.wav",
+      "committed_to_temp": true,
+      "temp_ref": "assets/temp/当前参考_小烛-温婉白月光.wav",
+      "generate_config": "configs/generated/小烛-温婉白月光_generate.json"
+    }
+  ]
+}

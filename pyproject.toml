@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "voice-editor"
-version = "0.2.0"
-description = "VoxCraft 声坊 — 本地中文 TTS 工作台，面向人类、AI 与 agent。"
+name = "voxflow"
+version = "0.3.0"
+description = "VoxFlow 声流 — 从 AI 声音到 AI 音乐再到自动发布的一条流水线：本地克隆音色 → Suno 出歌 → 整理物料上架各平台。"
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
@@ -42,8 +42,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/webkubor/voxcraft"
-Repository = "https://github.com/webkubor/voxcraft"
+Homepage = "https://github.com/webkubor/voxflow"
+Repository = "https://github.com/webkubor/voxflow"
 
 [project.scripts]
 voice = "cli.app:app"

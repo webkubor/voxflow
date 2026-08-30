@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "小晚-温柔治愈",
+  "commit_to_temp": true,
+  "text": "你先休息，我一直在。",
+  "tone": "年轻女声，贴耳近讲，音色温暖细腻，语速偏慢，开头直接入字，不要前置气口、笑声、喘息或杂音。",
+  "emotion": "温柔，安抚，陪伴，安心",
+  "output_filename": "AI女友_温柔治愈_小晚_试听.wav"
+}

@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "初霁-晨光安抚",
+  "commit_to_temp": true,
+  "text": "早安，今天也会是很好的一天。",
+  "tone": "清亮温柔女声，晨光感，发音清晰通透但不尖锐，节奏轻缓，带希望感，开头直接入字，禁止前置杂音。",
+  "emotion": "温暖，鼓励，安心，轻愉悦",
+  "output_filename": "AI女友_晨光安抚_初霁_试听.wav"
+}

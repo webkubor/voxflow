@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "武侠-稚子-倔强",
+  "commit_to_temp": false,
+  "text": "你们打我吧，我不会哭的，也不会求饶。",
+  "tone": "十来岁少年，声音略带沙哑的童音，语速不快但字字咬得很重，尾音短促有力，透着不服输的硬气",
+  "emotion": "倔强，硬气，不屈，逞强",
+  "output_filename": "武侠_稚子-倔强_我不哭.wav"
+}

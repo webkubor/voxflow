@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "小璃-温婉闺秀",
+  "commit_to_temp": true,
+  "text": "这位少侠，请问前方可有客栈？我和爹爹走散了……",
+  "tone": "七八岁女童，声音软糯甜美，语速轻柔舒缓，咬字清晰秀气，尾音自然收束带一点撒娇感，大家闺秀气质",
+  "emotion": "礼貌，温婉，略带慌张，乖巧",
+  "output_filename": "小璃_温婉闺秀_试听.wav"
+}

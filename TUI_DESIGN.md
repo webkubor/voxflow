@@ -1,6 +1,6 @@
-# TUI 设计文档 — VoxCraft 声坊
+# TUI 设计文档 — VoxFlow 声流
 
-> 本文档描述将VoxCraft 声坊改造为 TUI（终端用户界面）CLI 服务的完整设计方案。
+> 本文档描述将VoxFlow 声流改造为 TUI（终端用户界面）CLI 服务的完整设计方案。
 > 目标：在现有 `core/` 后端不变的前提下，用 `typer` + `rich` + `textual` 构建一套
 > 本地音色素材管理 + TTS 生产工作流的终端交互系统。
 >

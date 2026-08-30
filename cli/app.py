@@ -8,7 +8,7 @@ from cli.commands.ai import ai_script, ai_polish
 
 app = typer.Typer(
     name="voice",
-    help="[bold cyan]VoxCraft 声坊[/bold cyan] — 面向人类、AI 与 agent 的本地语音工作台",
+    help="[bold cyan]VoxFlow 声流[/bold cyan] — 面向人类、AI 与 agent 的本地语音工作台",
     add_completion=False,
 )
 app.add_typer(voice_app, name="voice")
@@ -29,7 +29,7 @@ def web(
     """启动 Web UI（本地浏览器操作）"""
     import uvicorn
     typer.echo(typer.style("=" * 50, fg=typer.colors.BRIGHT_YELLOW))
-    typer.echo(typer.style("  VoxCraft 声坊 Web UI", fg=typer.colors.BRIGHT_YELLOW, bold=True))
+    typer.echo(typer.style("  VoxFlow 声流 Web UI", fg=typer.colors.BRIGHT_YELLOW, bold=True))
     typer.echo(typer.style(f"  http://localhost:{port}", fg=typer.colors.CYAN))
     typer.echo(typer.style("=" * 50, fg=typer.colors.BRIGHT_YELLOW))
     uvicorn.run("web.app:app", host=host, port=port, reload=False)
@@ -38,7 +38,7 @@ def web(
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context):
     """
-    voice — VoxCraft 声坊
+    voice — VoxFlow 声流
 
     子命令组：
       voice      音色素材管理（list / add / preview / show / rm / import）

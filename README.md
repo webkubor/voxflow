@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="assets/branding/logo-icon.png" width="132" alt="VoxCraft 声坊" />
+  <img src="assets/branding/logo-icon.png" width="132" alt="VoxFlow 声流" />
 </p>
 
-<h1 align="center">VoxCraft 声坊</h1>
+<h1 align="center">VoxFlow 声流</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/github/license/webkubor/voxcraft?style=flat-square&color=92a8b3" alt="License" />
-  <img src="https://img.shields.io/github/stars/webkubor/voxcraft?style=flat-square&color=cc584d" alt="Stars" />
+  <img src="https://img.shields.io/github/license/webkubor/voxflow?style=flat-square&color=92a8b3" alt="License" />
+  <img src="https://img.shields.io/github/stars/webkubor/voxflow?style=flat-square&color=cc584d" alt="Stars" />
   <img src="https://img.shields.io/badge/Python-3.10%2B-5fa8b2?style=flat-square" alt="Python 3.10+" />
   <img src="https://img.shields.io/badge/Qwen3--TTS-1.7B-A873C4?style=flat-square" alt="Qwen3-TTS 1.7B" />
   <img src="https://img.shields.io/badge/%E9%9F%B3%E9%A2%91-%E4%B8%8D%E5%87%BA%E6%9C%AC%E6%9C%BA-4c9a6b?style=flat-square" alt="音频不出本机" />
@@ -30,14 +30,14 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/web-ui-main.png" width="860" alt="VoxCraft Web UI" />
+  <img src="assets/screenshots/web-ui-main.png" width="860" alt="VoxFlow Web UI" />
 </p>
 
 ---
 
 ## ⚖️ 和其它方案的区别
 
-| | ElevenLabs | 云 TTS（阿里/腾讯/Azure） | 剪映配音 | **VoxCraft** |
+| | ElevenLabs | 云 TTS（阿里/腾讯/Azure） | 剪映配音 | **VoxFlow** |
 |---|:---:|:---:|:---:|:---:|
 | 音频上传服务器 | ✅ 要 | ✅ 要 | ✅ 要 | ❌ **全程本地** |
 | 声音克隆 | ✅ | ⚠️ 多需企业认证 | ❌ | ✅ 一段样音即可 |
@@ -54,15 +54,15 @@
 不需要任何参考音频 —— 想要一个不存在的人的声音时，只有这条路。
 
 > 换个角度：如果你只是偶尔配几句、不在乎音频上传，云服务更省事。
-> VoxCraft 的价值在**批量**（不计次收费）与**私密**（音频不出本机）这两件事上。
+> VoxFlow 的价值在**批量**（不计次收费）与**私密**（音频不出本机）这两件事上。
 
 ---
 
 ## 📦 一分钟装好
 
 ```bash
-git clone https://github.com/webkubor/voxcraft.git
-cd voxcraft
+git clone https://github.com/webkubor/voxflow.git
+cd voxflow
 chmod +x install.sh && ./install.sh
 source .venv/bin/activate
 voice --help
@@ -147,7 +147,7 @@ voice web
 
 ### AI 文案助手（可选）
 
-VoxCraft 支持接入 [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) — 一个聚合 18 个免费 LLM 提供商的 OpenAI 兼容代理，实现 AI 文案生成与润色。
+VoxFlow 支持接入 [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) — 一个聚合 18 个免费 LLM 提供商的 OpenAI 兼容代理，实现 AI 文案生成与润色。
 
 ```bash
 # 1. 安装 FreeLLMAPI（Docker 一键启动）
@@ -155,7 +155,7 @@ curl -fsSL https://freellmapi.co/install.sh | bash
 
 # 2. 启动后访问 http://localhost:3001 添加免费 LLM API Key
 
-# 3. 在 VoxCraft 中使用
+# 3. 在 VoxFlow 中使用
 voice ai-script "写一段武侠旁白，讲剑客归隐山林" --words 200
 voice ai-polish "霜叶红于二月花" --style "更激昂"
 
@@ -177,7 +177,7 @@ voice ai-polish "霜叶红于二月花" --style "更激昂"
 ## 📁 项目结构
 
 ```
-voxcraft/
+voxflow/
 ├── cli/            # CLI 入口与子命令
 ├── core/           # 语音引擎 / 模式调度 / 音频处理
 ├── web/            # Web UI（FastAPI + 前端单页）

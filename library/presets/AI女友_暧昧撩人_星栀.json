@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "星栀-暧昧撩人",
+  "commit_to_temp": true,
+  "text": "你一说话，我就心动了。",
+  "tone": "年轻女声，柔甜磁性，轻微笑意但不过火，节奏轻快，贴耳亲密感明显，开头直接入字，禁止前置杂音。",
+  "emotion": "暧昧，俏皮，自信，轻挑",
+  "output_filename": "AI女友_暧昧撩人_星栀_试听.wav"
+}

@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "武侠-稚子-机灵",
+  "commit_to_temp": false,
+  "text": "嘿嘿，师父你教大师兄的时候，我都在窗外偷学会了！",
+  "tone": "八九岁男童，声音清脆灵动，语速偏快，咬字利落，尾音常带俏皮的上扬，偶尔轻笑，透着股鬼马精灵的劲儿",
+  "emotion": "得意，调皮，狡黠，卖乖",
+  "output_filename": "武侠_稚子-机灵_偷学武功.wav"
+}

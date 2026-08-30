@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "武侠-稚子",
+  "commit_to_temp": false,
+  "text": "江湖是什么？是很多人打架吗？",
+  "tone": "七八岁男童，声音稚嫩清亮，带有孩童特有的天真感，语速轻快自然，尾音微微上扬，咬字略带奶音但不粘腻，气息充沛有活力",
+  "emotion": "天真，好奇，懵懂，对未知世界的疑惑",
+  "output_filename": "武侠_稚子_江湖是什么.wav"
+}

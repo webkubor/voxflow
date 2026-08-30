@@ -87,3 +87,20 @@ configs/scripts.json
 *.wma
 *.aiff
 *.alac
+
+# --- Web UI 构建产物 ---
+web/static/assets/
+web/static/index.html
+
+
+# ── 目录重排后的新布局（2026-08-30）──
+# library/ 是长期资产：音色参考音、预设配方。
+#   参考音（*.wav）已被上面的规则忽略 —— 它是二进制资产，属于本机而非仓库，
+#   要备份该走备份，不该塞进 git 让每次 clone 都拖几百 MB。
+#   但**预设配方的 json 要入库** —— 那是可读的配置，值得版本化。
+library/voices/*/reference.wav
+library/voices/*/sample.wav
+
+# publish/ 是发行物料，按平台要求的结构组织（Audio/歌词/Cover）。
+# 整个目录都是产出，重新 pack 一次就有。
+publish/

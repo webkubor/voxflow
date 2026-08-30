@@ -1,17 +1,17 @@
-# VoxCraft 声坊
+# VoxFlow 声流
 
 An open-source Chinese TTS workstation built for humans, AI, and agents.
 
 > Local-first voice cloning + voice design, powered by Qwen3-TTS.
 
-VoxCraft is a local-first wrapper around **Qwen3-TTS**. The goal is simple: install it once, run it locally, and make it easy for both non-technical users and automation agents to use the same workflow.
+VoxFlow is a local-first wrapper around **Qwen3-TTS**. The goal is simple: install it once, run it locally, and make it easy for both non-technical users and automation agents to use the same workflow.
 
 <p align="center">
-  <img src="assets/branding/logo-icon.png" width="160" alt="VoxCraft logo"/>
+  <img src="assets/branding/logo-icon.png" width="160" alt="VoxFlow logo"/>
 </p>
 
 <p align="center">
-  <img src="assets/branding/social-banner.png" width="100%" alt="VoxCraft — AI Voice Editor for Creators"/>
+  <img src="assets/branding/social-banner.png" width="100%" alt="VoxFlow — AI Voice Editor for Creators"/>
 </p>
 
 ## What it does today
@@ -24,8 +24,8 @@ VoxCraft is a local-first wrapper around **Qwen3-TTS**. The goal is simple: inst
 ## Quick Start
 
 ```bash
-git clone https://github.com/webkubor/voxcraft.git
-cd voxcraft
+git clone https://github.com/webkubor/voxflow.git
+cd voxflow
 chmod +x install.sh
 ./install.sh
 source .venv/bin/activate
@@ -35,8 +35,8 @@ voice --help
 ## Minimal agent bootstrap
 
 ```bash
-git clone https://github.com/webkubor/voxcraft.git
-cd voxcraft
+git clone https://github.com/webkubor/voxflow.git
+cd voxflow
 ./install.sh
 source .venv/bin/activate
 voice --help

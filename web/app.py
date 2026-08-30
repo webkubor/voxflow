@@ -1,4 +1,4 @@
-"""VoxCraft 声坊 Web UI — FastAPI 后端
+"""VoxFlow 声流 Web UI — FastAPI 后端
 
 启动方式:
     .venv/bin/python -m web.app
@@ -389,7 +389,7 @@ class ScriptSaveRequest(BaseModel):
 
 
 # ── FastAPI 应用 ──────────────────────────────────────────
-app = FastAPI(title="VoxCraft 声坊", version="0.2.0")
+app = FastAPI(title="VoxFlow 声流", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -871,7 +871,7 @@ async def llm_polish(req: LLMPolishRequest):
 
 # ── Suno AI 音乐（voxsuno 集成）────────────────────────────
 #
-# 声音一条龙工作台的最后一环：用 VoxCraft 复刻的声音（或任何已建 persona）
+# 声音一条龙工作台的最后一环：用 VoxFlow 复刻的声音（或任何已建 persona）
 # 在 Suno 生成音乐，产物落回 out/ 由音频库统一管理。
 # persona 在 suno.com 网页端创建（无公开 API），本模块负责登录态/生成/入库。
 
@@ -1013,7 +1013,7 @@ async def get_audio_subdir(subdir: str, filename: str):
 if __name__ == "__main__":
     import uvicorn
     print("=" * 50)
-    print("  VoxCraft 声坊 Web UI")
+    print("  VoxFlow 声流 Web UI")
     print("  http://localhost:8866")
     print("=" * 50)
     uvicorn.run(app, host="0.0.0.0", port=8866)

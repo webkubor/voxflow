@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# VoxCraft 启动器 —— 把 AI 文案助手接到自己的中台，不依赖第三方 LLM 服务。
+# VoxFlow 启动器 —— 把 AI 文案助手接到自己的中台，不依赖第三方 LLM 服务。
 #
 # ## 为什么要这个脚本
 #
@@ -33,13 +33,13 @@ cd "$(dirname "$0")"
 
 # 模型名跟着中台的口径走。中台 GET /api/chat 会下发当前模型，
 # 换模型时改这里一处 —— 不要写 auto，那是 FreeLLMAPI 的路由约定，中台不认。
-export VOXCRAFT_LLM_BASE_URL="https://manager.museav.top/api"
-export VOXCRAFT_LLM_MODEL="deepseek-v4-flash"
+export VOXFLOW_LLM_BASE_URL="https://manager.museav.top/api"
+export VOXFLOW_LLM_MODEL="deepseek-v4-flash"
 
 # `cs` 在交互式 shell 里是个函数（见 .zshrc），脚本里调不到 —— 必须走真实二进制。
 # CORTEXOS_ROOT 由 .zshrc 导出；非交互场景（launchd、后台进程）拿不到，所以给默认值。
 CS_BIN="${CORTEXOS_ROOT:-$HOME/dev/gitlab/webkubor/CortexOS}/bin/cs"
 [ -x "$CS_BIN" ] || { echo "✗ 找不到 cs（$CS_BIN）—— 密钥注入依赖它"; exit 1; }
 
-exec "$CS_BIN" kyvault run --env VOXCRAFT_LLM_API_KEY=secret://museav/voxcraft-tenant-key \
+exec "$CS_BIN" kyvault run --env VOXFLOW_LLM_API_KEY=secret://museav/voxcraft-tenant-key \
   -- .venv/bin/voice "${@:-web}"

@@ -1,0 +1,13 @@
+{
+  "type": "design_batch",
+  "description": "指定 7 位 AI 女友音色落库批次",
+  "items": [
+    {"name": "暧昧撩人·星栀", "config": "presets/AI女友_暧昧撩人_星栀.json", "enabled": true},
+    {"name": "晨光安抚·初霁", "config": "presets/AI女友_晨光安抚_初霁.json", "enabled": true},
+    {"name": "清冷月色·疏音", "config": "presets/AI女友_清冷月色_疏音.json", "enabled": true},
+    {"name": "温热奶感·棠梨", "config": "presets/AI女友_温热奶感_棠梨.json", "enabled": true},
+    {"name": "温柔治愈·小晚", "config": "presets/AI女友_温柔治愈_小晚.json", "enabled": true},
+    {"name": "午夜耳语·夜棠", "config": "presets/AI女友_午夜耳语_夜棠.json", "enabled": true},
+    {"name": "元气阳光·朝朝", "config": "presets/AI女友_元气阳光_朝朝.json", "enabled": true}
+  ]
+}

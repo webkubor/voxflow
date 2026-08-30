@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "棠梨-温热奶感",
+  "commit_to_temp": true,
+  "text": "靠近一点，我会好好哄你睡。",
+  "tone": "年轻女声，温热奶感，贴耳近讲，声线柔软圆润，气息平稳，语速微慢，开头直接入字，禁止前置笑声、喘息和杂音。",
+  "emotion": "亲密，宠溺，安抚，放松",
+  "output_filename": "AI女友_温热奶感_棠梨_试听.wav"
+}

@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "小璃-温婉闺秀-v2",
+  "commit_to_temp": false,
+  "text": " 请问这位少侠，前方可有客栈？",
+  "tone": "七八岁女童，声音软糯甜美，语速轻柔舒缓，咬字清晰秀气。首字清晰入字，开头绝对禁止截断或吞音，第一句完整发出",
+  "emotion": "温婉，礼貌，略带慌张",
+  "output_filename": "小璃_v2_首字保护_试听.wav"
+}

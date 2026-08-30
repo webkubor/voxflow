@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "武侠-稚子-怯懦",
+  "commit_to_temp": false,
+  "text": "我、我能不能跟着你们……我一个人害怕……",
+  "tone": "六七岁孩童，声音细弱软糯，语速慢，常带停顿和迟疑，尾音轻颤或下沉，气息不稳，像是要哭出来的感觉",
+  "emotion": "害怕，委屈，哀求，无助",
+  "output_filename": "武侠_稚子-怯懦_别丢下我.wav"
+}

@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "疏音-清冷月色",
+  "commit_to_temp": true,
+  "text": "冷一点没关系，我会陪你到天亮。",
+  "tone": "年轻女声，清冷月色质感，轻薄但清晰，语气克制，节奏偏慢，距离感适中，开头直接入字，禁止前置杂音。",
+  "emotion": "清冷，克制，安静，守护",
+  "output_filename": "AI女友_清冷月色_疏音_试听.wav"
+}

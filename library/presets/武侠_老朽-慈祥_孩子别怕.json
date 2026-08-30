@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "武侠-老朽-慈祥",
+  "commit_to_temp": false,
+  "text": "孩子，来，到爷爷这儿来。江湖虽大，总有一处是你的容身之所。",
+  "tone": "六七十岁慈祥长者，声音温和沙哑，语速缓慢亲切，尾音常带笑意或叹息，气息柔和，像 grandparents 讲故事般的温暖",
+  "emotion": "慈祥，温暖，关怀，怜爱",
+  "output_filename": "武侠_老朽-慈祥_孩子别怕.wav"
+}

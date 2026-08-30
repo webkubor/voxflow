@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# voxsuno — VoxCraft 声坊 × Suno 桥接工作流
+# voxsuno — VoxFlow 声流 × Suno 桥接工作流
 #
-# 把 VoxCraft 复刻的声音变成 Suno 的 voice persona，然后用它生成音乐。
+# 把 VoxFlow 复刻的声音变成 Suno 的 voice persona，然后用它生成音乐。
 # 完整链路：
-#   VoxCraft 克隆声音 → 生成样音 wav → 引导上传 Suno 网页建 persona → 存 persona ID → suno CLI 用 persona 出歌
+#   VoxFlow 克隆声音 → 生成样音 wav → 引导上传 Suno 网页建 persona → 存 persona ID → suno CLI 用 persona 出歌
 #
 # 为什么 persona 创建必须在网页端：Suno 没有公开的「创建 custom voice」API，
 # CLI（paperfoot/suno-cli）只有 persona 查看（suno persona <ID>），创建只能走
@@ -11,7 +11,7 @@
 # 保存/复用 persona ID + 一键用 persona 生成音乐。
 #
 # 用法：
-#   voxsuno sample <voxkey> [文本]     # 1. VoxCraft 克隆声音，生成样音 wav（自动打开 Suno 建 persona 页）
+#   voxsuno sample <voxkey> [文本]     # 1. VoxFlow 克隆声音，生成样音 wav（自动打开 Suno 建 persona 页）
 #   voxsuno link  <persona_id> <名字>  # 2. 保存 persona ID（建好 persona 后注册回来）
 #   voxsuno list                      # 查看已保存的 persona
 #   voxsuno song <名字> --title "..." --tags "..." --lyrics "..." [--wait]
@@ -22,7 +22,7 @@
 
 set -euo pipefail
 
-VOXCRAFT_DIR="${VOXCRAFT_DIR:-$HOME/dev/github/app/voxcraft}"
+VOXFLOW_DIR="${VOXFLOW_DIR:-$HOME/dev/github/app/voxflow}"
 STATE_DIR="$HOME/.voxsuno"
 PERSONAS="$STATE_DIR/personas.json"
 OPEN_URL="${BROWSER:-open}"
@@ -65,20 +65,20 @@ for c in d.get('data',{}).get('checks',[]):
 " 2>/dev/null || "$SUNO_BIN" doctor
 }
 
-# ── 1. VoxCraft 生成样音 ──
+# ── 1. VoxFlow 生成样音 ──
 cmd_sample() {
   local voxkey="${1:?用法: voxsuno sample <voxkey> [文本]}"
   local text="${2:-这是一段声音样音，用来在 Suno 创建我的专属声音。}"
-  [ -d "$VOXCRAFT_DIR" ] || die "找不到 voxcraft: $VOXCRAFT_DIR（用 VOXCRAFT_DIR 指定）"
+  [ -d "$VOXFLOW_DIR" ] || die "找不到 voxflow: $VOXFLOW_DIR（用 VOXFLOW_DIR 指定）"
   # 确认音色存在
-  (cd "$VOXCRAFT_DIR" && source .venv/bin/activate 2>/dev/null && voice voice show "$voxkey" >/dev/null 2>&1) \
+  (cd "$VOXFLOW_DIR" && source .venv/bin/activate 2>/dev/null && voice voice show "$voxkey" >/dev/null 2>&1) \
     || die "音色 '$voxkey' 不存在，先 voice voice add 注册"
-  log "🎙️ VoxCraft 克隆音色 '$voxkey' 生成样音..."
+  log "🎙️ VoxFlow 克隆音色 '$voxkey' 生成样音..."
   local out
-  out=$(cd "$VOXCRAFT_DIR" && source .venv/bin/activate 2>/dev/null && voice clone "$voxkey" "$text" 2>&1 | grep -oE 'out/[^ ]+\.wav' | tail -1)
-  [ -n "$out" ] || die "样音生成失败（看上方 voxcraft 输出）"
-  local wav="$VOXCRAFT_DIR/$out"
-  [ -f "$wav" ] || wav=$(ls -t "$VOXCRAFT_DIR"/out/*.wav | head -1)
+  out=$(cd "$VOXFLOW_DIR" && source .venv/bin/activate 2>/dev/null && voice clone "$voxkey" "$text" 2>&1 | grep -oE 'out/[^ ]+\.wav' | tail -1)
+  [ -n "$out" ] || die "样音生成失败（看上方 voxflow 输出）"
+  local wav="$VOXFLOW_DIR/$out"
+  [ -f "$wav" ] || wav=$(ls -t "$VOXFLOW_DIR"/out/*.wav | head -1)
   log "✅ 样音: $wav ($(du -h "$wav" | cut -f1))"
   log ""
   log "➡️ 下一步：把这段样音上传到 Suno 创建 Custom Voice："
@@ -127,11 +127,11 @@ case "${1:-}" in
   song)   cmd_song "${2:-}" "${@:3}" ;;
   list)   cmd_list ;;
   *) cat <<'EOF'
-voxsuno — VoxCraft 声坊 × Suno 桥接工作流
+voxsuno — VoxFlow 声流 × Suno 桥接工作流
 
 用法:
   voxsuno login                         一键登录 Suno（从 Chrome 提取会话）
-  voxsuno sample <voxkey> [文本]        VoxCraft 克隆声音 → 生成样音 → 打开 Suno 建 persona 页
+  voxsuno sample <voxkey> [文本]        VoxFlow 克隆声音 → 生成样音 → 打开 Suno 建 persona 页
   voxsuno link <persona_id> <名字>      保存 Suno persona ID
   voxsuno list                          查看已保存的 persona
   voxsuno song <名字> --title ... --tags ... --lyrics ...

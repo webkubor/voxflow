@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "凌川_冰川理性_v1",
+  "commit_to_temp": false,
+  "text": "先深呼吸，我们把问题慢慢解开。",
+  "tone": "成熟女声，清冷理性，音色偏冷而顺滑，咬字明确，节奏稳定，情绪不过载，开头直接入字，禁止前置杂音。",
+  "emotion": "理性，冷静，安定，可靠",
+  "output_filename": "AI女友_冰川理性_凌川_试听_v1.wav"
+}

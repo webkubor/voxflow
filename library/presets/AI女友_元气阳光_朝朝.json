@@ -1,0 +1,12 @@
+{
+  "type": "design",
+  "content_type": "movie",
+  "model_size": "1.7B",
+  "model_type": "VoiceDesign",
+  "voice_name": "朝朝-元气阳光",
+  "commit_to_temp": true,
+  "text": "今天也一起加油，好吗！",
+  "tone": "少女感女声，明亮清透，吐字利落，节奏偏快但不尖锐，整体阳光积极，开头直接入字，禁止前置杂音。",
+  "emotion": "元气，鼓励，开朗，治愈",
+  "output_filename": "AI女友_元气阳光_朝朝_试听.wav"
+}
