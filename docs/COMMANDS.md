@@ -10,6 +10,8 @@ chmod +x install.sh
 source .venv/bin/activate
 ```
 
+运行要求：Python 3.10+、约 4.2GB（仅 Base）或 8.4GB（Base + VoiceDesign）模型磁盘空间；建议在 macOS Apple Silicon 上运行。FFmpeg 用于 MP3 参考音频与自动裁剪：`brew install ffmpeg`。没有 MPS 时会回退到 CPU。
+
 如果你只想重新安装项目本体：
 
 ```bash
@@ -35,10 +37,13 @@ voice preset list
 voice job list
 
 # 从已有音色克隆
-voice clone <persona> "你好，欢迎使用VoxCraft 声坊"
+voice clone <persona> "你好，欢迎使用 VoxFlow 声流"
 
 # 从文字描述设计新音色
 voice design <voice_name> "这是一段建模短句" --tone "温柔、清晰、贴耳"
+
+# 根据 JSON 剧本合成多角色对话
+voice dialogue configs/dialogue.json
 ```
 
 ## 3. 兼容入口
@@ -61,14 +66,22 @@ python main.py dialogue
 - `configs/dialogue.json`
 - `configs/personas.json`
 
-## 5. 当前未提供的能力
+## 5. 前端开发
 
-下面这些能力还在规划，不要按旧文档直接执行：
+Web UI 已随仓库构建产物提供，直接使用：
 
-- `webui/` 前端目录
-- `npm run web:dev`
-- `npm run api:dev`
-- `npm run web:build`
+```bash
+voice web
+```
+
+修改或重新构建前端时：
+
+```bash
+cd web/ui
+npm install
+npm run dev      # 开发服务器
+npm run build    # 构建到 web/static/
+```
 
 ## 6. 排查
 
@@ -80,5 +93,5 @@ git status --short
 which voice
 
 # 检查 Python 包是否已安装
-pip show voice-editor
+pip show voxflow
 ```

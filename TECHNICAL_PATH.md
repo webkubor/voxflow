@@ -1,4 +1,4 @@
-# VoxCraft 声坊 技术路径与规范 (Technical Path & Standards)
+# VoxFlow 声流 技术路径与规范 (Technical Path & Standards)
 
 本项目已形成一套成熟的“武侠级”配音自动化生成标准，后续维护与 AI 执行需严格遵循此路径。
 

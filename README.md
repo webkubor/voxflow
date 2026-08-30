@@ -68,7 +68,24 @@ source .venv/bin/activate
 voice --help
 ```
 
-脚本自动完成：创建 `.venv` → 安装依赖 → 下载基础模型。
+脚本自动完成：创建 `.venv` → 安装 Python 依赖 → 下载 Base 模型；交互安装时可选择是否继续下载 VoiceDesign 模型。
+
+### 运行环境与依赖
+
+| 项目 | 要求 / 说明 |
+|:---|:---|
+| 操作系统 | **macOS Apple Silicon 为一等支持平台**；没有 MPS 时会回退到 CPU，推理会明显变慢。 |
+| Python | 3.10–3.13（项目最低要求为 3.10）。 |
+| 磁盘 | Base-1.7B 与 VoiceDesign-1.7B 模型各约 4.2GB；仅克隆合成只需要 Base。 |
+| FFmpeg | 建议安装，用于 MP3 参考音频与自动裁剪；macOS：`brew install ffmpeg`。 |
+| Node.js / npm | 日常运行已构建的 Web UI 不需要；修改或重新构建前端时需要（在 `web/ui` 执行 `npm install && npm run build`）。 |
+
+`install.sh` 会安装项目 Python 包、`pydub` 和 `modelscope`。手动安装或 `voice doctor` 提示缺少 PyTorch 时，在已激活的虚拟环境中执行：
+
+```bash
+pip install -e .
+pip install modelscope torch torchaudio
+```
 
 ---
 
@@ -83,8 +100,8 @@ voice clone narrator "霜叶红于二月花，山色空蒙雨亦奇"
 voice design xiao_jing "这是一段建模短句" --tone "温柔、清晰、偏少女"
 # → voice 'xiao_jing' saved to personas.json
 
-# 多角色对白（配置驱动，暂无 CLI 子命令）
-python main.py dialogue          # 读 configs/dialogue.json 里的 lines
+# 多角色对白（配置驱动）
+voice dialogue configs/dialogue.json
 # → out/ 下按行生成并合并
 
 # 跑现成的武侠预设
@@ -100,17 +117,16 @@ voice preset run 武侠_老朽_江湖啊
 |:---|:---:|:---|
 | 声音克隆（角色复用） | ✅ | `voice clone <persona> "台词"` / Web UI「克隆合成」 |
 | 音色设计（文字描述） | ✅ | `voice design <name> "短句" --tone` / Web UI「音色设计」 |
-| 多角色对话生成 | ⚠️ | 功能已实现（`core/modes/dialogue.py`），但**没有 CLI 子命令**；入口是 `python main.py dialogue`，读 `configs/dialogue.json` |
+| 多角色对话生成 | ✅ | `voice dialogue configs/dialogue.json` / Web UI「多角色对话」 |
 | 预设任务 | ✅ | `voice preset list` / `voice preset run <名>` |
 | 音色列表管理 | ✅ | `voice voice list` |
 | **Web UI** | ✅ | `voice web` → http://localhost:8866 |
 | 文案库（持久化常用台词） | ✅ | Web UI「克隆合成」文案 chip 条 |
 | 异步任务队列（进度可见） | ✅ | Web UI 右下角任务队列 |
 | 模型状态与下载进度 | ✅ | Web UI 顶部状态栏 |
-| 环境自检 | ✅ | `voice doctor`（含 FreeLLMAPI 检测） |
+| 环境自检 | ✅ | `voice doctor`（含 LLM 后端连通性检测） |
 | Agent 无交互安装 | ✅ | `./install.sh --yes` |
-| **AI 文案生成** | ✅ | `voice ai-script "描述"` / Web UI AI 助手 |
-| **AI 文案润色** | ✅ | `voice ai-polish "文案"` / Web UI AI 助手 |
+| **AI 文案生成 / 润色** | ✅ | `voice ai-script` / `voice ai-polish` / Web UI AI 助手（可选 OpenAI 兼容后端） |
 
 ---
 
@@ -136,24 +152,28 @@ voice web
 | **音色库** | 管理已有音色 persona | 上传参考音频 → 自动注册命名 → 左侧点击试听 / 切换 |
 | **克隆合成** | 用已有音色生成台词 | 选音色 → 输入 / 选择文案 → 异步合成 → 在线试听 / 下载 |
 | **音色设计** | 用文字描述创造新音色 | 填音色名称、建模短句、音色描述 → 一键生成 → 入库复用 |
+| **多角色对话** | 将 JSON 剧本批量合成为一条音频 | 在 Web UI 填写剧本，或运行 `voice dialogue <配置文件>` |
 
 ### 辅助模块
 
 - **文案库**：常用台词保存在 `configs/scripts.json`，切换音色时文案不丢失，点击 chip 条一键载入。
 - **音频库**：历史生成列表，支持播放、下载、删除。
-- **任务队列**：合成 / 设计均为后台异步任务，带进度条，UI 不阻塞，可随时查看队列状态。
+- **任务队列**：克隆 / 设计 / 对话均为后台异步任务，带进度条，UI 不阻塞，可随时查看队列状态。
 - **模型状态栏**：顶部实时显示 Base / VoiceDesign 模型下载状态（未下载 / 下载中 / 已就绪），模型未就绪时对应功能自动禁用。
-- **AI 文案助手**：接入 [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) 后，可在克隆合成 Tab 中用 AI 生成文案、润色已有文案。未接入时功能自动隐藏，不影响核心 TTS 流程。
+- **AI 文案助手**：接入任意 OpenAI 兼容后端后，可在克隆合成 Tab 中生成或润色文案。未接入时功能自动隐藏，不影响核心 TTS 流程。
 
 ### AI 文案助手（可选）
 
-VoxFlow 支持接入 [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) — 一个聚合 18 个免费 LLM 提供商的 OpenAI 兼容代理，实现 AI 文案生成与润色。
+VoxFlow 通过 OpenAI 兼容协议接入 AI 文案后端。默认指向本地 [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi)，也可改接自己的网关或中台。
 
 ```bash
-# 1. 安装 FreeLLMAPI（Docker 一键启动）
+# 1. 安装并启动 FreeLLMAPI（可选，Docker 一键启动）
 curl -fsSL https://freellmapi.co/install.sh | bash
 
-# 2. 启动后访问 http://localhost:3001 添加免费 LLM API Key
+# 2. 或指定任意 OpenAI 兼容后端
+export VOXFLOW_LLM_BASE_URL="https://your-gateway.example/v1"
+export VOXFLOW_LLM_API_KEY="通过环境变量注入"
+export VOXFLOW_LLM_MODEL="your-model"
 
 # 3. 在 VoxFlow 中使用
 voice ai-script "写一段武侠旁白，讲剑客归隐山林" --words 200
@@ -162,7 +182,7 @@ voice ai-polish "霜叶红于二月花" --style "更激昂"
 # 或在 Web UI → 克隆合成 → AI 文案助手
 ```
 
-不安装 FreeLLMAPI 也不影响核心 TTS 功能，AI 助手会显示「未连接」并禁用。
+不配置 LLM 后端也不影响核心 TTS 功能，AI 助手会显示「未连接」并禁用。
 
 ---
 
@@ -229,8 +249,8 @@ Agent 调用前请先确认 `source .venv/bin/activate` 已执行，或使用 `.
 ## 🗺 路线图
 
 - [x] Phase 1 — 命名统一、README 清晰化
-- [x] Phase 2a — CLI 稳定（clone / design / voice list / preset）
-- [ ] dialogue 补 CLI 子命令（功能已在 `core/modes/dialogue.py`，目前只能 `python main.py dialogue`）
+- [x] Phase 2a — CLI 稳定（clone / design / dialogue / voice list / preset）
+- [x] dialogue CLI 与 Web UI 对话页
 - [x] Phase 2b — `voice doctor` 环境自检
 - [x] Phase 3 — WebUI MVP（上传音频 / 试听 / 下载）
 - [x] Phase 4 — Agent 无交互安装模式
