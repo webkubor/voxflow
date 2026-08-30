@@ -8,6 +8,10 @@
       <n-button secondary size="small" :loading="loading" @click="loadBoard">刷新状态</n-button>
     </div>
 
+    <!-- 流水线在前、平台账号在后：先看歌走到哪、决定发不发，
+         才轮到关心发去哪个账号。 -->
+    <PipelineBoard />
+
     <n-alert type="warning" :show-icon="false" class="truth-alert">
       未接入的平台登录检测或云备份不会被伪装成成功；请在台账记录实际状态后再以此页为准。
     </n-alert>
@@ -42,8 +46,8 @@
     </n-grid>
 
     <n-card size="small" class="backup-card" title="所有歌曲的云备份">
-      <n-list v-if="tracks.length" bordered>
-        <n-list-item v-for="track in tracks" :key="track.id">
+      <n-list v-if="backupTracks.length" bordered>
+        <n-list-item v-for="track in backupTracks" :key="track.id">
           <n-thing :title="track.title">
             <template #description>{{ track.cloud_backup.location || '尚未登记云端位置' }}</template>
             <template #header-extra>
@@ -64,10 +68,11 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
+import PipelineBoard from '../components/PipelineBoard.vue';
 import { usePipelineStore } from '../stores/pipeline';
 
 const pipelineStore = usePipelineStore();
-const { publishAccounts, tracks, error } = storeToRefs(pipelineStore);
+const { publishAccounts, backupTracks, error } = storeToRefs(pipelineStore);
 const loading = ref(false);
 
 const loginTagType = (status) => ({

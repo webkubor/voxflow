@@ -10,7 +10,11 @@ export const usePipelineStore = defineStore('pipeline', () => {
   const stageLabels = ref({});
   const platforms = ref([]);
   const summary = ref({});
-  const tracks = ref([]);
+  const tracks = ref([]);            // 流水线作品：走到哪一步
+  // 云备份台账是另一份数据（同一批歌，但字段是「备份在哪」不是「走到哪步」）。
+  // 曾经跟 tracks 共用一个 ref —— 两个接口写同一个字段、结构还不一样，
+  // 谁后加载谁把对方覆盖掉，表现为「看板刷新一下内容就变了」。
+  const backupTracks = ref([]);
   const publishAccounts = ref([]);
   const error = ref('');
 
@@ -45,12 +49,12 @@ export const usePipelineStore = defineStore('pipeline', () => {
   const loadPublishBoard = async () => {
     const data = await request('/api/publish-board');
     publishAccounts.value = data.accounts || [];
-    tracks.value = data.tracks || [];
+    backupTracks.value = data.tracks || [];
     return data;
   };
 
   return {
-    stages, stageLabels, platforms, summary, tracks, publishAccounts, error,
+    stages, stageLabels, platforms, summary, tracks, backupTracks, publishAccounts, error,
     loadPipeline, loadPublishBoard, setStage, upsertTrack, setPlatformStatus,
   };
 });
