@@ -1,0 +1,96 @@
+{
+  "_说明": [
+    "各发布平台的 SOP。加一个平台 = 加一段配置，不改代码。",
+    "字段来自实际页面探测（不是文档抄的），探测时间记在 verified_at。",
+    "平台改版后这里会过时 —— 发布失败时先回来核对这份配置，再去改代码。"
+  ],
+
+  "qishui": {
+    "label": "汽水音乐",
+    "verified_at": "2026-08-30",
+    "console": "https://music.douyin.com/console",
+    "reach": "字节系 APP + 全球 150+ 流媒体平台",
+
+    "entries": {
+      "single": {
+        "label": "发布作品 · 全曲",
+        "url": "https://music.douyin.com/console/publish",
+        "needs": [],
+        "note": "网页直传，不需要 SFTP。MVP 走这条。"
+      },
+      "batch": {
+        "label": "批量发布",
+        "url": "https://music.douyin.com/console/multi_publish_song",
+        "needs": ["sftp_account"],
+        "note": "单次最多 1000 首。SFTP 账号要联系平台管理员分配（提供机构名 + 抖音 UID），24 小时内短信告知。"
+      }
+    },
+
+    "audio": {
+      "formats": ["wav", "mp3", "m4a"],
+      "prefer": "wav"
+    },
+
+    "cover": {
+      "min_size": "1440x1440",
+      "ratio": "1:1",
+      "formats": ["jpg", "jpeg", "png"],
+      "max_mb": 10,
+      "note": "Suno 自带封面只有 360x360，放大会糊 —— 必须重新生成。"
+    },
+
+    "ai_declaration": {
+      "field": "创作方式",
+      "value": "AI",
+      "note": "平台有官方的 AI 选项，如实填。瞒报被查到影响账号。"
+    },
+
+    "form_fields": {
+      "required": ["歌曲名称", "歌手", "曲作者", "歌词", "专辑名称", "专辑歌手", "专辑封面"],
+      "optional": ["授权证明", "所属厂牌", "专辑介绍", "站外期望发行时间", "字节系平台上架时间"],
+      "note": "字段名来自 2026-08-30 页面实测。「保存」可存草稿，「下一步」进下一屏。"
+    },
+
+    "batch_upload": {
+      "protocol": "sftp",
+      "host_example": "52.80.104.27",
+      "port": 2222,
+      "layout": "/Audio/YYYYMMDD/ 下放音源 + 歌词 txt + 封面",
+      "excel": "publish/templates/batch_import_template.xlsx",
+      "note": "Excel 里的文件名必须和 SFTP 上传的完全一致。歌曲/专辑版本/风格/语言/上架平台必须填模板 sheet 里的预置值。"
+    },
+
+    "revenue": "0.8–1.5 元/千播（AI 曲）"
+  },
+
+  "netease": {
+    "label": "网易云音乐",
+    "verified_at": null,
+    "console": "https://music.163.com/musician",
+    "entries": {
+      "single": { "label": "上传作品", "url": "", "needs": [], "note": "仅网页，无批量通道" }
+    },
+    "audio": { "formats": ["wav", "mp3"], "prefer": "wav" },
+    "cover": { "min_size": "1400x1400", "ratio": "1:1", "formats": ["jpg", "png"], "max_mb": 10 },
+    "ai_declaration": {
+      "field": "AI 音乐人身份",
+      "value": "是",
+      "note": "有官方 AI 音乐人身份，但权益降级。"
+    },
+    "revenue": "0.2–0.4 元/千播（AI 曲）",
+    "⚠️": "每账号只有 5 次入驻机会，用完永久黑名单 —— 入驻这段绝对手工，不做自动化。"
+  },
+
+  "tencent": {
+    "label": "腾讯音乐人",
+    "verified_at": null,
+    "console": "https://y.qq.com/musician",
+    "entries": {
+      "single": { "label": "上传作品", "url": "", "needs": [], "note": "仅网页" }
+    },
+    "audio": { "formats": ["wav", "mp3"], "prefer": "wav" },
+    "cover": { "min_size": "待确认", "ratio": "1:1", "formats": ["jpg", "png"], "max_mb": null },
+    "ai_declaration": { "field": "待确认", "value": "", "note": "零一手资料，需登录实测后再填这里。" },
+    "revenue": "说法矛盾，未证实"
+  }
+}

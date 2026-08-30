@@ -104,3 +104,7 @@ library/voices/*/sample.wav
 # publish/ 是发行物料，按平台要求的结构组织（Audio/歌词/Cover）。
 # 整个目录都是产出，重新 pack 一次就有。
 publish/
+
+# 发布物料：音频和封面体积大，且都能从台账 + Suno 重新生成
+publish/2*/
+publish/covers/
