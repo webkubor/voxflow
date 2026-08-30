@@ -144,6 +144,13 @@
             <n-tab-pane name="suno" tab="AI 音乐">
               <SunoTab />
             </n-tab-pane>
+            <n-tab-pane name="works" tab="我的作品">
+              <!-- 作品流水线看板 —— PublishTab 注释里说它「挪去『我的作品』
+                   那一屏」，但那屏一直没建，看板组件写了却从没挂载过。
+                   37 首作品走到哪一步、下一步该干嘛，在产品里完全看不见。
+                   放回这里：AI 音乐出歌 → 我的作品管进度 → 全网发行看平台。 -->
+              <PipelineBoard />
+            </n-tab-pane>
             <n-tab-pane name="publish" tab="全网发行">
               <PublishTab />
             </n-tab-pane>
