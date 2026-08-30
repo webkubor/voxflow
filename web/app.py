@@ -1447,6 +1447,37 @@ async def get_audio_subdir(subdir: str, filename: str):
     return FileResponse(str(path), media_type=media_type, filename=safe_name)
 
 
+@app.get("/api/platform-accounts")
+async def platform_accounts():
+    """
+    各平台的账号资产：我是谁、发了多少首、主页在哪。
+
+    数据来自 scripts/sync_*.py 从平台抓回来的真实状态，不是手填的 ——
+    手填的台账会随时间变假（今天发一首、明天下架一首，没人记得回来改）。
+
+    每个平台记两个链接：artist_url 是艺人主页（发布表单填它，平台据此核实
+    音乐人身份），user_url 是个人主页（听歌记录/动态）。填错平台会打回。
+    """
+    from core.paths import PLATFORM_ACCOUNTS_FILE
+    if not PLATFORM_ACCOUNTS_FILE.exists():
+        return {"accounts": {}, "hint": "还没同步过。跑 scripts/sync_netease.py 抓一次。"}
+    try:
+        data = json.loads(PLATFORM_ACCOUNTS_FILE.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(500, f"账号台账读不了：{e}")
+
+    # 顺带统计台账里每个平台各有多少首在线 —— 跟平台自报的数对得上才可信
+    from core import pipeline
+    online = {}
+    for t in pipeline.list_tracks():
+        for pk, info in (t.get("platforms") or {}).items():
+            if info.get("status") in ("online", "published"):
+                online[pk] = online.get(pk, 0) + 1
+    for pk, acc in data.get("accounts", {}).items():
+        acc["local_online_count"] = online.get(pk, 0)
+    return data
+
+
 @app.get("/api/cover/{track_id}")
 async def get_cover(track_id: str):
     """

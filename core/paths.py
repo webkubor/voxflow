@@ -54,6 +54,7 @@ SCRIPTS_FILE = CONFIG_DIR / "scripts.json"
 LEDGER_FILE = CONFIG_DIR / "pipeline.json"
 ARTIST_FILE = CONFIG_DIR / "artist.json"
 PUBLISH_ACCOUNTS_FILE = CONFIG_DIR / "publish_accounts.json"
+PLATFORM_ACCOUNTS_FILE = CONFIG_DIR / "platform_accounts.json"   # 各平台账号与已发布曲目
 
 # ── 代码自带的资源（跟着版本走，进 git）──────────────────
 PLATFORMS_FILE = PROJECT_DIR / "configs" / "platforms.json"   # 平台 SOP
