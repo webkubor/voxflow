@@ -237,3 +237,42 @@ def tts_design(
         )
         console.print(f"  [green]✓ 标准样音已沉淀 → {ref_rel}[/green]")
         console.print(f"  [green]✓ 角色映射已更新 → {persona_file}[/green]")
+
+
+def tts_dialogue(
+    config_path: str = typer.Argument(..., help="剧本 JSON 配置文件路径，可相对于项目根目录（如 configs/dialogue.json）"),
+):
+    """根据剧本 JSON 配置文件，批量合成多角色对话并自动拼接。"""
+    import json
+    cfg_file = BASE_DIR / config_path if not os.path.isabs(config_path) else Path(config_path)
+    if not cfg_file.exists():
+        console.print(f"[red]✗[/red] 配置文件不存在：{config_path}")
+        raise typer.Exit(1)
+        
+    try:
+        with open(cfg_file, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception as e:
+        console.print(f"[red]✗[/red] 解析 JSON 失败：{e}")
+        raise typer.Exit(1)
+        
+    if "lines" not in cfg or not isinstance(cfg["lines"], list):
+        console.print(f"[red]✗[/red] 剧本格式错误：缺少 'lines' 列表")
+        raise typer.Exit(1)
+
+    from core.modes.dialogue import DialogueMode
+    
+    engine = _init_engine()
+    processor = _init_processor()
+    cloner = CloneMode(engine, processor)
+    dialogue = DialogueMode(engine, processor, cloner)
+    
+    console.print(f"\n[gold1]⏳ 正在启动剧本合成，剧目：{cfg.get('title', '未命名剧目')}...[/gold1]")
+    
+    try:
+        final_path = dialogue.run(cfg)
+        console.print(f"\n[green]✓[/green] 剧本对话合成完成！")
+        console.print(f"  合并成品 → [cyan]{os.path.relpath(final_path, BASE_DIR)}[/cyan]")
+    except Exception as e:
+        console.print(f"[red]✗[/red] 合成失败：{e}")
+        raise typer.Exit(1)

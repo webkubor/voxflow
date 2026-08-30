@@ -2,12 +2,12 @@
   "project_name": "周星驰_暗坊揭秘",
   "title": "无厘头暗坊",
   "type": "dialogue",
-  "persona": "zhou_xingchi",
+  "persona": "demo_narrator",
   "emotion_priority": true,
   "lines": [
     {
-      "role": "zhou_xingchi",
-      "reference_audio": "assets/temp/当前参考_搞笑男.wav",
+      "role": "demo_narrator",
+      "reference_audio": "assets/temp/当前参考_demo_narrator.wav",
       "text": "名门讲道义，皇权讲法度，可这暗坊的影子里，只认‘价值’。 ... 宁观尘想借孤山的剑，慕夕歌要窥天下的局。 ... 殊不知跨过这道槛，两人便已从看客，成了这死局里…… 最先祭旗的棋子。",
       "tone": "无厘头、机灵、带点夸张反差喜感，节奏灵活。‘价值’二字轻微停顿后抖包袱感，‘棋子’二字收尾带调侃意味。",
       "emotion": "夸张、调侃、反差喜剧、轻微破音感但不要失真",
