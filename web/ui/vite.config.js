@@ -10,7 +10,11 @@ export default defineConfig({
   },
   build: {
     outDir: '../static',
-    emptyOutDir: false, // 设为 false 避免误删 static 目录下的其他非构建资产
+    // 每次构建先清空。之前设 false 是怕误删 static 下的其它资产，但实际查过 ——
+    // static/ 里只有 assets/ 和 index.html，两个都是构建产物，没有要保护的东西。
+    // 不清的代价是每改一次堆一份带 hash 的新文件：实测堆到 15 个、9.4MB，
+    // 而真正被引用的只有 2 个。
+    emptyOutDir: true,
   },
   server: {
     port: 5173,
