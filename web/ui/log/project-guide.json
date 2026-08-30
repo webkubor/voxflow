@@ -15,12 +15,12 @@
     "businessLayer": [
       "src/stores"
     ],
-    "routeLayer": [],
+    "routeLayer": [
+      "src/router"
+    ],
     "configLayer": [
       "src/config"
     ]
   },
-  "suggestions": [
-    "未检测到 router/routes/pages/views 层；建议明确路由入口，方便 agent 复现页面路径。"
-  ]
+  "suggestions": []
 }
