@@ -20,8 +20,14 @@
 # ## 用法
 #
 #   ./run.sh          启动 Web UI（默认，http://localhost:8866）
+#   ./run.sh dev      **开发模式**：后端 8866 + Vite 前端 5173（改代码秒级热更新）
 #   ./run.sh doctor   自检（会显示 AI 助手连没连上）
 #   ./run.sh <任意 voice 子命令>
+#
+# 什么时候用 dev：改前端代码的时候。
+#   普通模式跑的是打包产物，改一行要重新 build（3 秒）+ 手动刷新；
+#   dev 模式改完存盘页面自己就变了，而且不打包所以首次加载快得多。
+#   开发时打开 http://localhost:5173（不是 8866）—— API 会自动代理到后端。
 #
 # 不想用中台、想回到本地 FreeLLMAPI：把下面三个 export 注释掉即可，
 # llm_client.py 的默认值就是 localhost:3001。
@@ -40,6 +46,20 @@ export VOXFLOW_LLM_MODEL="deepseek-v4-flash"
 # CORTEXOS_ROOT 由 .zshrc 导出；非交互场景（launchd、后台进程）拿不到，所以给默认值。
 CS_BIN="${CORTEXOS_ROOT:-$HOME/dev/gitlab/webkubor/CortexOS}/bin/cs"
 [ -x "$CS_BIN" ] || { echo "✗ 找不到 cs（$CS_BIN）—— 密钥注入依赖它"; exit 1; }
+
+# dev 模式：后端和前端各起一个，前端带热更新
+if [ "${1:-}" = "dev" ]; then
+  [ -d web/ui/node_modules ] || { echo "  安装前端依赖…"; (cd web/ui && npm install); }
+  echo "  后端 → http://localhost:8866"
+  echo "  前端 → http://localhost:5173  ← 开发时打开这个"
+  echo
+  # 后端放后台，前端占前台（Ctrl-C 一起停）
+  "$CS_BIN" kyvault run --env VOXFLOW_LLM_API_KEY=secret://museav/voxcraft-tenant-key \
+    -- .venv/bin/voice web &
+  BACKEND_PID=$!
+  trap 'kill $BACKEND_PID 2>/dev/null' EXIT INT TERM
+  cd web/ui && exec npm run dev
+fi
 
 exec "$CS_BIN" kyvault run --env VOXFLOW_LLM_API_KEY=secret://museav/voxcraft-tenant-key \
   -- .venv/bin/voice "${@:-web}"
