@@ -156,10 +156,21 @@ def list_tracks() -> list[dict[str, Any]]:
             "stage_index": STAGES.index(stage) if stage in STAGES else -1,
             "voice": t.get("voice"),          # 用了哪个音色
             "clip_id": t.get("clip_id"),      # Suno 的 clip
+            "clip_ids": t.get("clip_ids", []),   # 一次出两首，两个都留着
             "platforms": t.get("platforms", {}),
             "cloud_backup": _backup_record(t),
             "updated_at": t.get("updated_at", ""),
             "note": t.get("note", ""),
+            # ── 创作元数据 ──
+            # 歌本身的内容，跟流程状态无关，但必须留底：平台发布时歌词是必填项、
+            # 风格标签影响推荐，出了问题要复现也得靠这些。
+            # 不能只留在 Suno 云端和文件名里 —— 那边不归我们，账号一停或者
+            # 对方改版就没了；文件名更是只能塞下一个标题。
+            "lyrics": t.get("lyrics", ""),
+            "tags": t.get("tags", ""),       # 送给 Suno 的风格串
+            "prompt": t.get("prompt", ""),   # 让 LLM 写歌词时给的描述
+            "audio_file": t.get("audio_file", ""),
+            "cover_file": t.get("cover_file", ""),
         })
     tracks.sort(key=lambda x: x["updated_at"], reverse=True)
     return tracks

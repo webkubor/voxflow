@@ -10,6 +10,7 @@ import os
 import sys
 import json
 import re
+import shutil
 import threading
 import time
 import queue as queue_mod
@@ -940,6 +941,96 @@ async def llm_status():
 
 
 # ── 作品流水线（可观测：每首歌走到哪一步）──────────────────
+
+@app.get("/api/inbox")
+async def inbox_scan():
+    """
+    扫下载目录里等着入库的音乐文件。
+
+    ## 为什么需要这一步
+
+    Suno 刻意防自动下载：API 返回的 audio_url 写死 `api/forbidden`，
+    CDN 直链 403，网页播放走 blob/MSE 拿不到源地址，行内的下载菜单也不响应
+    合成事件。硬绕这层反爬性价比极低 —— 而且下载本来就是个一次性动作，
+    Suno 一次出两首，人本来就要听过才知道要哪首，顺手点一下下载的成本几乎为零。
+
+    真正吃时间的是**后面那段**：填表、传文件、拼 Excel、三个平台各重复一遍。
+    所以分工改成：人在浏览器点一下下载，工具接管之后的全部环节。
+
+    这个端点就是接管的入口 —— 列出下载目录里最近的音频，让人挑哪些入库。
+    """
+    import time
+    from pathlib import Path as _P
+
+    AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg"}
+    cutoff = time.time() - 7 * 86400        # 只看最近一周，避免翻出几年前的下载
+    candidates = []
+
+    for d in [_P.home() / "Downloads", OUT_DIR / MUSIC_SUBDIR]:
+        if not d.is_dir():
+            continue
+        for f in d.iterdir():
+            if f.suffix.lower() not in AUDIO_EXTS or not f.is_file():
+                continue
+            st = f.stat()
+            if st.st_mtime < cutoff:
+                continue
+            candidates.append({
+                "name": f.name,
+                "path": str(f),
+                "size_mb": round(st.st_size / 1024 / 1024, 1),
+                "mtime": st.st_mtime,
+                "in_library": d != _P.home() / "Downloads",   # 已经在库里的标出来
+            })
+
+    candidates.sort(key=lambda x: x["mtime"], reverse=True)
+    return {"files": candidates[:40], "downloads_dir": str(_P.home() / "Downloads")}
+
+
+@app.post("/api/inbox/import")
+async def inbox_import(req: dict):
+    """
+    把选中的音频收进音乐库，并在流水线登记一条「已出歌」。
+
+    **复制不移动**：下载目录是人的地盘，工具不该把人的文件搬走 ——
+    万一认错了文件，原件还在。重名自动加后缀，不覆盖。
+
+    登记成 generated 而不是 draft：文件都拿到了，歌显然已经出来了。
+    下一步「选定这首」仍然要人点 —— 一次出两首，哪首更好只有人知道。
+    """
+    from pathlib import Path as _P
+    from core import pipeline
+
+    paths = req.get("paths") or []
+    if not paths:
+        raise HTTPException(400, "没有选择文件")
+
+    music_dir = OUT_DIR / MUSIC_SUBDIR
+    music_dir.mkdir(parents=True, exist_ok=True)
+    imported = []
+
+    for src_str in paths:
+        src = _P(src_str)
+        if not src.is_file():
+            continue
+
+        dst = music_dir / src.name
+        if dst.resolve() != src.resolve():
+            n = 1
+            while dst.exists():
+                dst = music_dir / f"{src.stem}_{n}{src.suffix}"
+                n += 1
+            shutil.copy2(src, dst)
+
+        # 文件名去掉扩展名和 Suno 常见的后缀就是歌名
+        title = re.sub(r"[_-]?(v\d+(\.\d+)?|extended|remaster)$", "", dst.stem, flags=re.I).strip()
+        track_id = re.sub(r"[^\w\u4e00-\u9fff]+", "-", title).strip("-").lower() or dst.stem
+        pipeline.upsert(track_id, title=title, stage="generated",
+                        note=f"从 {src.parent.name} 导入")
+        imported.append({"track_id": track_id, "title": title, "file": dst.name})
+
+    return {"ok": True, "imported": imported, "count": len(imported)}
+
 
 @app.get("/api/pipeline")
 async def pipeline_list():

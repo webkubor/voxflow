@@ -35,7 +35,10 @@ VOXFLOW_DIR="${VOXFLOW_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 # 发行物料在顶层 publish/（2026-08-30 目录重排：平台规定的结构单独一层，
 # 跟「可随时清理的产出」out/ 分开）
 PUBLISH_ROOT="$VOXFLOW_DIR/publish"
-TEMPLATE="/Users/webkubor/Downloads/batch_import_template.xlsx"
+# Excel 模板收在项目里，不指向 ~/Downloads —— 那是个随时会被清理的地方，
+# 模板一旦被删，打包会在最后一步失败，而那时候前面的活都白干了。
+# 仍然允许用环境变量覆盖，平台改版换模板时不用改代码。
+TEMPLATE="${VOXPUBLISH_TEMPLATE:-$VOXFLOW_DIR/publish/templates/batch_import_template.xlsx}"
 SUNO_BIN="${SUNO_BIN:-}"
 if [ -z "$SUNO_BIN" ]; then
   if command -v suno >/dev/null 2>&1; then SUNO_BIN="suno"
