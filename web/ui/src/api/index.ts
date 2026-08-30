@@ -126,8 +126,10 @@ export const api = {
     post<{ ok: boolean; scripts: unknown[] }>('scripts', p),
   deleteScript: (id: string) => del<{ ok: boolean }>(`scripts/${id}`),
   aiGenerate: (prompt: string) => post<{ text: string }>('llm/generate', { prompt }),
-  aiPolish: (text: string) => post<{ text: string }>('llm/polish', { text }),
-  aiLyrics: (body: unknown) => post<{ text: string; lyrics?: string }>('llm/lyrics', body),
+  // 后端 LLMPolishRequest / LLMLyricsRequest 都是 {text|prompt, style?}
+  aiPolish: (p: { text: string; style?: string }) => post<{ text: string }>('llm/polish', p),
+  aiLyrics: (p: { prompt: string; style?: string }) =>
+    post<{ text: string; lyrics?: string }>('llm/lyrics', p),
 
   // ── 音频库 ──
   audioList: () => get<{ files: unknown[] }>('audio-list'),
@@ -135,7 +137,8 @@ export const api = {
 
   // ── Suno ──
   sunoStatus: () => get<Record<string, unknown>>('suno/status'),
-  sunoGenerate: (body: unknown) => post<{ task_id: string }>('suno/generate', body),
+  sunoGenerate: (p: { title: string; tags?: string; lyrics?: string; persona?: string }) =>
+    post<{ task_id: string }>('suno/generate', p),
 
   // ── 下载接管 ──
   inbox: () => get<{ files: unknown[]; downloads_dir: string }>('inbox'),

@@ -10,20 +10,39 @@ import { useVoicesStore } from './voices';
 
 const RUNNING_TASK_STATUSES = new Set(['queued', 'running']);
 
+/** 单个后台任务。形状按 TaskPanel 的消费和本 store 自己读的字段拼的。 */
+export interface TaskItem {
+  id: string;
+  type: string;
+  status: string;
+  params?: Record<string, unknown>;
+  stage?: string;
+  created_at?: string;
+  error?: string;
+  result?: {
+    urls?: string[];
+    files?: string[];
+    committed?: boolean;
+  };
+}
+
+/** MessageApi.vue 把 useMessage() 挂到 window.$message 上；全局没有类型声明，这里按使用方式窄化。 */
+type GlobalMessage = { [key: string]: (content: string) => void };
+
 export const useTasksStore = defineStore('tasks', () => {
-  const tasks = ref([]);
+  const tasks = ref<TaskItem[]>([]);
   const taskPanelCollapsed = ref(false);
   const globalLoading = ref(false);
   const globalLoadingText = ref('');
   const error = ref('');
-  const previousStatuses = new Map();
-  let pollTimer = null;
+  const previousStatuses = new Map<string, string>();
+  let pollTimer: number | null = null;
 
-  const showToast = (content, type = 'info') => {
-    window.$message?.[type]?.(content);
+  const showToast = (content: string, type: 'info' | 'success' | 'warning' | 'error' | 'loading' = 'info') => {
+    (window as unknown as { $message?: GlobalMessage }).$message?.[type]?.(content);
   };
 
-  const showLoading = (text) => {
+  const showLoading = (text: string) => {
     globalLoadingText.value = text;
     globalLoading.value = true;
   };
@@ -33,7 +52,7 @@ export const useTasksStore = defineStore('tasks', () => {
     globalLoadingText.value = '';
   };
 
-  const handleCompletedTask = async (task) => {
+  const handleCompletedTask = async (task: TaskItem) => {
     const becameDone = task.status === 'done' && previousStatuses.get(task.id) !== 'done';
     if (!becameDone) return;
     const library = useLibraryStore();
@@ -45,29 +64,30 @@ export const useTasksStore = defineStore('tasks', () => {
     if (task.result?.committed) await voices.loadPersonas().catch((cause) => { error.value = cause.message; });
   };
 
-  const pollTasks = async () => {
+  const pollTasks = async (): Promise<void> => {
     error.value = '';
     try {
       const data = await api.tasks();
-      tasks.value = data.tasks || [];
+      // api 层把 tasks 标成 unknown[]，这里按实际消费形状窄化。
+      tasks.value = (data.tasks || []) as TaskItem[];
       await Promise.all(tasks.value.map(handleCompletedTask));
       tasks.value.forEach((task) => previousStatuses.set(task.id, task.status));
     } catch (cause) {
-      error.value = cause.message;
+      error.value = await toMessage(cause);
     } finally {
       const isBusy = tasks.value.some((task) => RUNNING_TASK_STATUSES.has(task.status));
       pollTimer = window.setTimeout(pollTasks, isBusy ? 1500 : 5000);
     }
   };
 
-  const cancelTask = async (taskId) => {
+  const cancelTask = async (taskId: string): Promise<{ ok: boolean }> => {
     error.value = '';
     try {
       const data = await api.cancelTask(taskId);
       await pollTasks();
       return data;
     } catch (cause) {
-      error.value = cause.message;
+      error.value = await toMessage(cause);
       throw cause;
     }
   };

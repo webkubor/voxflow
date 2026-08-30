@@ -5,34 +5,38 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import { api, toMessage } from '../api';
+import type { Persona, PersonasResponse } from '../types/api';
 import { useSynthStore } from './synth';
+import type { DesignPreset } from './synth';
 
 export const useVoicesStore = defineStore('voices', () => {
-  const personas = ref({});
-  const selectedPersona = ref(null);
-  const previewKey = ref(null);
+  const personas = ref<Record<string, Persona>>({});
+  const selectedPersona = ref<string | null>(null);
+  const previewKey = ref<string | null>(null);
   const previewProgress = ref(0);
-  const previewPlayer = ref(null);
+  const previewPlayer = ref<HTMLAudioElement | null>(null);
   const error = ref('');
 
-  const loadPersonas = async () => {
+  const loadPersonas = async (): Promise<PersonasResponse> => {
     error.value = '';
     try {
       const data = await api.personas();
       personas.value = data.personas || {};
-      useSynthStore().designPresets = data.presets || [];
+      // 契约里 presets 是 unknown[]；实际形状是 DesignTab 消费的
+      // {voice_name, tone, text, emotion}（定义在 synth store），这里窄化后写入。
+      useSynthStore().designPresets = (data.presets || []) as DesignPreset[];
       if (!selectedPersona.value) {
         const [firstKey] = Object.keys(personas.value);
         if (firstKey) selectPersona(firstKey);
       }
       return data;
     } catch (cause) {
-      error.value = cause.message;
+      error.value = await toMessage(cause);
       throw cause;
     }
   };
 
-  const selectPersona = (key) => {
+  const selectPersona = (key: string) => {
     selectedPersona.value = key;
     const persona = personas.value[key];
     if (persona) {
@@ -42,7 +46,7 @@ export const useVoicesStore = defineStore('voices', () => {
     }
   };
 
-  const togglePreview = (key) => {
+  const togglePreview = (key: string) => {
     const audio = previewPlayer.value;
     if (!audio) return;
     if (previewKey.value === key) {
@@ -66,7 +70,7 @@ export const useVoicesStore = defineStore('voices', () => {
     previewProgress.value = 0;
   };
 
-  const deletePersona = async (key) => {
+  const deletePersona = async (key: string): Promise<{ ok: boolean }> => {
     error.value = '';
     try {
       const data = await api.deletePersona(key);
@@ -74,7 +78,7 @@ export const useVoicesStore = defineStore('voices', () => {
       await loadPersonas();
       return data;
     } catch (cause) {
-      error.value = cause.message;
+      error.value = await toMessage(cause);
       throw cause;
     }
   };
@@ -85,7 +89,10 @@ export const useVoicesStore = defineStore('voices', () => {
    * 名字跟文件路径已经解耦（后端只从 ref 字段读音频），所以这里就是改两个
    * 字段，不会牵动任何文件 —— 想叫什么叫什么，中文、空格、标点都行。
    */
-  const updatePersona = async (key, { name, desc }) => {
+  const updatePersona = async (
+    key: string,
+    { name, desc }: { name?: string; desc?: string },
+  ): Promise<{ ok: boolean; name: string; desc: string }> => {
     error.value = '';
     try {
       const body = new FormData();
@@ -97,19 +104,19 @@ export const useVoicesStore = defineStore('voices', () => {
       await loadPersonas();
       return data;
     } catch (cause) {
-      error.value = cause.message;
+      error.value = await toMessage(cause);
       throw cause;
     }
   };
 
-  const addPersona = async (formData) => {
+  const addPersona = async (formData: FormData): Promise<{ ok: boolean; key: string }> => {
     error.value = '';
     try {
       const data = await api.addPersona(formData);
       await loadPersonas();
       return data;
     } catch (cause) {
-      error.value = cause.message;
+      error.value = await toMessage(cause);
       throw cause;
     }
   };
