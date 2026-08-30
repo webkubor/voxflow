@@ -85,6 +85,18 @@ def check_status() -> dict:
             "error": "",
         }
     except Exception as e:
+        # 429 是「暂时用太快了」，不是「没配好」。混为一谈的话，
+        # 用户看到「未连接」会去翻配置、改 base_url，而其实等一分钟就好了。
+        msg = str(e)
+        if "429" in msg or "频率超限" in msg:
+            return {
+                "available": True,
+                "throttled": True,
+                "base_url": _default_base,
+                "model": _default_model,
+                "models": [_default_model],
+                "error": "请求太频繁，稍等一下再试",
+            }
         return {
             "available": False,
             "base_url": _default_base,
