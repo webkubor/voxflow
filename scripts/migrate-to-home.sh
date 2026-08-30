@@ -26,7 +26,7 @@ GO="${1:-}"
 
 # configs 要单独处理：platforms.json 是代码的一部分，留在项目里；
 # 其余（台账、音色库、艺人档案）是数据，搬走。
-DATA_DIRS=(assets out publish voice_designs models)
+DATA_DIRS=(assets out publish voice_designs models library)
 # 留在项目里的是**代码自带的模板**（git 里有它们）：
 #   platforms.json  平台 SOP
 #   design/dialogue.json  合成配置模板
@@ -59,6 +59,21 @@ move() {
 
 echo "整目录搬迁："
 for d in "${DATA_DIRS[@]}"; do
+  # assets/branding 是 logo 源文件，属于代码资源（进 git、跟着版本走），
+  # 不能跟着 assets 一起搬 —— 搬走了项目里的 logo 就没了
+  if [ "$d" = "assets" ] && [ -d "$PROJECT/assets/branding" ]; then
+    if [ "$GO" = "--go" ]; then
+      mkdir -p "$HOME_DIR/assets"
+      for sub in "$PROJECT/assets"/*; do
+        [ -e "$sub" ] || continue
+        [ "$(basename "$sub")" = "branding" ] && continue
+        move "$sub" "$HOME_DIR/assets/$(basename "$sub")"
+      done
+    else
+      echo "  · assets/（branding 除外）  $(du -sh "$PROJECT/assets" 2>/dev/null | cut -f1)"
+    fi
+    continue
+  fi
   # publish/templates 是代码资源，不能跟着 publish 一起走
   if [ "$d" = "publish" ] && [ -d "$PROJECT/publish/templates" ]; then
     if [ "$GO" = "--go" ]; then
