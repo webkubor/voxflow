@@ -17,6 +17,7 @@ declare module 'vue' {
     GlobalPlayer: typeof import('./../components/GlobalPlayer.vue')['default']
     MainLayout: typeof import('./../components/MainLayout.vue')['default']
     MessageApi: typeof import('./../components/MessageApi.vue')['default']
+    NAlert: typeof import('naive-ui')['NAlert']
     NAvatar: typeof import('naive-ui')['NAvatar']
     NBadge: typeof import('naive-ui')['NBadge']
     NButton: typeof import('naive-ui')['NButton']
