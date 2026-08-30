@@ -1,565 +1,338 @@
-<template>
-  <div class="tab-content-container">
-    <div class="publish-header">
-      <div>
-        <h3 class="tab-title">音乐自动发布</h3>
-        <p class="tab-subtitle">账号登录、歌手身份与平台曲目发布台账</p>
-      </div>
-      <n-button secondary size="small" :loading="loading" @click="loadBoard">刷新状态</n-button>
-    </div>
-
-    <!-- 🎙️ 歌手身份与平台歌手 ID 绑定 (用户核心诉求，防止自动发布填错 ID) -->
-    <n-card v-if="artist" size="small" class="artist-identity-card">
-      <template #header>
-        <div class="identity-header-title">
-          <span>🎙️ 歌手身份与平台绑定</span>
-          <span class="identity-header-sub">发布校验的唯一真源</span>
-        </div>
-      </template>
-      <template #header-extra>
-        <n-button size="tiny" secondary type="primary" @click="openEditArtistModal">
-          ✎ 编辑歌手档案
-        </n-button>
-      </template>
-
-      <div class="identity-layout">
-        <!-- 基础身份信息 -->
-        <div class="identity-info-box">
-          <div class="info-item">
-            <span class="info-label">公开艺名/歌手：</span>
-            <span class="info-value-highlight">{{ artist.stage_name || '未登记' }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">版权真实姓名：</span>
-            <span class="info-value">{{ artist.real_name || '未登记' }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">默认版权比例：</span>
-            <span class="info-value-auth">{{ artist.defaults?.authorization_ratio || '100%' }} (词/曲/录音全自研)</span>
-          </div>
-        </div>
-
-        <!-- 各平台歌手 ID 绑定状态 -->
-        <div class="platform-profiles-box">
-          <div class="profile-title">平台发布歌手 ID (自动读取)</div>
-          <div class="profile-grid">
-            <div 
-              v-for="profile in artist.platform_profiles" 
-              :key="profile.platform" 
-              class="profile-item"
-            >
-              <span class="platform-dot"></span>
-              <span class="platform-name">{{ profile.platform }}：</span>
-              <span class="profile-id-badge">ID: {{ parseArtistId(profile.url) }}</span>
-              <a :href="profile.url" target="_blank" class="profile-link-btn">
-                歌手主页 ↗
-              </a>
-            </div>
-            <div v-if="!artist.platform_profiles || artist.platform_profiles.length === 0" class="no-profiles-tip">
-              ⚠️ 暂无绑定的歌手主页，请立即编辑以导入歌手 ID，防止自动化发布时填错！
-            </div>
-          </div>
-        </div>
-      </div>
-    </n-card>
-
-    <!-- 流水线在前、平台账号在后：先看歌走到哪、决定发不发，才轮到关心发去哪个账号。 -->
-    <PipelineBoard />
-
-    <n-alert type="warning" :show-icon="false" class="truth-alert">
-      未接入的平台登录检测或云备份不会被伪装成成功；请在台账记录实际状态后再以此页为准。
-    </n-alert>
-
-    <!-- 平台发布状态卡片网格 -->
-    <n-grid :cols="1" :m-cols="3" :x-gap="16" :y-gap="16" class="accounts-grid">
-      <n-grid-item v-for="account in publishAccounts" :key="account.id">
-        <n-card size="small" class="account-card">
-          <template #header>
-            <div class="account-heading">
-              <span class="account-label-text">{{ account.label }}</span>
-              <n-tag size="small" :type="loginTagType(account.login.status)" round>
-                {{ account.login.label }}
-              </n-tag>
-            </div>
-          </template>
-          
-          <!-- 平台登录详情 -->
-          <p class="account-detail">{{ account.login.detail }}</p>
-          
-          <!-- 已发布歌曲及 ID 列表 -->
-          <div class="release-heading">已记录曲目 · {{ account.releases.length }} 首</div>
-          <n-space v-if="account.releases.length" vertical size="small" class="releases-list">
-            <div v-for="release in account.releases" :key="release.id" class="release-row">
-              <div class="release-left-meta">
-                <span class="release-title" :title="release.title">{{ release.title }}</span>
-                <!-- 展示可能存在的平台歌曲 ID (通过 url 或者 note 解析) -->
-                <span v-if="getSongId(release)" class="song-id-tag">
-                  ID: {{ getSongId(release) }}
-                </span>
-              </div>
-              <n-space size="small" align="center">
-                <n-tag size="tiny" :type="publishTagType(release.status)" round>{{ release.status }}</n-tag>
-                <a 
-                  v-if="getSongUrl(release)" 
-                  :href="getSongUrl(release)" 
-                  target="_blank" 
-                  class="song-link-icon"
-                  title="前往平台播放"
-                >
-                  🎵
-                </a>
-              </n-space>
-            </div>
-          </n-space>
-          <n-empty v-else size="small" description="暂无已记录发布曲目" class="empty-releases" />
-        </n-card>
-      </n-grid-item>
-    </n-grid>
-
-    <n-card size="small" class="backup-card" title="所有歌曲的云备份">
-      <n-list v-if="backupTracks.length" bordered>
-        <n-list-item v-for="track in backupTracks" :key="track.id">
-          <n-thing :title="track.title">
-            <template #description>{{ track.cloud_backup.location || '尚未登记云端位置' }}</template>
-            <template #header-extra>
-              <n-tag size="small" :type="backupTagType(track.cloud_backup.status)">
-                {{ track.cloud_backup.label }}
-              </n-tag>
-            </template>
-          </n-thing>
-        </n-list-item>
-      </n-list>
-      <n-empty v-else description="流水线中还没有歌曲记录" />
-    </n-card>
-
-    <p v-if="error" class="publish-error">{{ error }}</p>
-
-    <!-- 🎙️ 歌手档案编辑弹窗 -->
-    <n-modal
-      v-model:show="showEditArtist"
-      preset="card"
-      style="width: 500px;"
-      title="✎ 修改歌手身份与平台绑定"
-      size="small"
-      class="artist-modal-card"
-    >
-      <n-form :model="editArtistForm" layout="vertical">
-        <n-form-item label="🎙️ 歌手艺名 (用于词曲作者、表演者栏)">
-          <n-input v-model:value="editArtistForm.stage_name" placeholder="例如：月栖洲" />
-        </n-form-item>
-        <n-form-item label="👤 真实姓名 (版权实名，用于结算收益)">
-          <n-input v-model:value="editArtistForm.real_name" placeholder="请输入身份证姓名" />
-        </n-form-item>
-        
-        <div class="modal-section-title">🔗 平台歌手主页链接 (保存后自动解析歌手 ID)</div>
-        
-        <n-form-item label="网易云音乐人主页 Link">
-          <n-input v-model:value="neteaseUrl" placeholder="https://music.163.com/#/artist?id=..." />
-        </n-form-item>
-
-        <n-form-item label="QQ音乐人主页 Link">
-          <n-input v-model:value="qqUrl" placeholder="https://y.qq.com/n/ryqq_v2/singer/..." />
-        </n-form-item>
-      </n-form>
-
-      <template #action>
-        <n-space justify="end">
-          <n-button secondary @click="showEditArtist = false">取消</n-button>
-          <n-button type="primary" :loading="savingArtist" @click="saveArtistProfile">保存更改</n-button>
-        </n-space>
-      </template>
-    </n-modal>
-  </div>
-</template>
-
 <script setup>
-import { onMounted, ref } from 'vue';
+/**
+ * 平台视角：切到哪个平台，就看那个平台的账号、专辑、已上架作品。
+ *
+ * ## 为什么改成这样
+ *
+ * 上一版把所有内容纵向堆在一页：三个平台的账号卡并排、云备份列表、
+ * 流水线看板，从头往下摆。问题是**这些东西不在同一个维度上** ——
+ * 「我的歌走到哪一步」是本地流程视角，「网易云上有哪些歌」是平台视角，
+ * 混在一起看就是一堆卡片，想找什么都得从头扫一遍。
+ *
+ * 现在按平台切：一次只看一个平台的完整画面（我是谁 → 有多少数据 →
+ * 有哪些专辑 → 有哪些歌）。流水线看板挪去「我的作品」那一屏，
+ * 它属于本地流程，不属于任何平台。
+ *
+ * ## 界面上不放敏感信息
+ *
+ * 真实姓名、证件号这些在后端就被脱敏了（core/pipeline.py 的 _redact）。
+ * 界面是可以给人看、可以截图演示的地方，展示的应该是作品和数据。
+ */
+import { computed, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
-import PipelineBoard from '../components/PipelineBoard.vue';
 import { usePipelineStore } from '../stores/pipeline';
+import { useTasksStore } from '../stores/tasks';
 
 const pipelineStore = usePipelineStore();
-const { publishAccounts, backupTracks, artist, error } = storeToRefs(pipelineStore);
+const tasksStore = useTasksStore();
+const { platforms, tracks } = storeToRefs(pipelineStore);
+
+const accounts = ref({});
+const albums = ref({});
 const loading = ref(false);
+const current = ref('netease');   // 默认停在有数据的那个
+const openAlbum = ref('');
 
-// 歌手编辑相关
-const showEditArtist = ref(false);
-const savingArtist = ref(false);
-const editArtistForm = ref({ stage_name: '', real_name: '' });
-const neteaseUrl = ref('');
-const qqUrl = ref('');
-
-const loginTagType = (status) => ({
-  connected: 'success', expired: 'error', unconfigured: 'warning', unknown: 'default',
-}[status] || 'default');
-
-const backupTagType = (status) => ({
-  backed_up: 'success', syncing: 'info', failed: 'error', unrecorded: 'warning',
-}[status] || 'default');
-
-const publishTagType = (status) => ({
-  published: 'success', publishing: 'info', rejected: 'error', pending: 'warning',
-}[status] || 'default');
-
-// 从主页 URL 中提取歌手 ID
-const parseArtistId = (url) => {
-  if (!url) return '未登记';
-  try {
-    const u = new URL(url);
-    if (url.includes('y.qq.com')) {
-      const match = u.pathname.match(/\/singer\/([A-Za-z0-9]+)/);
-      return match ? match[1] : '未知';
-    }
-    if (url.includes('music.163.com')) {
-      const id = u.searchParams.get('id') || u.hash.split('id=')[1];
-      return id || '未知';
-    }
-  } catch (e) {
-    // 可能是老旧的普通文本
-  }
-  const matches = url.match(/id=(\d+)/) || url.match(/\/singer\/([A-Za-z0-9]+)/);
-  return matches ? matches[1] : '已登记';
-};
-
-// 解析歌曲的平台 ID
-const getSongId = (release) => {
-  if (!release) return '';
-  if (release.song_id) return release.song_id;
-  if (release.url) {
-    try {
-      const u = new URL(release.url);
-      if (release.url.includes('song')) {
-        const id = u.searchParams.get('id') || u.pathname.match(/\/song\/([0-9]+)/)?.[1];
-        if (id) return id;
-      }
-    } catch(e) {}
-  }
-  return release.note || '';
-};
-
-// 解析歌曲链接
-const getSongUrl = (release) => {
-  return release?.url || '';
-};
-
-const loadBoard = async () => {
+const load = async () => {
   loading.value = true;
   try {
-    await pipelineStore.loadPublishBoard();
+    const [acc, alb] = await Promise.all([
+      fetch('/api/platform-accounts').then((r) => r.json()),
+      fetch('/api/albums').then((r) => r.json()),
+    ]);
+    accounts.value = acc.accounts || {};
+    albums.value = alb.albums || {};
+    await pipelineStore.loadPipeline();
+  } catch (cause) {
+    tasksStore.showToast(cause.message || '加载平台数据失败', 'error');
   } finally {
     loading.value = false;
   }
 };
+onMounted(load);
 
-const openEditArtistModal = () => {
-  const currentArtist = artist.value || {};
-  editArtistForm.value = {
-    stage_name: currentArtist.stage_name || '',
-    real_name: currentArtist.real_name || ''
-  };
-  
-  // 回填平台链接
-  const profiles = currentArtist.platform_profiles || [];
-  const netease = profiles.find(p => p.platform === '网易云音乐');
-  const qq = profiles.find(p => p.platform === 'QQ音乐');
-  neteaseUrl.value = netease ? netease.url : '';
-  qqUrl.value = qq ? qq.url : '';
-  
-  showEditArtist.value = true;
+/** 平台清单：顺序固定，不按数据多少排 —— 位置一变人就要重新找 */
+const platformList = computed(() =>
+  Object.entries(platforms.value || {}).map(([key, p]) => ({
+    key,
+    label: p.label,
+    account: accounts.value[key] || null,
+    songCount: tracks.value.filter((t) => t.platforms?.[key]).length,
+  })),
+);
+
+const acc = computed(() => accounts.value[current.value] || null);
+
+const albumsOfPlatform = computed(() =>
+  Object.entries(albums.value)
+    .filter(([, a]) => a.platform === current.value)
+    .map(([key, a]) => ({ key, ...a }))
+    .sort((a, b) => (b.publish_date || '').localeCompare(a.publish_date || '')),
+);
+
+const songsOfPlatform = computed(() =>
+  tracks.value
+    .filter((t) => t.platforms?.[current.value])
+    .map((t) => ({ ...t, p: t.platforms[current.value] }))
+    .sort((a, b) => (b.p.publish_date || '').localeCompare(a.p.publish_date || '')),
+);
+
+const fmtDuration = (sec) => {
+  if (!sec) return '';
+  const m = Math.floor(sec / 60);
+  return `${m}:${String(sec % 60).padStart(2, '0')}`;
 };
-
-const saveArtistProfile = async () => {
-  savingArtist.value = true;
-  try {
-    const updatedProfiles = [];
-    if (neteaseUrl.value.trim()) {
-      updatedProfiles.push({
-        platform: '网易云音乐',
-        url: neteaseUrl.value.trim(),
-        has_page: true,
-        type: 'Artist Profile'
-      });
-    }
-    if (qqUrl.value.trim()) {
-      updatedProfiles.push({
-        platform: 'QQ音乐',
-        url: qqUrl.value.trim(),
-        has_page: true,
-        type: 'Official Artist'
-      });
-    }
-    
-    await pipelineStore.saveArtist({
-      stage_name: editArtistForm.value.stage_name.trim(),
-      real_name: editArtistForm.value.real_name.trim(),
-      platform_profiles: updatedProfiles
-    });
-    showEditArtist.value = false;
-  } catch (e) {
-    console.error(e);
-  } finally {
-    savingArtist.value = false;
-  }
-};
-
-onMounted(() => { void loadBoard(); });
 </script>
 
+<template>
+  <div class="tab-content-container">
+    <div class="head">
+      <div>
+        <h3 class="tab-title">平台</h3>
+        <p class="tab-subtitle">每个平台的账号、专辑与已上架作品</p>
+      </div>
+      <n-button secondary size="small" :loading="loading" @click="load">刷新</n-button>
+    </div>
+
+    <!-- 平台切换：一次只看一个平台的完整画面 -->
+    <div class="platform-tabs">
+      <button
+        v-for="p in platformList"
+        :key="p.key"
+        class="platform-tab"
+        :class="{ active: current === p.key, empty: !p.account }"
+        @click="current = p.key"
+      >
+        <span class="pt-label">{{ p.label }}</span>
+        <span v-if="p.account" class="pt-meta">{{ p.songCount }} 首</span>
+        <span v-else class="pt-meta">未接入</span>
+      </button>
+    </div>
+
+    <!-- 没接入的平台：说清楚差什么，不装作有数据 -->
+    <n-empty
+      v-if="!acc"
+      :description="`${platformList.find(p => p.key === current)?.label || ''} 还没同步过账号数据`"
+      class="empty-platform"
+    >
+      <template #extra>
+        <p class="empty-hint">
+          跑一次同步脚本就有了：<code>browser-harness &lt; scripts/sync_{{ current }}.py</code>
+        </p>
+      </template>
+    </n-empty>
+
+    <template v-else>
+      <!-- 账号卡：我是谁 + 这个平台上的数据 -->
+      <n-card size="small" class="account-card">
+        <div class="acc-head">
+          <img v-if="acc.avatar_url" :src="acc.avatar_url" class="acc-avatar" alt="" />
+          <div class="acc-id">
+            <div class="acc-name">
+              {{ acc.artist_name }}
+              <n-tag v-if="acc.stats?.roles" size="small" round :bordered="false">{{ acc.stats.roles }}</n-tag>
+            </div>
+            <div v-if="acc.alias?.length" class="acc-alias">{{ acc.alias.join(' · ') }}</div>
+            <div class="acc-links">
+              <a :href="acc.artist_url" target="_blank" rel="noopener">艺人主页</a>
+              <a v-if="acc.user_url" :href="acc.user_url" target="_blank" rel="noopener">个人主页</a>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="acc.stats?.works" class="acc-stats">
+          <div class="stat">
+            <span class="stat-n">{{ acc.stats.play_count }}</span>
+            <span class="stat-l">播放量<em v-if="acc.stats.play_yesterday_delta"> +{{ acc.stats.play_yesterday_delta }}</em></span>
+          </div>
+          <div class="stat"><span class="stat-n">{{ acc.stats.fans }}</span><span class="stat-l">粉丝</span></div>
+          <div class="stat"><span class="stat-n">{{ acc.song_count }}</span><span class="stat-l">作品</span></div>
+          <div class="stat"><span class="stat-n">{{ acc.album_count }}</span><span class="stat-l">专辑</span></div>
+          <div class="stat"><span class="stat-n">¥{{ acc.stats.withdrawable_cny }}</span><span class="stat-l">可提现</span></div>
+          <div class="stat"><span class="stat-n">{{ acc.stats.musician_index }}</span><span class="stat-l">音乐人指数</span></div>
+        </div>
+        <p class="acc-synced">同步于 {{ (acc.synced_at || '').replace('T', ' ') }}</p>
+      </n-card>
+
+      <!-- 专辑：点开看曲目 -->
+      <section v-if="albumsOfPlatform.length" class="section">
+        <h4 class="section-title">专辑 <em>{{ albumsOfPlatform.length }}</em></h4>
+        <div class="album-grid">
+          <div
+            v-for="a in albumsOfPlatform"
+            :key="a.key"
+            class="album"
+            :class="{ open: openAlbum === a.key }"
+            @click="openAlbum = openAlbum === a.key ? '' : a.key"
+          >
+            <img v-if="a.cover_api" :src="a.cover_api" class="album-cover" :alt="a.title" />
+            <div v-else class="album-cover album-cover-empty">♪</div>
+            <div class="album-title">{{ a.title }}</div>
+            <div class="album-meta">{{ a.track_count }} 首 · {{ a.publish_date }}</div>
+          </div>
+        </div>
+
+        <!-- 展开的专辑曲目 -->
+        <n-card v-if="openAlbum" size="small" class="album-detail">
+          <template #header>
+            <span class="ad-title">{{ albums[openAlbum]?.title }}</span>
+            <span class="ad-meta">{{ albums[openAlbum]?.publish_date }}</span>
+          </template>
+          <p v-if="albums[openAlbum]?.description" class="ad-desc">{{ albums[openAlbum].description }}</p>
+          <ol class="ad-tracks">
+            <li v-for="t in albums[openAlbum]?.tracks || []" :key="t.id">
+              <span class="adt-name">{{ t.title }}</span>
+              <span class="adt-dur">{{ fmtDuration(t.duration) }}</span>
+              <a v-if="t.url" :href="t.url" target="_blank" rel="noopener" class="adt-link">听</a>
+            </li>
+          </ol>
+        </n-card>
+      </section>
+
+      <!-- 已上架作品 -->
+      <section class="section">
+        <h4 class="section-title">已上架 <em>{{ songsOfPlatform.length }}</em></h4>
+        <div class="song-list">
+          <div v-for="s in songsOfPlatform" :key="s.id" class="song">
+            <span class="song-name">{{ s.title }}</span>
+            <span class="song-album">{{ s.p.album }}</span>
+            <span class="song-date">{{ s.p.publish_date }}</span>
+            <span class="song-dur">{{ fmtDuration(s.p.duration) }}</span>
+            <a v-if="s.p.song_url" :href="s.p.song_url" target="_blank" rel="noopener" class="song-link">听</a>
+          </div>
+        </div>
+      </section>
+    </template>
+  </div>
+</template>
+
 <style scoped>
-.tab-content-container { display: flex; flex-direction: column; gap: var(--vf-space-4); }
-.publish-header { display: flex; align-items: center; justify-content: space-between; gap: var(--vf-space-3); }
-.tab-title { margin: 0; color: var(--vf-text-1); font-size: 15px; font-weight: 600; }
-.tab-subtitle, .account-detail { margin: var(--vf-space-1) 0 0; color: var(--vf-text-3); font-size: 12px; }
-.truth-alert { margin: 0; }
-
-/* 🎙️ 歌手身份卡片毛玻璃样式 */
-.artist-identity-card {
-  background: rgba(22, 22, 26, 0.45) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.05) !important;
-  border-radius: 14px !important;
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25) !important;
+.head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: var(--vf-space-4);
 }
+.tab-title { margin: 0; font-size: 16px; color: var(--vf-text-1); }
+.tab-subtitle { margin: 4px 0 0; font-size: 12px; color: var(--vf-text-3); }
 
-.identity-header-title {
-  display: flex;
-  flex-direction: column;
+.platform-tabs {
+  display: flex; gap: var(--vf-space-2);
+  margin-bottom: var(--vf-space-4);
 }
-
-.identity-header-sub {
-  font-size: 11px;
-  color: var(--vf-text-3);
-  font-weight: normal;
-  margin-top: 2px;
-}
-
-.identity-layout {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 20px;
-  padding: 8px 0;
-}
-
-@media (min-width: 768px) {
-  .identity-layout {
-    grid-template-columns: 1fr 1.3fr;
-  }
-}
-
-.identity-info-box {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  border-right: none;
-  padding-right: 0;
-}
-
-@media (min-width: 768px) {
-  .identity-info-box {
-    border-right: 1px solid rgba(255, 255, 255, 0.06);
-    padding-right: 24px;
-  }
-}
-
-.info-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-}
-
-.info-label {
+.platform-tab {
+  flex: 1;
+  padding: var(--vf-space-3);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-md);
+  background: var(--vf-bg-2);
   color: var(--vf-text-2);
+  cursor: pointer;
+  display: flex; flex-direction: column; gap: 2px;
+  transition: border-color .15s, background .15s;
 }
-
-.info-value-highlight {
-  color: var(--vf-primary);
-  font-weight: 600;
-  font-size: 15px;
-  text-shadow: 0 0 10px rgba(129, 140, 248, 0.25);
-}
-
-.info-value {
+.platform-tab:hover { background: var(--vf-bg-3); }
+.platform-tab.active {
+  border-color: var(--vf-primary);
+  background: var(--vf-primary-soft);
   color: var(--vf-text-1);
-  font-weight: 500;
+}
+.platform-tab.empty { opacity: .55; }
+.pt-label { font-size: 13px; font-weight: 600; }
+.pt-meta { font-size: 11px; color: var(--vf-text-3); }
+
+.empty-platform { padding: var(--vf-space-7) 0; }
+.empty-hint { font-size: 12px; color: var(--vf-text-3); }
+.empty-hint code {
+  padding: 2px 6px; border-radius: var(--vf-radius-sm);
+  background: var(--vf-bg-3); color: var(--vf-text-2);
 }
 
-.info-value-auth {
-  color: var(--vf-ok);
-  font-weight: 500;
+.account-card { margin-bottom: var(--vf-space-4); }
+.acc-head { display: flex; gap: var(--vf-space-3); align-items: center; }
+.acc-avatar { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; }
+.acc-name {
+  display: flex; align-items: center; gap: var(--vf-space-2);
+  font-size: 15px; font-weight: 600; color: var(--vf-text-1);
 }
+.acc-alias { margin-top: 2px; font-size: 12px; color: var(--vf-text-3); }
+.acc-links { margin-top: var(--vf-space-1); display: flex; gap: var(--vf-space-3); }
+.acc-links a { font-size: 12px; color: var(--vf-primary); text-decoration: none; }
+.acc-links a:hover { text-decoration: underline; }
 
-.platform-profiles-box {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.acc-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: var(--vf-space-2);
+  margin-top: var(--vf-space-4);
 }
+.stat {
+  padding: var(--vf-space-3) var(--vf-space-2);
+  border-radius: var(--vf-radius-md);
+  background: var(--vf-bg-3);
+  text-align: center;
+}
+.stat-n { display: block; font-size: 17px; font-weight: 600; color: var(--vf-primary); }
+.stat-l { font-size: 11px; color: var(--vf-text-3); }
+.stat-l em { font-style: normal; color: var(--vf-ok); }
+.acc-synced { margin: var(--vf-space-3) 0 0; font-size: 11px; color: var(--vf-text-3); }
 
-.profile-title {
+.section { margin-bottom: var(--vf-space-5); }
+.section-title {
+  margin: 0 0 var(--vf-space-3);
+  font-size: 13px; color: var(--vf-text-2);
+}
+.section-title em { font-style: normal; color: var(--vf-text-3); }
+
+.album-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: var(--vf-space-3);
+}
+.album { cursor: pointer; }
+.album-cover {
+  width: 100%; aspect-ratio: 1;
+  border-radius: var(--vf-radius-md);
+  object-fit: cover;
+  background: var(--vf-bg-3);
+  transition: outline-color .15s;
+  outline: 2px solid transparent;
+}
+.album.open .album-cover { outline-color: var(--vf-primary); }
+.album-cover-empty {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--vf-text-3); font-size: 26px;
+}
+.album-title {
+  margin-top: var(--vf-space-2);
+  font-size: 12px; color: var(--vf-text-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.album-meta { font-size: 11px; color: var(--vf-text-3); }
+
+.album-detail { margin-top: var(--vf-space-3); }
+.ad-title { font-size: 14px; color: var(--vf-text-1); }
+.ad-meta { margin-left: var(--vf-space-2); font-size: 11px; color: var(--vf-text-3); }
+.ad-desc {
+  margin: 0 0 var(--vf-space-3);
+  font-size: 12px; line-height: 1.7; color: var(--vf-text-2);
+}
+.ad-tracks { margin: 0; padding-left: var(--vf-space-5); }
+.ad-tracks li {
+  display: flex; align-items: center; gap: var(--vf-space-3);
+  padding: 3px 0; font-size: 12px; color: var(--vf-text-2);
+}
+.adt-name { flex: 1; }
+.adt-dur { color: var(--vf-text-3); font-variant-numeric: tabular-nums; }
+.adt-link { color: var(--vf-primary); text-decoration: none; }
+
+.song-list { display: flex; flex-direction: column; }
+.song {
+  display: flex; align-items: center; gap: var(--vf-space-3);
+  padding: var(--vf-space-2) var(--vf-space-3);
+  border-bottom: 1px solid var(--vf-border);
   font-size: 12px;
-  font-weight: 600;
-  color: var(--vf-text-2);
-  margin-bottom: 4px;
 }
-
-.profile-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.profile-item {
-  display: flex;
-  align-items: center;
-  font-size: 13px;
-  background: rgba(255, 255, 255, 0.02);
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-.platform-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--vf-primary);
-  margin-right: 8px;
-  box-shadow: 0 0 6px var(--vf-primary);
-}
-
-.platform-name {
-  color: var(--vf-text-1);
-  font-weight: 500;
-  margin-right: 6px;
-}
-
-.profile-id-badge {
-  font-size: 11px;
-  color: var(--vf-text-2);
-  background: rgba(129, 140, 248, 0.12);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: monospace;
-}
-
-.profile-link-btn {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--vf-primary);
-  text-decoration: none;
-  transition: opacity 0.2s;
-}
-
-.profile-link-btn:hover {
-  opacity: 0.8;
-  text-decoration: underline;
-}
-
-.no-profiles-tip {
-  font-size: 12px;
-  color: var(--vf-warn);
-  padding: 10px;
-}
-
-/* 账号卡片毛玻璃样式 */
-.account-card {
-  background: rgba(22, 22, 26, 0.45) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.04) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2) !important;
-  transition: border-color 0.3s;
-}
-
-.account-card:hover {
-  border-color: rgba(129, 140, 248, 0.2) !important;
-}
-
-.account-heading, .release-row { 
-  display: flex; 
-  align-items: center; 
-  justify-content: space-between; 
-  gap: var(--vf-space-2); 
-}
-
-.account-label-text {
-  font-weight: 600;
-  color: var(--vf-text-1);
-  font-size: 14px;
-}
-
-.release-heading { 
-  margin: var(--vf-space-4) 0 var(--vf-space-2); 
-  color: var(--vf-text-2); 
-  font-size: 12px; 
-  font-weight: 600;
-}
-
-.releases-list {
-  max-height: 250px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.release-row {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  padding: 6px 10px;
-  border-radius: 8px;
-}
-
-.release-left-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  overflow: hidden;
-  margin-right: 8px;
-}
-
-.release-title { 
-  overflow: hidden; 
-  color: var(--vf-text-1); 
-  font-size: 13px; 
-  text-overflow: ellipsis; 
-  white-space: nowrap; 
-}
-
-.song-id-tag {
-  font-size: 10px;
-  color: var(--vf-text-3);
-  font-family: monospace;
-}
-
-.song-link-icon {
-  text-decoration: none;
-  font-size: 12px;
-  transition: transform 0.2s;
-}
-.song-link-icon:hover {
-  transform: scale(1.2);
-}
-
-.empty-releases {
-  padding: 24px 0 !important;
-}
-
-.backup-card {
-  background: rgba(22, 22, 26, 0.42) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.04) !important;
-  border-radius: 12px !important;
-}
-
-.publish-error { margin: 0; color: var(--vf-err); font-size: 12px; }
-
-/* 弹窗细节 */
-.modal-section-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--vf-text-2);
-  margin: 16px 0 8px;
-}
+.song:hover { background: var(--vf-bg-2); }
+.song-name { flex: 1; color: var(--vf-text-1); }
+.song-album { width: 150px; color: var(--vf-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.song-date { width: 84px; color: var(--vf-text-3); font-variant-numeric: tabular-nums; }
+.song-dur { width: 44px; color: var(--vf-text-3); text-align: right; font-variant-numeric: tabular-nums; }
+.song-link { width: 20px; color: var(--vf-primary); text-decoration: none; text-align: right; }
 </style>

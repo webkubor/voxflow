@@ -2,71 +2,59 @@
   <div class="tab-content-container">
     <!-- 头部操作区 -->
     <div class="library-header">
-      <div class="header-title-box">
-        <span class="header-icon">📁</span>
-        <h3 class="tab-title">媒体资产库</h3>
-        <span class="file-count-badge">{{ audioFiles.length }} 首作品</span>
+      <div class="header-left">
+        <h3 class="tab-title">已生成音频资产</h3>
+        <span class="count-pill">{{ audioFiles.length }} 条记录</span>
       </div>
-      <button class="refresh-btn" @click="loadAudioList">
-        <span>🔄 刷新曲目</span>
+      <button class="clean-btn" @click="loadAudioList">
+        🔄 刷新列表
       </button>
     </div>
 
-    <!-- 流媒体曲目网格 (Spotify-like Track Grid) -->
-    <div v-if="audioFiles.length > 0" class="track-grid">
+    <!-- 清爽精密曲目列表 (Clean Audio Table/List) -->
+    <div v-if="audioFiles.length > 0" class="audio-list">
       <div 
         v-for="file in audioFiles" 
         :key="file.filename" 
-        class="track-card"
+        class="audio-row"
       >
-        <!-- 正方形黑胶封面区 -->
-        <div class="track-cover-wrap" @click="playAudio(file.url, file.filename)">
-          <div class="vinyl-record">
-            <div class="vinyl-center"></div>
-          </div>
-          <!-- 悬浮播放按钮 -->
-          <div class="hover-play-btn">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <path d="M8 5V19L19 12L8 5Z"/>
-            </svg>
+        <button class="row-play-btn" @click="playAudio(file.url, file.filename)" title="试听">
+          ▶
+        </button>
+
+        <div class="row-main-info">
+          <span class="file-name" :title="file.filename">{{ file.filename }}</span>
+          <div class="file-meta">
+            <span>{{ file.created }}</span>
+            <span class="meta-dot">·</span>
+            <span>{{ formatBytes(file.size) }}</span>
           </div>
         </div>
 
-        <!-- 曲目信息 -->
-        <div class="track-info">
-          <span class="track-title" :title="file.filename">{{ file.filename }}</span>
-          <div class="track-meta-row">
-            <span class="track-date">{{ file.created }}</span>
-            <span class="track-size">{{ formatBytes(file.size) }}</span>
-          </div>
-        </div>
-
-        <!-- 卡片底部快捷操作 -->
-        <div class="track-actions-row">
+        <div class="row-actions">
           <a 
-            class="action-pill-btn download-pill" 
+            class="row-action-link" 
             :href="file.url" 
             :download="file.filename"
-            title="下载音频"
+            title="下载文件"
           >
-            ⬇ 下载
+            下载
           </a>
           <button 
-            class="action-pill-btn del-pill" 
+            class="row-del-btn" 
             @click="deleteAudio(file.filename)"
-            title="删除曲目"
+            title="删除"
           >
-            🗑️
+            ✕
           </button>
         </div>
       </div>
     </div>
 
     <!-- 暂无音频空态 -->
-    <div v-else class="empty-library">
-      <div class="empty-disc-icon">💿</div>
-      <h4>资产库空空如也</h4>
-      <p>在「克隆合成」或「AI 音乐工坊」中生成你的第一首音频作品吧</p>
+    <div v-else class="empty-state">
+      <p>暂无已生成音频</p>
+      <span>在「声音克隆」或「音色设计」页面开始合成声音</span>
     </div>
   </div>
 </template>
@@ -92,8 +80,8 @@ const formatBytes = (bytes) => {
 .tab-content-container {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  max-width: 1200px;
+  gap: 16px;
+  max-width: 960px;
   margin: 0 auto;
   width: 100%;
   padding-bottom: 40px;
@@ -103,223 +91,152 @@ const formatBytes = (bytes) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--vf-border-subtle);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--vf-border);
 }
 
-.header-title-box {
+.header-left {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.header-icon { font-size: 20px; }
-
 .tab-title {
   margin: 0;
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--vf-text-1);
 }
 
-.file-count-badge {
+.count-pill {
   font-size: 11px;
-  font-weight: 600;
-  background: rgba(129, 140, 248, 0.15);
-  color: var(--vf-primary);
-  padding: 3px 8px;
-  border-radius: 99px;
-}
-
-.refresh-btn {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--vf-border-subtle);
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
   color: var(--vf-text-2);
-  padding: 6px 14px;
-  border-radius: 99px;
+  padding: 2px 8px;
+  border-radius: var(--vf-radius-xs);
+}
+
+.clean-btn {
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  color: var(--vf-text-2);
+  padding: 4px 12px;
+  border-radius: var(--vf-radius-xs);
   font-size: 12px;
-  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
+.clean-btn:hover { background: var(--vf-bg-hover); color: var(--vf-text-1); }
 
-.refresh-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--vf-text-1);
-}
-
-/* 流媒体网格 */
-.track-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 18px;
-}
-
-.track-card {
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid var(--vf-border-subtle);
-  border-radius: 18px;
-  padding: 14px;
+/* 清爽行列表 */
+.audio-list {
   display: flex;
   flex-direction: column;
+  gap: 6px;
+}
+
+.audio-row {
+  display: flex;
+  align-items: center;
   gap: 12px;
-  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
-  position: relative;
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-sm);
+  padding: 10px 14px;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.track-card:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
-  transform: translateY(-4px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+.audio-row:hover {
+  background: var(--vf-bg-hover);
+  border-color: var(--vf-border-strong);
 }
 
-/* 封面与黑胶 */
-.track-cover-wrap {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
+.row-play-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--vf-bg-3);
+  border: 1px solid var(--vf-border);
+  color: var(--vf-text-1);
+  font-size: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  position: relative;
+  transition: all 0.15s ease;
+}
+
+.row-play-btn:hover {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+}
+
+.row-main-info {
+  flex: 1;
   overflow: hidden;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
-}
-
-.vinyl-record {
-  width: 70%;
-  height: 70%;
-  border-radius: 50%;
-  background: #09090b;
-  border: 4px solid rgba(255, 255, 255, 0.06);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8);
-}
-
-.vinyl-center {
-  width: 28%;
-  height: 28%;
-  border-radius: 50%;
-  background: var(--vf-primary);
-}
-
-.hover-play-btn {
-  position: absolute;
-  bottom: 12px;
-  right: 12px;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--vf-primary);
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  opacity: 0;
-  transform: translateY(8px);
-  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
-.track-card:hover .hover-play-btn {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.hover-play-btn:hover {
-  transform: scale(1.1) !important;
-  background: #a5b4fc;
-}
-
-/* 曲目信息 */
-.track-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
-.track-title {
+.file-name {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--vf-text-1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.track-meta-row {
+.file-meta {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 6px;
   font-size: 11px;
   color: var(--vf-text-3);
 }
 
-/* 操作行 */
-.track-actions-row {
+.meta-dot { color: var(--vf-border-strong); }
+
+.row-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  gap: 8px;
 }
 
-.action-pill-btn {
-  font-size: 11px;
-  font-weight: 500;
-  padding: 4px 10px;
-  border-radius: 99px;
-  cursor: pointer;
-  text-decoration: none;
-  transition: all 0.2s ease;
-}
-
-.download-pill {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+.row-action-link {
+  font-size: 12px;
   color: var(--vf-text-2);
+  text-decoration: none;
+  background: var(--vf-bg-3);
+  border: 1px solid var(--vf-border);
+  padding: 3px 10px;
+  border-radius: var(--vf-radius-xs);
+  transition: all 0.15s ease;
 }
 
-.download-pill:hover {
-  background: var(--vf-primary);
-  color: #ffffff;
-  border-color: var(--vf-primary);
+.row-action-link:hover {
+  background: var(--vf-bg-hover);
+  color: var(--vf-text-1);
 }
 
-.del-pill {
+.row-del-btn {
   background: none;
   border: none;
   color: var(--vf-text-3);
   font-size: 12px;
+  cursor: pointer;
+  padding: 4px;
 }
+.row-del-btn:hover { color: var(--vf-err); }
 
-.del-pill:hover { color: var(--vf-err); }
-
-/* 空态 */
-.empty-library {
+.empty-state {
   text-align: center;
-  padding: 80px 20px;
+  padding: 60px 10px;
   color: var(--vf-text-3);
 }
-
-.empty-disc-icon {
-  font-size: 48px;
-  margin-bottom: 12px;
-}
-
-.empty-library h4 {
-  margin: 0 0 6px 0;
-  font-size: 16px;
-  color: var(--vf-text-2);
-}
-
-.empty-library p {
-  margin: 0;
-  font-size: 13px;
-}
+.empty-state p { margin: 0 0 4px 0; font-size: 14px; color: var(--vf-text-2); }
+.empty-state span { font-size: 12px; }
 </style>

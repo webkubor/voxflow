@@ -1,41 +1,32 @@
 @import "./tokens.css";
 
 /* ==========================================
-   VoxFlow 现代音频流媒体（Suno / Spotify 风格）核心样式
+   VoxFlow 纯净精密声学深色系统 (Clean Precision Dark Mode)
    ========================================== */
 
-:root {
-  --vf-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Segoe UI", Roboto, sans-serif;
-  --vf-primary-gradient: linear-gradient(135deg, #6366f1 0%, #818cf8 50%, #c084fc 100%);
-  --vf-glow-primary: 0 0 24px rgba(129, 140, 248, 0.35);
-  --vf-card-glow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  --vf-border-subtle: rgba(255, 255, 255, 0.06);
-  --vf-border-active: rgba(129, 140, 248, 0.4);
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
 html, body {
   margin: 0;
   padding: 0;
   height: 100%;
-  font-family: var(--vf-font-sans);
-  background-color: #08080c !important;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Helvetica Neue", sans-serif;
+  background-color: var(--vf-bg-0) !important;
   color: var(--vf-text-1);
   overflow: hidden;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.012em;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #app {
   height: 100%;
-  position: relative;
-  background: 
-    radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.12) 0%, transparent 45%),
-    radial-gradient(circle at 85% 85%, rgba(192, 132, 252, 0.08) 0%, transparent 50%),
-    radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.04) 0%, transparent 60%),
-    #08080c;
+  background: var(--vf-bg-0);
 }
 
-/* 强制 Naive UI 布局组件完全透明化，露出全局流媒体背景 */
+/* 布局透明与灰阶结构 */
 .n-layout,
 .n-layout-scroll-container,
 .n-layout-sider,
@@ -44,142 +35,139 @@ html, body {
   background-color: transparent !important;
 }
 
-/* 顶部导航 Header */
+/* 顶部导航 Header：深黑半透 + 精密下边线 */
 .app-header {
-  height: 64px;
-  background: rgba(10, 10, 15, 0.75) !important;
-  backdrop-filter: blur(28px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
-  border-bottom: 1px solid var(--vf-border-subtle) !important;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  height: 56px;
+  background: rgba(9, 9, 12, 0.85) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border-bottom: 1px solid var(--vf-border) !important;
   position: relative;
   z-index: 20;
 }
 
-/* 侧边栏 Sider */
+/* 侧边栏 Sider：精密灰阶面板 */
 .n-layout-sider {
-  background: rgba(12, 12, 18, 0.65) !important;
-  backdrop-filter: blur(24px) saturate(160%) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(160%) !important;
-  border-right: 1px solid var(--vf-border-subtle) !important;
+  background: var(--vf-bg-1) !important;
+  border-right: 1px solid var(--vf-border) !important;
 }
 
-/* 药丸式导航 Tabs (Suno / Spotify Pill Navigation) */
-.n-tabs .n-tabs-nav {
-  padding: 0 4px;
-}
-
+/* 顶部导航 Tabs：清爽胶囊 */
 .n-tabs.n-tabs--line-type .n-tabs-tab {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  padding: 8px 18px !important;
-  margin: 0 4px;
-  border-radius: 99px;
-  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+  padding: 6px 16px !important;
+  margin: 0 3px;
+  border-radius: var(--vf-radius-full);
+  transition: all 0.18s ease;
   color: var(--vf-text-2) !important;
 }
 
 .n-tabs.n-tabs--line-type .n-tabs-tab:hover {
-  color: var(--vf-text-1) !important;
-  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff !important;
+  background: var(--vf-bg-hover);
 }
 
 .n-tabs.n-tabs--line-type .n-tabs-tab.n-tabs-tab--active {
   color: #ffffff !important;
-  background: rgba(129, 140, 248, 0.16) !important;
+  background: var(--vf-bg-active) !important;
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
 }
 
 .n-tabs.n-tabs--line-type .n-tabs-bar {
-  display: none !important; /* 去除传统下划线，采用现代药丸高亮 */
+  display: none !important;
 }
 
-/* 流媒体卡片 (Card) */
+/* 卡片 (Card)：纯净暗灰 + 纯白微边框 */
 .n-card {
-  background: rgba(18, 18, 26, 0.65) !important;
-  backdrop-filter: blur(20px) !important;
-  -webkit-backdrop-filter: blur(20px) !important;
-  border: 1px solid var(--vf-border-subtle) !important;
-  border-radius: 18px !important;
-  box-shadow: var(--vf-card-glow) !important;
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  background: var(--vf-bg-2) !important;
+  border: 1px solid var(--vf-border) !important;
+  border-radius: var(--vf-radius-md) !important;
+  box-shadow: var(--vf-shadow-card) !important;
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
 .n-card:hover {
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: var(--vf-border-strong) !important;
 }
 
-/* 按钮 (Button) 现代化 */
+/* 按钮 (Button)：高对比黑白精工 */
 .n-button {
   font-weight: 500;
-  border-radius: 99px !important;
-  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+  border-radius: var(--vf-radius-sm) !important;
+  transition: all 0.15s ease !important;
 }
 
 .n-button:not(.n-button--disabled):active {
-  transform: scale(0.95);
+  transform: scale(0.97);
 }
 
 .n-button--primary-type {
-  background: var(--vf-primary-gradient) !important;
-  border: none !important;
-  box-shadow: 0 4px 18px rgba(99, 102, 241, 0.4) !important;
-  color: #ffffff !important;
+  background: #ffffff !important;
+  border: 1px solid #ffffff !important;
+  color: #000000 !important;
+  font-weight: 600 !important;
 }
 
 .n-button--primary-type:hover {
-  box-shadow: 0 6px 24px rgba(129, 140, 248, 0.6) !important;
+  background: #e4e4e7 !important;
+  border-color: #e4e4e7 !important;
   transform: translateY(-1px);
 }
 
-/* 输入框 (Input) 深度优化 */
+/* 输入框 (Input)：纯净凹槽灰阶 */
 .n-input {
-  background-color: rgba(255, 255, 255, 0.035) !important;
-  border: 1px solid var(--vf-border-subtle) !important;
-  border-radius: 14px !important;
-  transition: all 0.25s ease !important;
-  font-size: 14px;
+  background-color: var(--vf-bg-3) !important;
+  border: 1px solid var(--vf-border) !important;
+  border-radius: var(--vf-radius-sm) !important;
+  transition: border-color 0.15s ease, background 0.15s ease !important;
+  font-size: 13px;
+  color: var(--vf-text-1) !important;
 }
 
 .n-input:hover {
-  background-color: rgba(255, 255, 255, 0.05) !important;
-  border-color: rgba(255, 255, 255, 0.12) !important;
+  border-color: var(--vf-border-strong) !important;
 }
 
 .n-input--focus,
 .n-input:focus-within {
-  background-color: rgba(129, 140, 248, 0.03) !important;
-  border-color: var(--vf-primary) !important;
-  box-shadow: 0 0 16px rgba(129, 140, 248, 0.25) !important;
+  background-color: var(--vf-bg-2) !important;
+  border-color: var(--vf-border-focus) !important;
+  box-shadow: 0 0 0 1px var(--vf-border-focus) !important;
 }
 
-/* 下拉菜单与模态窗 */
+.n-input .n-input__textarea-el,
+.n-input .n-input__input-el {
+  color: var(--vf-text-1) !important;
+}
+
+/* 下拉菜单与模态窗：深色纯净浮层 */
 .n-popover, 
 .n-dropdown-menu,
 .n-select-menu,
 .n-modal,
 .n-card.n-modal {
-  background: rgba(14, 14, 22, 0.88) !important;
-  backdrop-filter: blur(32px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(32px) saturate(180%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 20px !important;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6) !important;
+  background: var(--vf-bg-2) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+  border: 1px solid var(--vf-border-strong) !important;
+  border-radius: var(--vf-radius-md) !important;
+  box-shadow: var(--vf-shadow-elevated) !important;
 }
 
-/* 滚动条 */
+/* 精细滚动条 */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent !important;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12) !important;
-  border-radius: 99px !important;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: var(--vf-radius-full);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(129, 140, 248, 0.4) !important;
+  background: rgba(255, 255, 255, 0.25);
 }

@@ -4,54 +4,43 @@
     <div v-if="!modelStatus.base.ready && !modelStatus.base.downloading" class="warn-banner">
       <span class="warn-icon">⚠️</span>
       <div class="warn-text">
-        <strong>Base 基础大模型未就绪</strong> — 请在终端执行 <code>./install.sh</code> 下载模型资产。
+        <strong>Base 基础大模型未就绪</strong> — 请在终端运行 <code>./install.sh</code> 下载模型权重。
       </div>
     </div>
 
-    <!-- 顶部：AI 艺人聚焦展台 (Hero Artist Banner) -->
-    <div class="artist-hero-card" :class="{ 'has-selected': !!selectedPersona }">
-      <div class="hero-left">
-        <div class="hero-avatar">
-          {{ selectedPersona ? (personas[selectedPersona]?.name || selectedPersona).charAt(0) : '🎙️' }}
-        </div>
-        <div class="hero-meta">
-          <div class="hero-name-row">
-            <span class="hero-title">{{ selectedPersona ? personas[selectedPersona]?.name : '请从左侧选择音色艺人' }}</span>
-            <span v-if="selectedPersona" class="hero-id-tag">{{ selectedPersona }}</span>
-          </div>
-          <p class="hero-subtitle">
-            {{ selectedPersona ? (personas[selectedPersona]?.desc || personas[selectedPersona]?.instruction || '已装载专属声音特征矩阵') : '点击左侧音色工坊中的卡片以装载音色' }}
-          </p>
-        </div>
+    <!-- 顶部：当前音色状态条 -->
+    <div class="persona-indicator-bar">
+      <div class="indicator-left">
+        <span class="indicator-label">当前选定音色:</span>
+        <span v-if="selectedPersona" class="indicator-badge">
+          🎙️ {{ personas[selectedPersona]?.name || selectedPersona }} ({{ selectedPersona }})
+        </span>
+        <span v-else class="indicator-none">未选择音色（请点击左侧音色库）</span>
       </div>
-
-      <div class="hero-right" v-if="selectedPersona">
-        <span class="hero-status-tag" :class="personas[selectedPersona]?.has_audio ? 'status-ok' : 'status-warn'">
-          {{ personas[selectedPersona]?.has_audio ? '● 样音特征已就绪' : '○ 基础模型模拟' }}
+      <div class="indicator-right" v-if="selectedPersona">
+        <span class="status-chip" :class="personas[selectedPersona]?.has_audio ? 'chip-ok' : 'chip-none'">
+          {{ personas[selectedPersona]?.has_audio ? '✓ 样音特征已装载' : '○ 纯文本模拟' }}
         </span>
       </div>
     </div>
 
-    <!-- AI 写作助手胶囊 -->
+    <!-- AI 写作助手折叠条 -->
     <n-collapse class="ai-help-collapse" :default-expanded-names="[]">
       <n-collapse-item name="ai">
         <template #header>
-          <div class="ai-assistant-pill">
-            <span class="sparkle-icon">✨</span>
-            <span class="assistant-title">AI 灵感写作助手</span>
-            <span class="assistant-tip">点击展开让 AI 一键生成优质台词与旁白</span>
+          <div class="ai-collapse-header">
+            <span class="spark-icon">✨</span>
+            <span class="header-text">AI 帮我写文案</span>
+            <span class="header-sub">不会写文案？让 AI 快速生成台词或旁白</span>
           </div>
         </template>
         <AIHelpSection />
       </n-collapse-item>
     </n-collapse>
 
-    <!-- 历史灵感文案库 -->
+    <!-- 灵感草稿箱 -->
     <div v-if="savedScripts.length > 0" class="scripts-section">
-      <div class="section-header">
-        <span class="section-title">📂 灵感草稿箱</span>
-        <span class="section-count">{{ savedScripts.length }} 篇</span>
-      </div>
+      <div class="section-title">📂 历史草稿 ({{ savedScripts.length }})</div>
       <div class="scripts-list">
         <div 
           v-for="s in savedScripts" 
@@ -59,39 +48,36 @@
           class="script-chip"
           @click="loadScript(s)"
         >
-          <span class="chip-icon">📄</span>
-          <span class="chip-text">{{ s.title }}</span>
-          <button class="chip-del" @click.stop="deleteScript(s.id)">✕</button>
+          <span>{{ s.title }}</span>
+          <button class="chip-close" @click.stop="deleteScript(s.id)">✕</button>
         </div>
       </div>
     </div>
 
-    <!-- 核心创作工作台 (Studio Creation Workspace) -->
-    <div class="studio-form-card">
-      <div class="workspace-header">
-        <span class="workspace-label">📝 声音剧本内容</span>
-        <span class="char-counter">{{ cloneForm.text.length }} / 400 字</span>
+    <!-- 核心创作工作台 -->
+    <div class="studio-panel">
+      <div class="panel-header">
+        <span class="panel-title">需要合成的声音文案</span>
+        <span class="panel-counter">{{ cloneForm.text.length }} / 400 字</span>
       </div>
 
-      <div class="textarea-wrapper">
-        <n-input 
-          v-model:value="cloneForm.text" 
-          type="textarea"
-          :rows="5"
-          maxlength="400"
-          placeholder="在此输入需要转成语音的文案，或从上方灵感助手生成..." 
-          class="studio-textarea"
-        />
-      </div>
+      <n-input 
+        v-model:value="cloneForm.text" 
+        type="textarea"
+        :rows="5"
+        maxlength="400"
+        placeholder="在此输入要合成语音的文本内容..." 
+        class="clean-textarea"
+      />
 
-      <!-- 快速情绪风格标签 (Mood Inspiration Tags) -->
-      <div class="mood-tags-row">
-        <span class="mood-label">快速氛围预设:</span>
-        <div class="mood-pills">
+      <!-- 快速氛围预设 -->
+      <div class="mood-bar">
+        <span class="mood-title">快捷预设:</span>
+        <div class="mood-list">
           <button 
             v-for="mood in moodPresets" 
             :key="mood.label"
-            class="mood-pill-btn"
+            class="mood-btn"
             @click="applyMood(mood)"
           >
             {{ mood.label }}
@@ -99,46 +85,43 @@
         </div>
       </div>
 
-      <!-- 语气与情绪微调 -->
-      <div class="params-grid">
-        <div class="param-box">
-          <label class="param-label">🗣️ 语气与声线特征</label>
+      <!-- 参数栅格 -->
+      <div class="params-row">
+        <div class="param-item">
+          <label>🗣️ 语气描述 (音色特征)</label>
           <n-input 
             v-model:value="cloneForm.tone" 
-            placeholder="例如：沉稳深情、语速适中（留空则继承音色描述）" 
+            placeholder="例如：沉稳深情、语速适中（留空继承音色描述）" 
           />
         </div>
-        <div class="param-box">
-          <label class="param-label">🎭 情绪控制修饰</label>
+        <div class="param-item">
+          <label>🎭 情绪标签 (修饰强度)</label>
           <n-input 
             v-model:value="cloneForm.emotion" 
-            placeholder="例如：happy, whispering, excited（留空自动适配）" 
+            placeholder="例如：happy、sad、angry（留空自动适配）" 
           />
         </div>
       </div>
 
-      <!-- 底部控制与流光生成按钮 (Hero CTA) -->
-      <div class="studio-bottom-bar">
-        <div class="bottom-left-controls">
-          <div class="toggle-control-item">
+      <!-- 底部控制与高对比主按钮 -->
+      <div class="panel-footer">
+        <div class="footer-left">
+          <div class="switch-item">
             <n-switch v-model:value="cloneForm.emotionPriority" size="small" />
-            <span class="toggle-text">情绪优先锁定</span>
+            <span>情绪控制优先</span>
           </div>
-          <button class="save-draft-btn" @click="saveScript">
-            <span>💾 存为灵感草稿</span>
+          <button class="save-btn" @click="saveScript">
+            💾 保存草稿
           </button>
         </div>
 
-        <div class="bottom-right-actions">
-          <button 
-            class="hero-generate-btn" 
-            :disabled="!selectedPersona || !cloneForm.text.trim()"
-            @click="handleSynthesize"
-          >
-            <span class="btn-spark">⚡</span>
-            <span class="btn-text">立即生成高保真音频</span>
-          </button>
-        </div>
+        <button 
+          class="primary-synth-btn" 
+          :disabled="!selectedPersona || !cloneForm.text.trim()"
+          @click="handleSynthesize"
+        >
+          立即合成音频
+        </button>
       </div>
     </div>
   </div>
@@ -175,21 +158,21 @@ const cloneForm = reactive({
 });
 
 const moodPresets = [
-  { label: '🌿 温柔治愈', tone: '语速轻柔，声线细腻温和', emotion: 'gentle, comforting' },
-  { label: '🔥 激情旁白', tone: '情绪饱满，抑扬顿挫富有感染力', emotion: 'excited, dynamic' },
-  { label: '🌙 午夜低语', tone: '气声偏多，极具亲近感的耳语', emotion: 'whispering, intimate' },
-  { label: '⚔️ 武侠江湖', tone: '苍劲豪迈，带有江湖侠客的洒脱与威严', emotion: 'heroic, calm' }
+  { label: '温柔治愈', tone: '语速轻柔，声线细腻温和', emotion: 'gentle, comforting' },
+  { label: '激情旁白', tone: '情绪饱满，抑扬顿挫富有感染力', emotion: 'excited, dynamic' },
+  { label: '午夜低语', tone: '气声偏多，极具亲近感的耳语', emotion: 'whispering, intimate' },
+  { label: '武侠江湖', tone: '苍劲豪迈，带有江湖侠客的洒脱与威严', emotion: 'heroic, calm' }
 ];
 
 const applyMood = (mood) => {
   cloneForm.tone = mood.tone;
   cloneForm.emotion = mood.emotion;
-  tasksStore.showToast(`已应用「${mood.label}」氛围`, 'success');
+  tasksStore.showToast(`已应用「${mood.label}」`, 'success');
 };
 
 const handleSynthesize = () => {
   if (!selectedPersona.value) {
-    tasksStore.showToast('请先在左侧选择要克隆的音色艺人', 'warning');
+    tasksStore.showToast('请先选择音色', 'warning');
     return;
   }
   if (!cloneForm.text.trim()) {
@@ -213,7 +196,7 @@ const saveScript = () => {
     return;
   }
   libraryStore.saveScript(cloneForm.text);
-  tasksStore.showToast('已存入灵感草稿箱', 'success');
+  tasksStore.showToast('已存入草稿箱', 'success');
 };
 
 const loadScript = (script) => {
@@ -234,174 +217,106 @@ onMounted(() => {
 .tab-content-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  max-width: 1080px;
+  gap: 14px;
+  max-width: 960px;
   margin: 0 auto;
   width: 100%;
-  padding-bottom: 30px;
+  padding-bottom: 40px;
 }
 
-/* 警告横幅 */
+/* 警告框 */
 .warn-banner {
   display: flex;
   align-items: center;
-  gap: 12px;
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  padding: 12px 18px;
-  border-radius: 14px;
-  color: #fca5a5;
+  gap: 10px;
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  padding: 10px 16px;
+  border-radius: var(--vf-radius-sm);
+  color: var(--vf-warn);
   font-size: 13px;
 }
 
-.warn-icon { font-size: 18px; }
-.warn-text code { background: rgba(0, 0, 0, 0.3); padding: 2px 6px; border-radius: 4px; }
-
-/* 艺人聚焦卡片 (Hero Artist Banner) */
-.artist-hero-card {
+/* 音色指示条 */
+.persona-indicator-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 24px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--vf-border-subtle);
-  border-radius: 20px;
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  padding: 10px 16px;
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-sm);
 }
 
-.artist-hero-card.has-selected {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(192, 132, 252, 0.06) 100%);
-  border-color: rgba(129, 140, 248, 0.35);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
-}
-
-.hero-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.hero-avatar {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #4f46e5 0%, #a855f7 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  font-weight: 700;
-  color: #ffffff;
-  box-shadow: 0 6px 20px rgba(79, 70, 229, 0.4);
-}
-
-.hero-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.hero-name-row {
+.indicator-left {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.hero-title {
-  font-size: 17px;
-  font-weight: 700;
+.indicator-label {
+  font-size: 12px;
+  color: var(--vf-text-3);
+}
+
+.indicator-badge {
+  font-size: 13px;
+  font-weight: 600;
   color: var(--vf-text-1);
 }
 
-.hero-id-tag {
+.indicator-none {
+  font-size: 13px;
+  color: var(--vf-text-3);
+}
+
+.status-chip {
   font-size: 11px;
-  font-family: monospace;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--vf-primary-hover);
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--vf-radius-xs);
 }
+.chip-ok { background: rgba(34, 197, 94, 0.1); color: var(--vf-ok); border: 1px solid rgba(34, 197, 94, 0.2); }
+.chip-none { background: var(--vf-bg-3); color: var(--vf-text-3); border: 1px solid var(--vf-border); }
 
-.hero-subtitle {
-  margin: 0;
-  font-size: 12px;
-  color: var(--vf-text-2);
-}
-
-.hero-status-tag {
-  font-size: 12px;
-  font-weight: 600;
-  padding: 6px 14px;
-  border-radius: 99px;
-}
-
-.status-ok {
-  background: rgba(16, 185, 129, 0.14);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
-}
-
-.status-warn {
-  background: rgba(245, 158, 11, 0.14);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.3);
-}
-
-/* AI 写作助手 */
-.ai-assistant-pill {
+/* AI 助手 */
+.ai-collapse-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font-size: 13px;
 }
+.spark-icon { font-size: 14px; }
+.header-text { font-weight: 600; color: var(--vf-text-1); }
+.header-sub { font-size: 11px; color: var(--vf-text-3); }
 
-.sparkle-icon { font-size: 16px; }
-.assistant-title { font-weight: 600; color: var(--vf-text-1); }
-.assistant-tip { font-size: 11px; color: var(--vf-text-3); }
-
-/* 灵感草稿箱 */
+/* 草稿箱 */
 .scripts-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
-
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.section-title { font-size: 12px; font-weight: 600; color: var(--vf-text-2); }
-.section-count { font-size: 11px; color: var(--vf-text-3); }
-
-.scripts-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
+.section-title { font-size: 12px; font-weight: 600; color: var(--vf-text-3); }
+.scripts-list { display: flex; flex-wrap: wrap; gap: 6px; }
 
 .script-chip {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--vf-border-subtle);
-  padding: 4px 12px;
-  border-radius: 99px;
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  padding: 3px 10px;
+  border-radius: var(--vf-radius-xs);
   font-size: 12px;
   color: var(--vf-text-2);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
-
 .script-chip:hover {
-  background: rgba(129, 140, 248, 0.12);
-  border-color: var(--vf-primary);
+  background: var(--vf-bg-hover);
   color: var(--vf-text-1);
+  border-color: var(--vf-border-strong);
 }
-
-.chip-del {
+.chip-close {
   background: none;
   border: none;
   color: var(--vf-text-3);
@@ -409,166 +324,112 @@ onMounted(() => {
   font-size: 10px;
   padding: 0;
 }
+.chip-close:hover { color: var(--vf-err); }
 
-.chip-del:hover { color: var(--vf-err); }
-
-/* 主创作工坊卡片 */
-.studio-form-card {
-  background: rgba(18, 18, 26, 0.65);
-  border: 1px solid var(--vf-border-subtle);
-  border-radius: 20px;
-  padding: 24px;
+/* 核心工作台 */
+.studio-panel {
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-md);
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  gap: 16px;
 }
 
-.workspace-header {
+.panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
+.panel-title { font-size: 13px; font-weight: 600; color: var(--vf-text-1); }
+.panel-counter { font-size: 11px; color: var(--vf-text-3); font-family: monospace; }
 
-.workspace-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--vf-text-1);
-}
-
-.char-counter {
-  font-size: 12px;
-  color: var(--vf-text-3);
-  font-family: monospace;
-}
-
-.mood-tags-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.mood-label {
-  font-size: 12px;
-  color: var(--vf-text-3);
-}
-
-.mood-pills {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.mood-pill-btn {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--vf-border-subtle);
-  color: var(--vf-text-2);
-  padding: 4px 12px;
-  border-radius: 99px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.mood-pill-btn:hover {
-  background: rgba(129, 140, 248, 0.16);
-  border-color: var(--vf-primary);
-  color: var(--vf-primary-hover);
-  transform: translateY(-1px);
-}
-
-.params-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.param-box {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.param-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--vf-text-2);
-}
-
-/* 底部操作与流光主生成按钮 */
-.studio-bottom-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 10px;
-  border-top: 1px solid var(--vf-border-subtle);
-}
-
-.bottom-left-controls {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.toggle-control-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.toggle-text {
-  font-size: 12px;
-  color: var(--vf-text-2);
-}
-
-.save-draft-btn {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--vf-border-subtle);
-  color: var(--vf-text-2);
-  padding: 6px 14px;
-  border-radius: 99px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.save-draft-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--vf-text-1);
-}
-
-/* 超大流光主生成按钮 (Suno-like CTA) */
-.hero-generate-btn {
+.mood-bar {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 28px;
-  border-radius: 99px;
-  background: linear-gradient(135deg, #6366f1 0%, #818cf8 50%, #c084fc 100%);
-  border: none;
-  color: #ffffff;
-  font-size: 14px;
-  font-weight: 700;
+}
+.mood-title { font-size: 12px; color: var(--vf-text-3); }
+.mood-list { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.mood-btn {
+  background: var(--vf-bg-3);
+  border: 1px solid var(--vf-border);
+  color: var(--vf-text-2);
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: var(--vf-radius-xs);
   cursor: pointer;
-  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.45);
-  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transition: all 0.15s ease;
+}
+.mood-btn:hover {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
 }
 
-.hero-generate-btn:hover:not(:disabled) {
-  transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 8px 32px rgba(129, 140, 248, 0.65);
+.params-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.param-item { display: flex; flex-direction: column; gap: 5px; }
+.param-item label { font-size: 12px; color: var(--vf-text-2); }
+
+.panel-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 14px;
+  border-top: 1px solid var(--vf-border);
 }
 
-.hero-generate-btn:active:not(:disabled) {
-  transform: scale(0.97);
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
-.hero-generate-btn:disabled {
-  opacity: 0.4;
+.switch-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--vf-text-2);
+}
+
+.save-btn {
+  background: var(--vf-bg-3);
+  border: 1px solid var(--vf-border);
+  color: var(--vf-text-2);
+  padding: 5px 12px;
+  border-radius: var(--vf-radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.save-btn:hover { background: var(--vf-bg-hover); color: var(--vf-text-1); }
+
+/* 高对比主按钮 */
+.primary-synth-btn {
+  background: #ffffff;
+  border: 1px solid #ffffff;
+  color: #000000;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 24px;
+  border-radius: var(--vf-radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.primary-synth-btn:hover:not(:disabled) {
+  background: #e4e4e7;
+  border-color: #e4e4e7;
+  transform: translateY(-1px);
+}
+.primary-synth-btn:disabled {
+  opacity: 0.3;
   cursor: not-allowed;
-  box-shadow: none;
 }
-
-.btn-spark { font-size: 16px; }
 </style>
