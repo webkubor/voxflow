@@ -53,6 +53,8 @@ declare module 'vue' {
     NThing: typeof import('naive-ui')['NThing']
     NTooltip: typeof import('naive-ui')['NTooltip']
     PipelineBoard: typeof import('./../components/PipelineBoard.vue')['default']
+    RouterLink: typeof import('vue-router')['RouterLink']
+    RouterView: typeof import('vue-router')['RouterView']
     TaskPanel: typeof import('./../components/TaskPanel.vue')['default']
   }
 }

@@ -8,7 +8,7 @@
     "packageManager": "npm",
     "viteConfig": "vite.config.js",
     "tsConfig": "tsconfig.json",
-    "alias": false,
+    "alias": true,
     "apiLayer": [
       "src/api"
     ],
@@ -16,11 +16,11 @@
       "src/stores"
     ],
     "routeLayer": [],
-    "configLayer": []
+    "configLayer": [
+      "src/config"
+    ]
   },
   "suggestions": [
-    "未检测到 @ 路径 alias；建议在 Vite resolve.alias 与 tsconfig/jsconfig paths 中配置 @/*。",
-    "未检测到 router/routes/pages/views 层；建议明确路由入口，方便 agent 复现页面路径。",
-    "未检测到 config/constants/env 层；建议集中管理环境变量、常量和开关。"
+    "未检测到 router/routes/pages/views 层；建议明确路由入口，方便 agent 复现页面路径。"
   ]
 }
