@@ -1,0 +1,40 @@
+{
+  "tracks": {
+    "76006155-ed7e-4d1d-bf67-815ca794eb6f": {
+      "stage": "generated",
+      "title": "竹影孤行",
+      "clip_id": "76006155-ed7e-4d1d-bf67-815ca794eb6f",
+      "updated_at": "2026-08-30T21:13:45"
+    },
+    "d27f33e1-cb34-4779-9769-35007bea8c12": {
+      "stage": "generated",
+      "title": "若雪听见",
+      "clip_id": "d27f33e1-cb34-4779-9769-35007bea8c12",
+      "updated_at": "2026-08-30T21:13:45"
+    },
+    "eac8f146-d1f5-41c6-9e41-2a8b04ed6320": {
+      "stage": "selected",
+      "title": "落雪",
+      "clip_id": "eac8f146-d1f5-41c6-9e41-2a8b04ed6320",
+      "updated_at": "2026-08-30T21:13:45"
+    },
+    "9fcddb3d-788e-465a-80c0-a203e0d92ba5": {
+      "stage": "generated",
+      "title": "照雪的人",
+      "clip_id": "9fcddb3d-788e-465a-80c0-a203e0d92ba5",
+      "updated_at": "2026-08-30T21:13:45"
+    },
+    "0b9e5132-d359-44ea-999c-84cede708928": {
+      "stage": "generated",
+      "title": "雪夜无名",
+      "clip_id": "0b9e5132-d359-44ea-999c-84cede708928",
+      "updated_at": "2026-08-30T21:13:45"
+    },
+    "9f04c05b-d795-4969-8d93-20468c1c995d": {
+      "stage": "generated",
+      "title": "一剑霜寒",
+      "clip_id": "9f04c05b-d795-4969-8d93-20468c1c995d",
+      "updated_at": "2026-08-30T21:13:45"
+    }
+  }
+}
