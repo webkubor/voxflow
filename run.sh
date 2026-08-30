@@ -36,5 +36,10 @@ cd "$(dirname "$0")"
 export VOXCRAFT_LLM_BASE_URL="https://manager.museav.top/api"
 export VOXCRAFT_LLM_MODEL="deepseek-v4-flash"
 
-exec cs kyvault run --env VOXCRAFT_LLM_API_KEY=secret://museav/voxcraft-tenant-key \
+# `cs` 在交互式 shell 里是个函数（见 .zshrc），脚本里调不到 —— 必须走真实二进制。
+# CORTEXOS_ROOT 由 .zshrc 导出；非交互场景（launchd、后台进程）拿不到，所以给默认值。
+CS_BIN="${CORTEXOS_ROOT:-$HOME/dev/gitlab/webkubor/CortexOS}/bin/cs"
+[ -x "$CS_BIN" ] || { echo "✗ 找不到 cs（$CS_BIN）—— 密钥注入依赖它"; exit 1; }
+
+exec "$CS_BIN" kyvault run --env VOXCRAFT_LLM_API_KEY=secret://museav/voxcraft-tenant-key \
   -- .venv/bin/voice "${@:-web}"
