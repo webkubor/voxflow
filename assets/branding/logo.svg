@@ -1,0 +1,63 @@
+<!--
+  VoxFlow 声流 —— 品牌标识
+
+  ## 形
+
+  声波柱（Vox）排成一条流动的曲线（Flow）—— 产品名的两半各占一半。
+
+  柱高**刻意不对称**：主峰压在偏右（第 5 根最高），起伏是「低-升-顿-推到顶-收」。
+  第一版做成了左右镜像的正弦包络，看着是漂亮，但镜像对称等于没有方向 ——
+  读出来是静止的音量条，不是流。方向感是这个图标唯一要表达的东西。
+
+  底部那条贯穿的细线是时间轴：柱子站在轴上往右走，"流"才成立。
+
+  为什么不用麦克风/音符这类图标：它们说的是「录音」和「音乐」，
+  而这个产品的重点是**从声音到上架的那条链**。链要用流动表达。
+
+  ## 色
+
+  主色 #818cf8（vf‑primary），跟 tokens.css 同一个值 —— 品牌色只有一处真源。
+  柱子从左到右做 60%→100% 的不透明度渐变，让视线有方向感，
+  也暗示流程从左往右推进。
+
+  刻意避开 museav 的品牌橙 #ff8a50：两个产品同色会让人以为是同一个东西。
+
+  ## 尺寸
+
+  viewBox 用 64×64，最小可用到 16px（favicon）—— 柱子宽 6、间距 4，
+  缩到 16px 时仍是可辨的 5 根竖线，不会糊成一坨。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="VoxFlow">
+  <defs>
+    <linearGradient id="vf-flow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#818cf8" stop-opacity=".55"/>
+      <stop offset=".5" stop-color="#a5b4fc" stop-opacity="1"/>
+      <stop offset="1" stop-color="#6366f1" stop-opacity=".85"/>
+    </linearGradient>
+    <clipPath id="vf-round">
+      <rect x="0" y="0" width="64" height="64" rx="14"/>
+    </clipPath>
+  </defs>
+
+  <!-- 底：跟界面同一个墨色（vf‑bg‑2），图标放在深色界面里不会出现色块边框 -->
+  <g clip-path="url(#vf-round)">
+    <rect width="64" height="64" fill="#16161a"/>
+
+    <!-- 零线：声波围绕它振动。柱子会盖住大部分，只在间隙露出来 —— 这正是
+         波形图的样子。压到很暗，是参照不是元素。 -->
+    <rect x="7" y="31.4" width="50" height="1.2" rx=".6" fill="#818cf8" opacity=".2"/>
+
+    <!-- 声波柱：**垂直居中**于零线（y = 32 - h/2），高度不对称、主峰偏右。
+         居中是关键 —— 上一版底边对齐，那是条形图的语法，读起来像数据图表
+         不像声音。声波的视觉语法就是围绕中轴上下对称。
+         宽 5.5 间距 3.5，缩到 16px 仍是可辨的竖线。 -->
+    <g fill="url(#vf-flow)">
+      <rect x="8"  y="27" width="5.5" height="10" rx="2.75"/>
+      <rect x="17" y="22" width="5.5" height="20" rx="2.75"/>
+      <rect x="26" y="25" width="5.5" height="14" rx="2.75"/>
+      <rect x="35" y="18" width="5.5" height="28" rx="2.75"/>
+      <rect x="44" y="14" width="5.5" height="36" rx="2.75"/>
+      <rect x="53" y="23" width="5.5" height="18" rx="2.75"/>
+    </g>
+  </g>
+</svg>
