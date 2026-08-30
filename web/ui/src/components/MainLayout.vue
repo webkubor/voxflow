@@ -36,6 +36,7 @@
             </n-tooltip>
           </n-space>
         </div>
+        <span class="build-stamp" :title="`前端构建于 ${buildTime}`">{{ buildTime }}</span>
       </n-layout-header>
 
       <!-- 中部主内容布局 -->
@@ -206,7 +207,14 @@ const voicesStore = useVoicesStore();
 
 const { capBadges } = storeToRefs(capabilitiesStore);
 const { personas, selectedPersona } = storeToRefs(voicesStore);
-const { globalLoading, globalLoadingText } = storeToRefs(synthStore);
+// globalLoading 在 **tasks** store，不在 synth。取错 store 时 storeToRefs
+// 给回 undefined，而 n-spin 的 :show 拿到 undefined 就一直转 —— 页面永远在加载中，
+// 零报错。今天第三次栽在「方法/状态取错 store」上了。
+const { globalLoading, globalLoadingText } = storeToRefs(tasksStore);
+
+// 构建时间戳：刷新后这个数没变，就说明产物没重新构建 ——
+// 省掉「改了没效果，先怀疑是不是忘了 build」那一轮
+const buildTime = __BUILD_TIME__;
 
 const currentTab = ref('clone');
 const showAddPersona = ref(false);
@@ -607,4 +615,13 @@ onBeforeUnmount(() => {
 }
 .empty-state p { margin: 0 0 4px 0; font-size: 13px; color: var(--vf-text-2); }
 .empty-state span { font-size: 11px; }
+
+.build-stamp {
+  margin-left: 12px;
+  font-size: 10px;
+  color: var(--vf-text-3);
+  opacity: .6;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
 </style>

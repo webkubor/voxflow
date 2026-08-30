@@ -154,6 +154,22 @@ for vue in (PROJECT / "web/ui/src").rglob("*.vue"):
                 bad_calls.append(f"{vue.name}: {var}.{call}() 不存在于 {store} store")
 check("组件调用的 store 方法都存在", not bad_calls, "; ".join(bad_calls[:3]))
 
+# storeToRefs 解构出来的状态，store 里真的有吗。
+# 「globalLoading 在 tasks store 却从 synth 取」就是这么漏的 ——
+# 取错拿到 undefined，n-spin 的 :show 收到 undefined 会一直转，页面永远 loading。
+bad_refs = []
+for vue in (PROJECT / "web/ui/src").rglob("*.vue"):
+    text = strip_comments(vue.read_text(encoding="utf-8"))
+    for names, var in re.findall(r"storeToRefs?\s*\(\s*(\w+)\s*\)", text) and \
+                      re.findall(r"const\s*\{([^}]+)\}\s*=\s*storeToRefs\((\w+)\)", text):
+        store = store_var.get(var)
+        if not store or store not in exported:
+            continue
+        for name in [n.strip().split(":")[0].strip() for n in names.split(",") if n.strip()]:
+            if name and name not in exported[store]:
+                bad_refs.append(f"{vue.name}: {name} 不在 {store} store 里（从 {var} 解构）")
+check("组件解构的 store 状态都存在", not bad_refs, "; ".join(bad_refs[:3]))
+
 print(f"\n{'─' * 40}")
 if failures:
     print(f"✗ {len(failures)}/{checks} 项没过：")

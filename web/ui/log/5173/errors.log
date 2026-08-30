@@ -1,0 +1,851 @@
+# Dev Log (port 5173) — started 2026-08-30 23:56:32.915 +08:00
+
+# Top Errors（按频率降序，聚合去重）
+1. (×60) [2026-08-30 23:59:51.362 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:59:51.362 +08:00
+2. (×53) [2026-08-30 23:59:48.336 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:59:48.336 +08:00
+3. (×42) [2026-08-30 23:59:37.238 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:59:37.238 +08:00
+4. (×33) [2026-08-30 23:59:45.311 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:59:45.311 +08:00
+5. (×31) [2026-08-30 23:59:52.367 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:59:52.367 +08:00
+6. (×25) [2026-08-30 23:59:50.355 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:59:50.355 +08:00
+7. (×19) [2026-08-30 23:59:49.348 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:59:49.348 +08:00
+8. (×15) [2026-08-30 23:59:46.324 +08:00] [api][failed] GET /api/jobs-stream 9ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:59:46.324 +08:00
+9. (×15) [2026-08-30 23:59:45.312 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:59:45.312 +08:00
+10. (×13) [2026-08-30 23:59:39.257 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:59:39.257 +08:00
+11. (×12) [2026-08-30 23:59:42.282 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:59:42.282 +08:00
+12. (×11) [2026-08-30 23:59:46.320 +08:00] [api][failed] GET /api/jobs-stream 9ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:59:46.320 +08:00
+13. (×9) [2026-08-30 23:59:29.174 +08:00] [api][failed] GET /api/jobs-stream 3ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:59:29.174 +08:00
+14. (×8) [2026-08-30 23:59:50.360 +08:00] [api][failed] GET /api/jobs-stream 10ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:59:50.360 +08:00
+15. (×6) [2026-08-30 23:58:50.156 +08:00] [api][failed] GET /api/jobs-stream 10ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:58:50.156 +08:00
+16. (×6) [2026-08-30 23:59:30.184 +08:00] [api][failed] GET /api/jobs-stream 11ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:59:30.184 +08:00
+17. (×5) [2026-08-30 23:59:16.137 +08:00] [api][failed] GET /api/jobs-stream 3ms http=502 page=/start
+  返回: ""  ← last 2026-08-30 23:59:16.137 +08:00
+18. (×4) [2026-08-30 23:59:16.366 +08:00] [api][failed] GET /api/jobs-stream 3ms http=502 page=/draw
+  返回: ""  ← last 2026-08-30 23:59:16.366 +08:00
+19. (×3) [2026-08-30 23:58:13.657 +08:00] [api][failed] GET /api/jobs-stream 12ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:58:13.657 +08:00
+20. (×3) [2026-08-30 23:59:27.160 +08:00] [api][failed] GET /api/jobs-stream 11ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }  ← last 2026-08-30 23:59:27.160 +08:00
+
+# Recent（原始记录，最新在上）
+[2026-08-30 23:59:52.370 +08:00] [api][failed] GET /api/jobs-stream 3ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:52.367 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:51.365 +08:00] [api][failed] GET /api/jobs-stream 3ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:51.362 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:50.360 +08:00] [api][failed] GET /api/jobs-stream 10ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:50.355 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:49.349 +08:00] [api][failed] GET /api/jobs-stream 10ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:49.348 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:48.339 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:48.336 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:47.330 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:47.328 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:46.324 +08:00] [api][failed] GET /api/jobs-stream 9ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:46.320 +08:00] [api][failed] GET /api/jobs-stream 9ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:45.312 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:45.311 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:44.302 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:44.299 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:43.294 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:43.292 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:42.286 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:42.282 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:41.281 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:41.272 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:40.267 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:40.264 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:39.260 +08:00] [api][failed] GET /api/jobs-stream 9ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:39.257 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:38.249 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:38.247 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:37.248 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:37.238 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:36.235 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:36.231 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:35.226 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:35.223 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:34.219 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:34.218 +08:00] [api][failed] GET /api/jobs-stream 9ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:33.214 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:33.207 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:32.204 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:32.202 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:31.196 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:31.194 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:30.188 +08:00] [api][failed] GET /api/jobs-stream 12ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:30.184 +08:00] [api][failed] GET /api/jobs-stream 11ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:29.174 +08:00] [api][failed] GET /api/jobs-stream 3ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:29.170 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:28.168 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:28.164 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:27.160 +08:00] [api][failed] GET /api/jobs-stream 11ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:27.156 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:26.148 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:26.147 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:25.136 +08:00] [api][failed] GET /api/jobs-stream 3ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:25.135 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:24.133 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:24.129 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:23.123 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:23.120 +08:00] [api][failed] GET /api/jobs-stream 11ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:22.114 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:22.107 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:21.104 +08:00] [api][failed] GET /api/jobs-stream 3734ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:21.102 +08:00] [api][failed] GET /api/jobs-stream 3953ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:16.366 +08:00] [api][failed] GET /api/jobs-stream 3ms http=502 page=/draw
+  返回: ""
+[2026-08-30 23:59:16.137 +08:00] [api][failed] GET /api/jobs-stream 3ms http=502 page=/start
+  返回: ""
+[2026-08-30 23:59:15.360 +08:00] [api][failed] GET /api/jobs-stream 3ms http=502 page=/draw
+  返回: ""
+[2026-08-30 23:59:15.132 +08:00] [api][failed] GET /api/jobs-stream 3ms http=502 page=/start
+  返回: ""
+[2026-08-30 23:59:14.355 +08:00] [api][failed] GET /api/jobs-stream 3ms http=502 page=/draw
+  返回: ""
+[2026-08-30 23:59:14.126 +08:00] [api][failed] GET /api/jobs-stream 3ms http=502 page=/start
+  返回: ""
+[2026-08-30 23:59:13.350 +08:00] [api][failed] GET /api/jobs-stream 6ms http=502 page=/draw
+  返回: ""
+[2026-08-30 23:59:13.121 +08:00] [api][failed] GET /api/jobs-stream 2ms http=502 page=/start
+  返回: ""
+[2026-08-30 23:59:12.342 +08:00] [api][failed] GET /api/jobs-stream 4ms http=502 page=/draw
+  返回: ""
+[2026-08-30 23:59:12.118 +08:00] [api][failed] GET /api/jobs-stream 4ms http=502 page=/start
+  返回: ""
+[2026-08-30 23:59:11.336 +08:00] [api][failed] GET /api/jobs-stream 4ms http=502 page=/draw
+  返回: ""
+[2026-08-30 23:59:11.117 +08:00] [api][failed] GET /api/jobs-stream 3ms http=502 page=/start
+  返回: ""
+[2026-08-30 23:59:10.332 +08:00] [api][failed] GET /api/jobs-stream 3ms http=502 page=/draw
+  返回: ""
+[2026-08-30 23:59:10.106 +08:00] [api][failed] GET /api/jobs-stream 3ms http=502 page=/start
+  返回: ""
+[2026-08-30 23:59:09.326 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:09.101 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:08.319 +08:00] [api][failed] GET /api/jobs-stream 9ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:08.093 +08:00] [api][failed] GET /api/jobs-stream 3ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:07.309 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:07.087 +08:00] [api][failed] GET /api/jobs-stream 10ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:06.303 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:06.074 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:05.296 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:05.069 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:04.287 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:04.063 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:03.276 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:03.054 +08:00] [api][failed] GET /api/jobs-stream 9ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:02.269 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:02.221 +08:00] [api][failed] GET /version.json 3ms http=404 page=/start
+  返回: "The server is configured with a public base URL of /static/ - did you mean to visit /static/version.json instead?"
+[2026-08-30 23:59:02.042 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:01.260 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:01.033 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:00.254 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:59:00.027 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:59.251 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:59.019 +08:00] [api][failed] GET /api/jobs-stream 9ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:58.238 +08:00] [api][failed] GET /api/jobs-stream 3ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:58.008 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:57.233 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:57.001 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:56.223 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:55.994 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:55.222 +08:00] [api][failed] GET /api/jobs-stream 25ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:54.990 +08:00] [api][failed] GET /api/jobs-stream 9ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:54.188 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:53.977 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:53.178 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:52.971 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:52.172 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:51.965 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:51.163 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:50.957 +08:00] [api][failed] GET /api/jobs-stream 11ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:50.156 +08:00] [api][failed] GET /api/jobs-stream 10ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:49.944 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:49.144 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:48.936 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:48.136 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:47.928 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:47.129 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:46.921 +08:00] [api][failed] GET /api/jobs-stream 9ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:46.123 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:45.910 +08:00] [api][failed] GET /api/jobs-stream 13ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:45.113 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:44.894 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:44.107 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:43.888 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:43.101 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:42.877 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:42.094 +08:00] [api][failed] GET /api/jobs-stream 9ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:41.870 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:41.083 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:40.864 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:40.076 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:39.857 +08:00] [api][failed] GET /api/jobs-stream 9ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:38.999 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:38.845 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:37.992 +08:00] [api][failed] GET /api/jobs-stream 10ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:37.838 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:36.978 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:36.833 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:35.972 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:35.827 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:34.965 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:34.823 +08:00] [api][failed] GET /api/jobs-stream 11ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:33.958 +08:00] [api][failed] GET /api/jobs-stream 9ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:33.810 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:32.948 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:32.802 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:31.939 +08:00] [api][failed] GET /api/jobs-stream 10ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:31.796 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:30.895 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:30.790 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:29.888 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:29.779 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:28.880 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:28.773 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:27.873 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:27.766 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:26.865 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:26.759 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:25.858 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:25.754 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:24.848 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:24.743 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:23.839 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:23.736 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:22.833 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:22.727 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:21.826 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:21.721 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:20.822 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:20.710 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:19.809 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:19.701 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:18.802 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:18.693 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:17.794 +08:00] [api][failed] GET /api/jobs-stream 3ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:17.686 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:16.790 +08:00] [api][failed] GET /api/jobs-stream 8ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:16.678 +08:00] [api][failed] GET /api/jobs-stream 6ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:15.778 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:15.670 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:14.771 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:14.664 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:13.764 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:13.657 +08:00] [api][failed] GET /api/jobs-stream 12ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:12.757 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:12.643 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:11.746 +08:00] [api][failed] GET /api/jobs-stream 4ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:11.636 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:10.740 +08:00] [api][failed] GET /api/jobs-stream 3ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:10.629 +08:00] [api][failed] GET /api/jobs-stream 7ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:09.735 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:09.623 +08:00] [api][failed] GET /api/jobs-stream 5ms http=404 page=/start
+  返回: {
+    "detail": "Not Found"
+  }
+[2026-08-30 23:58:08.726 +08:00] [api][failed] GET /api/jobs-stream 3ms http=404 page=/draw
+  返回: {
+    "detail": "Not Found"
+  }
