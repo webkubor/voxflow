@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# voxsuno — VoxCraft 声坊 × Suno 桥接工作流
+#
+# 把 VoxCraft 复刻的声音变成 Suno 的 voice persona，然后用它生成音乐。
+# 完整链路：
+#   VoxCraft 克隆声音 → 生成样音 wav → 引导上传 Suno 网页建 persona → 存 persona ID → suno CLI 用 persona 出歌
+#
+# 为什么 persona 创建必须在网页端：Suno 没有公开的「创建 custom voice」API，
+# CLI（paperfoot/suno-cli）只有 persona 查看（suno persona <ID>），创建只能走
+# suno.com 网页「Create Custom Voice」。所以本脚本负责：本地生成样音 + 打开网页 +
+# 保存/复用 persona ID + 一键用 persona 生成音乐。
+#
+# 用法：
+#   voxsuno sample <voxkey> [文本]     # 1. VoxCraft 克隆声音，生成样音 wav（自动打开 Suno 建 persona 页）
+#   voxsuno link  <persona_id> <名字>  # 2. 保存 persona ID（建好 persona 后注册回来）
+#   voxsuno list                      # 查看已保存的 persona
+#   voxsuno song <名字> --title "..." --tags "..." --lyrics "..." [--wait]
+#                                     # 3. 用保存的 persona 生成音乐
+#   voxsuno login                     # 一键登录 Suno（从 Chrome 提取会话）
+#
+# 配置：~/.voxsuno/personas.json（persona 名 → {id, voxkey, created_at}）
+
+set -euo pipefail
+
+VOXCRAFT_DIR="${VOXCRAFT_DIR:-$HOME/dev/github/app/voxcraft}"
+STATE_DIR="$HOME/.voxsuno"
+PERSONAS="$STATE_DIR/personas.json"
+OPEN_URL="${BROWSER:-open}"
+
+# suno CLI 定位：PATH 优先，~/.cargo/bin 兜底（非交互 shell 常常没有 cargo bin）
+SUNO_BIN="${SUNO_BIN:-}"
+if [ -z "$SUNO_BIN" ]; then
+  if command -v suno >/dev/null 2>&1; then SUNO_BIN="suno"
+  elif [ -x "$HOME/.cargo/bin/suno" ]; then SUNO_BIN="$HOME/.cargo/bin/suno"
+  fi
+fi
+[ -n "$SUNO_BIN" ] || die "找不到 suno CLI（先 cargo install suno 或设 SUNO_BIN）"
+
+mkdir -p "$STATE_DIR"
+[ -f "$PERSONAS" ] || echo '{}' > "$PERSONAS"
+
+log()  { echo "  $*"; }
+die()  { echo "❌ $*" >&2; exit 1; }
+
+# ── persona 注册表读写 ──
+persona_get() { python3 -c "import json,sys;d=json.load(open('$PERSONAS'));p=d.get('$1') or {};print(p.get('$2',''))"; }
+persona_set() { python3 -c "
+import json
+p='$PERSONAS'
+d=json.load(open(p))
+d['$1']={'id':'$2','voxkey':'$3','created_at':'$(date +%Y-%m-%d)'}
+json.dump(d,open(p,'w'),ensure_ascii=False,indent=2)
+"; }
+
+# ── Suno 登录 ──
+cmd_login() {
+  log "🔄 从 Chrome 提取 Suno 会话..."
+  "$SUNO_BIN" auth --login
+  log "✅ 登录完成，检查状态："
+  "$SUNO_BIN" doctor | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+for c in d.get('data',{}).get('checks',[]):
+    print(f\"  {c['name']}: {c['status']}\")
+" 2>/dev/null || "$SUNO_BIN" doctor
+}
+
+# ── 1. VoxCraft 生成样音 ──
+cmd_sample() {
+  local voxkey="${1:?用法: voxsuno sample <voxkey> [文本]}"
+  local text="${2:-这是一段声音样音，用来在 Suno 创建我的专属声音。}"
+  [ -d "$VOXCRAFT_DIR" ] || die "找不到 voxcraft: $VOXCRAFT_DIR（用 VOXCRAFT_DIR 指定）"
+  # 确认音色存在
+  (cd "$VOXCRAFT_DIR" && source .venv/bin/activate 2>/dev/null && voice voice show "$voxkey" >/dev/null 2>&1) \
+    || die "音色 '$voxkey' 不存在，先 voice voice add 注册"
+  log "🎙️ VoxCraft 克隆音色 '$voxkey' 生成样音..."
+  local out
+  out=$(cd "$VOXCRAFT_DIR" && source .venv/bin/activate 2>/dev/null && voice clone "$voxkey" "$text" 2>&1 | grep -oE 'out/[^ ]+\.wav' | tail -1)
+  [ -n "$out" ] || die "样音生成失败（看上方 voxcraft 输出）"
+  local wav="$VOXCRAFT_DIR/$out"
+  [ -f "$wav" ] || wav=$(ls -t "$VOXCRAFT_DIR"/out/*.wav | head -1)
+  log "✅ 样音: $wav ($(du -h "$wav" | cut -f1))"
+  log ""
+  log "➡️ 下一步：把这段样音上传到 Suno 创建 Custom Voice："
+  log "   1. 打开 https://suno.com/create/voice（正在打开…）"
+  log "   2. 上传文件: $wav"
+  log "   3. Suno 生成 voice persona 后，复制 persona ID"
+  log "   4. 回终端执行: voxsuno link <persona_id> <名字>"
+  "$OPEN_URL" "https://suno.com/create/voice" 2>/dev/null || true
+}
+
+# ── 2. 保存 persona ID ──
+cmd_link() {
+  local pid="${1:?用法: voxsuno link <persona_id> <名字>}"
+  local name="${2:-voice_$(date +%m%d)}"
+  persona_set "$name" "$pid" ""
+  log "✅ 已保存 persona: $name → $pid"
+  log "   生成音乐: voxsuno song $name --title \"...\" --tags \"...\" --lyrics \"...\""
+}
+
+# ── 3. 用 persona 生成音乐 ──
+cmd_song() {
+  local name="${1:?用法: voxsuno song <persona名> --title ... --tags ... --lyrics ...}"
+  local pid
+  pid=$(persona_get "$name" id)
+  [ -n "$pid" ] || die "persona '$name' 未保存（先 voxsuno link）"
+  shift
+  log "🎵 用 persona '$name' ($pid) 生成音乐..."
+  "$SUNO_BIN" generate --persona "$pid" "$@"
+}
+
+# ── list ──
+cmd_list() {
+  python3 -c "
+import json
+d=json.load(open('$PERSONAS'))
+if not d: print('（还没有保存的 persona）')
+for k,v in d.items():
+    print(f\"  {k}: {v.get('id','?')}  (voxkey={v.get('voxkey','-')}, {v.get('created_at','')})\")
+"
+}
+
+case "${1:-}" in
+  login)  cmd_login ;;
+  sample) cmd_sample "${2:-}" "${3:-}" ;;
+  link)   cmd_link "${2:-}" "${3:-}" ;;
+  song)   cmd_song "${2:-}" "${@:3}" ;;
+  list)   cmd_list ;;
+  *) cat <<'EOF'
+voxsuno — VoxCraft 声坊 × Suno 桥接工作流
+
+用法:
+  voxsuno login                         一键登录 Suno（从 Chrome 提取会话）
+  voxsuno sample <voxkey> [文本]        VoxCraft 克隆声音 → 生成样音 → 打开 Suno 建 persona 页
+  voxsuno link <persona_id> <名字>      保存 Suno persona ID
+  voxsuno list                          查看已保存的 persona
+  voxsuno song <名字> --title ... --tags ... --lyrics ...
+                                         用 persona 生成音乐（透传 suno generate 参数）
+
+完整链路:
+  voxsuno sample jxx_host "你好，这是一段样音"   # 本地克隆 + 打开 Suno 建 voice
+  # 网页上传样音 → 拿到 persona ID
+  voxsuno link a1b2c3d4-... 我的声音              # 保存
+  voxsuno song 我的声音 --title "月下" --tags "古风, 古筝" --lyrics "[Verse]\n..." --wait
+EOF
+    ;;
+esac
