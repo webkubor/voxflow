@@ -81,10 +81,15 @@
  * 职责：展示后台声音合成任务的队列进度、报错信息及完成后试听/下载
  * API 来源：与 /api/tasks 状态同步，支持 DELETE /api/tasks/{id} 取消排队
  */
-import { computed, inject } from 'vue';
+import { computed } from 'vue';
+import { storeToRefs } from 'pinia';
+import { useLibraryStore } from '../stores/library';
+import { useTasksStore } from '../stores/tasks';
 
-const { tasks, taskPanelCollapsed } = inject('state');
-const { cancelTask, playAudio } = inject('actions');
+const tasksStore = useTasksStore();
+const { tasks, taskPanelCollapsed } = storeToRefs(tasksStore);
+const { cancelTask } = tasksStore;
+const { playAudio } = useLibraryStore();
 
 // 活跃进行中的任务数量
 const activeTaskCount = computed(() => {
@@ -141,7 +146,7 @@ const formatTime = (timeStr) => {
   width: 300px;
   max-height: 400px;
   background-color: #1c1c20;
-  border: 1px solid #2d2d30;
+  border: 1px solid var(--vf-bg-4);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   z-index: 999;
@@ -163,7 +168,7 @@ const formatTime = (timeStr) => {
   align-items: center;
   padding: 0 12px;
   cursor: pointer;
-  border-bottom: 1px solid #2d2d30;
+  border-bottom: 1px solid var(--vf-bg-4);
   user-select: none;
 }
 
@@ -173,12 +178,12 @@ const formatTime = (timeStr) => {
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: #fff;
+  color: var(--vf-text-1);
 }
 
 .header-icon {
   font-size: 12px;
-  color: #a0a0a5;
+  color: var(--vf-text-2);
 }
 
 .panel-body {
@@ -195,30 +200,30 @@ const formatTime = (timeStr) => {
   padding: 10px;
   border-radius: 6px;
   background-color: #151518;
-  border-left: 4px solid #707075;
+  border-left: 4px solid var(--vf-text-3);
 }
 
 .task-item-card.status-queued {
-  border-left-color: #707075;
+  border-left-color: var(--vf-text-3);
 }
 
 .task-item-card.status-running {
-  border-left-color: #f0a020;
+  border-left-color: var(--vf-gold);
   animation: borderPulse 1.5s infinite;
 }
 
 .task-item-card.status-done {
-  border-left-color: #18a058;
+  border-left-color: var(--vf-ok);
 }
 
 .task-item-card.status-error {
-  border-left-color: #d03050;
+  border-left-color: var(--vf-err);
 }
 
 @keyframes borderPulse {
-  0% { border-left-color: #f0a020; }
+  0% { border-left-color: var(--vf-gold); }
   50% { border-left-color: rgba(240, 160, 32, 0.4); }
-  100% { border-left-color: #f0a020; }
+  100% { border-left-color: var(--vf-gold); }
 }
 
 .task-info-row {
@@ -237,18 +242,18 @@ const formatTime = (timeStr) => {
 
 .task-type-badge.clone {
   background-color: rgba(24, 160, 88, 0.15);
-  color: #18a058;
+  color: var(--vf-ok);
 }
 
 .task-type-badge.design {
   background-color: rgba(32, 128, 240, 0.15);
-  color: #2080f0;
+  color: var(--vf-info);
 }
 
 .task-target-name {
   font-size: 12px;
   font-weight: 600;
-  color: #fff;
+  color: var(--vf-text-1);
   flex: 1;
   margin-left: 8px;
   white-space: nowrap;
@@ -260,12 +265,12 @@ const formatTime = (timeStr) => {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: #a0a0a5;
+  color: var(--vf-text-2);
 }
 
 .task-error-msg {
   font-size: 11px;
-  color: #d03050;
+  color: var(--vf-err);
   background-color: rgba(208, 48, 80, 0.08);
   padding: 4px 6px;
   border-radius: 4px;

@@ -85,10 +85,16 @@
  * 职责：展示设计模型就绪度，渲染音色预设网格，提供套用逻辑并提交音色设计参数
  * API 来源：POST /api/design, /api/personas (design_presets 字段)
  */
-import { inject } from 'vue';
+import { useCapabilitiesStore } from '../stores/capabilities';
+import { useSynthStore } from '../stores/synth';
+import { useTasksStore } from '../stores/tasks';
+import { storeToRefs } from 'pinia';
 
-const { designForm, designPresets, modelStatus } = inject('state');
-const { doDesign, showToast } = inject('actions');
+const synthStore = useSynthStore();
+const { designPresets } = storeToRefs(synthStore);
+const { designForm, doDesign } = synthStore;
+const { modelStatus } = useCapabilitiesStore();
+const { showToast } = useTasksStore();
 
 // 一键套用预设配方
 const applyPreset = (preset) => {
@@ -109,9 +115,9 @@ const applyPreset = (preset) => {
 
 .warn-banner {
   background-color: rgba(240, 160, 32, 0.1);
-  border: 1px solid #f0a020;
+  border: 1px solid var(--vf-gold);
   border-radius: 6px;
-  color: #f0a020;
+  color: var(--vf-gold);
   padding: 10px 15px;
   font-size: 13px;
   margin-bottom: 16px;
@@ -124,7 +130,7 @@ const applyPreset = (preset) => {
 .section-title {
   font-size: 13px;
   font-weight: 600;
-  color: #e5e5e7;
+  color: var(--vf-text-1);
   margin-bottom: 8px;
 }
 
@@ -133,9 +139,9 @@ const applyPreset = (preset) => {
 }
 
 .preset-card {
-  border: 1px solid #2d2d30;
+  border: 1px solid var(--vf-bg-4);
   border-radius: 6px;
-  background-color: #18181c;
+  background-color: var(--vf-bg-1);
   padding: 10px;
   cursor: pointer;
   height: 90px;
@@ -147,19 +153,19 @@ const applyPreset = (preset) => {
 }
 
 .preset-card:hover {
-  border-color: #36ad6a;
-  background-color: #1e1e24;
+  border-color: var(--vf-ok);
+  background-color: var(--vf-bg-3);
 }
 
 .preset-name {
   font-size: 13px;
   font-weight: 600;
-  color: #fff;
+  color: var(--vf-text-1);
 }
 
 .preset-tone {
   font-size: 11px;
-  color: #a0a0a5;
+  color: var(--vf-text-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -167,15 +173,15 @@ const applyPreset = (preset) => {
 
 .preset-text {
   font-size: 11px;
-  color: #707075;
+  color: var(--vf-text-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .form-container {
-  background-color: #18181c;
-  border: 1px solid #2d2d30;
+  background-color: var(--vf-bg-1);
+  border: 1px solid var(--vf-bg-4);
   border-radius: 8px;
   padding: 20px;
 }
@@ -185,17 +191,17 @@ const applyPreset = (preset) => {
   justify-content: space-between;
   align-items: center;
   margin-top: 10px;
-  border-top: 1px solid #2d2d30;
+  border-top: 1px solid var(--vf-bg-4);
   padding-top: 16px;
 }
 
 .switch-label {
   font-size: 13px;
-  color: #e5e5e7;
+  color: var(--vf-text-1);
 }
 
 .switch-tip {
   font-size: 11px;
-  color: #707075;
+  color: var(--vf-text-3);
 }
 </style>

@@ -85,7 +85,9 @@
  * 职责：支持表单信息填写，接收本地音频文件（支持点击及拖放上传），并提交 Multipart 上传
  * API 来源：POST /api/personas/add
  */
-import { ref, reactive, computed, inject } from 'vue';
+import { ref, reactive, computed } from 'vue';
+import { useTasksStore } from '../stores/tasks';
+import { useVoicesStore } from '../stores/voices';
 
 const props = defineProps({
   show: {
@@ -96,7 +98,8 @@ const props = defineProps({
 
 const emit = defineEmits(['update:show']);
 
-const { loadPersonas, showToast, showLoading, hideLoading } = inject('actions');
+const { addPersona } = useVoicesStore();
+const { showToast, showLoading, hideLoading } = useTasksStore();
 
 const dragOver = ref(false);
 const fileInput = ref(null);
@@ -171,22 +174,13 @@ const submitAdd = async () => {
 
   showLoading('正在上传参考音频并注册音色...');
   try {
-    const res = await fetch('/api/personas/add', {
-      method: 'POST',
-      body: formData,
-    });
-    const data = await res.json();
-    hideLoading();
-    if (data.status === 'ok') {
-      showToast('音色注册成功', 'success');
-      closeModal();
-      await loadPersonas();
-    } else {
-      showToast(data.error || '注册失败', 'error');
-    }
+    await addPersona(formData);
+    showToast('音色注册成功', 'success');
+    closeModal();
   } catch (e) {
+    showToast(e.message || '注册音色接口异常', 'error');
+  } finally {
     hideLoading();
-    showToast('注册音色接口异常', 'error');
   }
 };
 </script>
@@ -196,7 +190,7 @@ const submitAdd = async () => {
   width: 100%;
   border: 1px dashed #444;
   border-radius: 6px;
-  background-color: #18181c;
+  background-color: var(--vf-bg-1);
   min-height: 120px;
   display: flex;
   justify-content: center;
@@ -209,7 +203,7 @@ const submitAdd = async () => {
 
 .file-drop-zone:hover,
 .file-drop-zone.is-dragover {
-  border-color: #36ad6a;
+  border-color: var(--vf-ok);
   background-color: rgba(54, 173, 106, 0.04);
 }
 
@@ -228,12 +222,12 @@ const submitAdd = async () => {
 .drop-placeholder p {
   margin: 0;
   font-size: 13px;
-  color: #a0a0a5;
+  color: var(--vf-text-2);
 }
 
 .sub-tip {
   font-size: 11px;
-  color: #606065;
+  color: var(--vf-text-3);
   margin-top: 4px;
 }
 
@@ -259,7 +253,7 @@ const submitAdd = async () => {
 .file-name {
   font-size: 13px;
   font-weight: 500;
-  color: #fff;
+  color: var(--vf-text-1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -267,7 +261,7 @@ const submitAdd = async () => {
 
 .file-size {
   font-size: 11px;
-  color: #808085;
+  color: var(--vf-text-3);
 }
 
 .modal-footer-btns {

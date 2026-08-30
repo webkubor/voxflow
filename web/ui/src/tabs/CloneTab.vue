@@ -16,8 +16,23 @@
       </n-tag>
     </div>
 
-    <!-- AI 写作助手 -->
-    <AIHelpSection />
+    <!--
+      AI 写作助手默认折叠。
+
+      它是**给文案框服务的辅助工具**，不是流程的一步 —— 展开着占掉半个首屏，
+      把真正要用的「选音色 → 填文案 → 合成」挤到屏幕以下，用户进来第一眼
+      看到的是一个自己未必要用的东西。
+
+      需要的时候点开，不需要的时候它只占一行。
+    -->
+    <n-collapse class="ai-help-collapse" :default-expanded-names="[]">
+      <n-collapse-item name="ai">
+        <template #header>
+          <span class="ai-help-header">✨ AI 帮我写文案 <em>不会写就让它先出个稿</em></span>
+        </template>
+        <AIHelpSection />
+      </n-collapse-item>
+    </n-collapse>
 
     <!-- 历史保存文案库 -->
     <div v-if="savedScripts.length > 0" class="scripts-section">
@@ -104,26 +119,25 @@
  * 职责：管理并提交克隆合成任务参数，渲染历史文案库，与 AI 助手做数据绑定
  * API 来源：POST /api/clone, GET /api/scripts, POST /api/scripts 等
  */
-import { inject } from 'vue';
+import { useCapabilitiesStore } from '../stores/capabilities';
+import { useSynthStore } from '../stores/synth';
+import { useVoicesStore } from '../stores/voices';
+import { storeToRefs } from 'pinia';
 import AIHelpSection from '../components/AIHelpSection.vue';
 
-const { 
-  selectedPersona, 
-  personas, 
-  cloneForm, 
-  savedScripts, 
-  modelStatus 
-} = inject('state');
-
-const { 
-  loadScript, 
-  deleteScript, 
-  saveScript, 
-  doClone 
-} = inject('actions');
+const voicesStore = useVoicesStore();
+const synthStore = useSynthStore();
+const { selectedPersona, personas } = storeToRefs(voicesStore);
+const { savedScripts } = storeToRefs(synthStore);
+const { cloneForm, loadScript, deleteScript, saveScript, doClone } = synthStore;
+const { modelStatus } = useCapabilitiesStore();
 </script>
 
 <style scoped>
+.ai-help-collapse { margin-bottom: var(--vf-space-4); }
+.ai-help-header { font-size: 13px; color: var(--vf-text-2); }
+.ai-help-header em { font-style: normal; margin-left: var(--vf-space-2); font-size: 12px; color: var(--vf-text-3); }
+
 .tab-content-container {
   display: flex;
   flex-direction: column;
@@ -132,9 +146,9 @@ const {
 
 .warn-banner {
   background-color: rgba(240, 160, 32, 0.1);
-  border: 1px solid #f0a020;
+  border: 1px solid var(--vf-gold);
   border-radius: 6px;
-  color: #f0a020;
+  color: var(--vf-gold);
   padding: 10px 15px;
   font-size: 13px;
   margin-bottom: 16px;
@@ -149,7 +163,7 @@ const {
 
 .bar-label {
   font-size: 13px;
-  color: #a0a0a5;
+  color: var(--vf-text-2);
   font-weight: 500;
 }
 
@@ -160,7 +174,7 @@ const {
 .section-title {
   font-size: 13px;
   font-weight: 600;
-  color: #e5e5e7;
+  color: var(--vf-text-1);
   margin-bottom: 8px;
 }
 
@@ -172,19 +186,19 @@ const {
 
 .script-chip {
   cursor: pointer;
-  background-color: #1e1e24;
-  border-color: #2d2d30;
+  background-color: var(--vf-bg-3);
+  border-color: var(--vf-bg-4);
   transition: background-color 0.2s, border-color 0.2s;
 }
 
 .script-chip:hover {
   background-color: #262630;
-  border-color: #36ad6a;
+  border-color: var(--vf-ok);
 }
 
 .form-container {
-  background-color: #18181c;
-  border: 1px solid #2d2d30;
+  background-color: var(--vf-bg-1);
+  border: 1px solid var(--vf-bg-4);
   border-radius: 8px;
   padding: 20px;
 }
@@ -194,17 +208,17 @@ const {
   justify-content: space-between;
   align-items: center;
   margin-top: 10px;
-  border-top: 1px solid #2d2d30;
+  border-top: 1px solid var(--vf-bg-4);
   padding-top: 16px;
 }
 
 .switch-label {
   font-size: 13px;
-  color: #e5e5e7;
+  color: var(--vf-text-1);
 }
 
 .switch-tip {
   font-size: 11px;
-  color: #707075;
+  color: var(--vf-text-3);
 }
 </style>

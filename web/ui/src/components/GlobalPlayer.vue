@@ -54,16 +54,13 @@
  * 职责：接收全局播放请求，提供一键下载，实现即时自动播
  * API 来源：直接播放来自 /api/audio/... 或静态托管路径的音频流
  */
-import { ref, inject, watch, nextTick } from 'vue';
+import { ref, watch, nextTick } from 'vue';
+import { useLibraryStore } from '../stores/library';
+import { useTasksStore } from '../stores/tasks';
 
-const { player } = inject('state');
+const { player, closePlayer } = useLibraryStore();
+const { showToast } = useTasksStore();
 const audioPlayer = ref(null);
-
-const closePlayer = () => {
-  player.visible = false;
-  player.url = '';
-  player.filename = '';
-};
 
 // 监听播放 URL 的变化，自动重新加载并试听
 watch(
@@ -73,8 +70,8 @@ watch(
       await nextTick();
       if (audioPlayer.value) {
         audioPlayer.value.load();
-        audioPlayer.value.play().catch((e) => {
-          console.warn('浏览器自动播放受阻，等待用户交互：', e);
+        audioPlayer.value.play().catch(() => {
+          showToast('浏览器阻止了自动播放，请点击播放器播放', 'warning');
         });
       }
     }
@@ -89,8 +86,8 @@ watch(
   left: 0;
   right: 0;
   height: 70px;
-  background-color: #1e1e24;
-  border-top: 1px solid #2d2d30;
+  background-color: var(--vf-bg-3);
+  border-top: 1px solid var(--vf-bg-4);
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
   z-index: 1000;
   box-sizing: border-box;
@@ -134,7 +131,7 @@ watch(
 .filename {
   font-size: 13px;
   font-weight: 500;
-  color: #fff;
+  color: var(--vf-text-1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -142,7 +139,7 @@ watch(
 
 .sub-text {
   font-size: 11px;
-  color: #808085;
+  color: var(--vf-text-3);
 }
 
 .player-control {

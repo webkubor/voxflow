@@ -6,6 +6,71 @@
         <div class="header-left">
           <img :src="'/assets/branding/logo-icon.png'" class="logo-img" alt="Logo" />
           <span class="app-title">VoxFlow 声流</span>
+          <div class="header-platforms">
+            <span class="platforms-label">一键自动发布：</span>
+            <n-space size="small" align="center">
+              <n-tooltip trigger="hover">
+                <template #trigger>
+                  <div class="platform-badge">
+                    <!-- 汽水音乐官方彩色 SVG -->
+                    <svg class="platform-icon" width="22" height="22" viewBox="0 0 58 59" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <g clip-path="url(#clip0_3409_38666_logo)">
+                        <path d="M57.4495 38.0618H46.4532C46.3514 37.2641 46.1982 36.4738 45.9945 35.6959L40.4963 14.5835H53.9473L50.3335 0.562393H22.4398L28.0185 21.9294C26.534 21.9595 25.0586 22.1679 23.6237 22.5504C20.5394 23.3533 17.7171 24.9471 15.4346 27.1748C13.1521 29.4025 11.4882 32.1873 10.6066 35.2551H21.8199L0.124786 40.9244H9.87519C9.92022 42.3019 10.1177 43.6701 10.4641 45.004C11.5172 49.049 13.914 52.6141 17.2598 55.1123C20.6055 57.6105 24.7008 58.8929 28.8712 58.7483C33.0416 58.6037 37.0386 57.0408 40.2039 54.3168C43.3693 51.5929 45.5143 47.8703 46.2858 43.7621H35.7482L57.4495 38.0618Z" fill="url(#paint0_linear_3409_38666_logo)" />
+                      </g>
+                      <defs>
+                        <linearGradient id="paint0_linear_3409_38666_logo" x1="48.2136" y1="2.02163" x2="20.547" y2="55.185" gradientUnits="userSpaceOnUse">
+                          <stop stop-color="#FCFB47" />
+                          <stop offset="0.1" stop-color="#D2FB46" />
+                          <stop offset="0.29" stop-color="#89FC44" />
+                          <stop offset="0.45" stop-color="#54FD42" />
+                          <stop offset="0.57" stop-color="#33FD41" />
+                          <stop offset="0.63" stop-color="#27FD41" />
+                          <stop offset="0.75" stop-color="#26FD78" />
+                          <stop offset="0.86" stop-color="#25FDA7" />
+                          <stop offset="0.95" stop-color="#24FDC4" />
+                          <stop offset="1" stop-color="#24FDCF" />
+                        </linearGradient>
+                        <clipPath id="clip0_3409_38666_logo">
+                          <rect width="57.3247" height="58.1771" fill="white" transform="translate(0.124786 0.562393)" />
+                        </clipPath>
+                      </defs>
+                    </svg>
+                  </div>
+                </template>
+                抖音汽水音乐
+              </n-tooltip>
+              
+              <n-tooltip trigger="hover">
+                <template #trigger>
+                  <div class="platform-badge">
+                    <!-- QQ音乐官方彩色 SVG -->
+                    <svg class="platform-icon" viewBox="-147 -173.3 470 492.3" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+                      <linearGradient id="qq_linear_logo" gradientTransform="rotate(-90 1397 232)" gradientUnits="userSpaceOnUse" x1="1310" x2="1780" y1="-1077" y2="-1077">
+                        <stop offset="0" stop-color="#fbbe0a"/>
+                        <stop offset="1" stop-color="#feda24"/>
+                      </linearGradient>
+                      <circle cx="88" cy="84" fill="url(#qq_linear_logo)" r="235"/>
+                      <path d="M123.8 104c-5.9-8.3-11.5-16.1-17.1-23.8C85.2 50.4 63.6 20.6 42-9.1 28.3-28 14.7-46.9.8-65.6-3.4-71.2-3.9-77.1-2-83.5c3.9-13.3 13.2-22.5 24.2-30.1 20.1-13.9 42.8-21 66.6-25.2 20.7-3.6 41.2-8 59.3-19.4 4.9-3.1 9-7.3 13.5-11 1.2-1 2.3-2.1 4.6-4.1 1.5 7.3 3 13.4 4 19.5 3 18 1.9 35.5-6.2 52.1-11 22.4-29 36.4-52.6 43.6C97-53.5 82.1-52.4 67-52.5c-1.1 0-2.2.3-4.1.5 3.7 6.5 7 12.6 10.6 18.5 14.5 23.7 29 47.4 43.4 71.2l47.4 78.6c4.1 6.8 8.4 13.6 12.4 20.5 9.3 16 16.1 32.7 14.8 51.9-1.3 18.8-8.1 35.2-19.8 49.6-19.1 23.5-43.9 37.1-73.5 42.4-27.9 4.9-54.5 1.8-79.2-12.3-27.8-15.8-45.6-44.5-41.4-78.7 2.7-22.5 13.9-41.1 30.4-56.4 17.6-16.2 38.5-26.1 61.8-30.6 17.2-3.4 34.4-3.2 51.4 1.4.5.1 1.1-.1 2.6-.1z" fill="#0daf52"/>
+                    </svg>
+                  </div>
+                </template>
+                QQ音乐
+              </n-tooltip>
+
+              <n-tooltip trigger="hover">
+                <template #trigger>
+                  <div class="platform-badge">
+                    <!-- 网易云音乐官方红色圆盘 SVG -->
+                    <svg class="platform-icon" viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+                      <path fill="#e60026" d="M12.001 22C6.47813 22 2.00098 17.5228 2.00098 12C2.00098 6.47715 6.47813 2 12.001 2C17.5238 2 22.001 6.47715 22.001 12C22.001 17.5228 17.5238 22 12.001 22Z"/>
+                      <path d="M10.915 11.5684C11.1559 10.7273 11.9899 10.0266 12.9053 9.9202C13.092 10.6139 13.2926 11.2934 13.4503 11.9826C13.503 12.2127 13.4869 12.4776 13.4317 12.7098C13.2195 13.6019 12.1844 13.9521 11.4543 13.3949C10.9232 12.9896 10.7125 12.2757 10.915 11.5684ZM14.7323 11.3707C14.6071 10.9065 14.476 10.4438 14.3394 9.95097C14.8388 10.081 15.2465 10.3108 15.594 10.6485C16.8506 11.87 16.9793 13.9488 15.888 15.3804C14.7526 16.8698 12.7331 17.5141 10.8596 16.9848C8.55798 16.3345 7.05207 14.0327 7.41861 11.6692C7.69287 9.90076 8.68938 8.66514 10.3187 7.93582C10.7257 7.75367 10.8985 7.37612 10.739 7.0063C10.5818 6.64172 10.1984 6.50242 9.79548 6.66349C7.07384 7.7515 5.47405 10.7974 6.12578 13.6503C6.83792 16.7679 9.61963 18.8125 12.7995 18.5089C14.5318 18.3435 15.9636 17.5609 17.0156 16.1624C18.5218 14.1599 18.3131 11.3794 16.5534 9.66325C15.8867 9.01311 15.0816 8.64501 14.1638 8.50972C14.08 8.49736 13.9463 8.45787 13.9314 8.40426C13.8437 8.09092 13.7506 7.77237 13.7249 7.45035C13.6963 7.09273 14.0143 6.80938 14.3753 6.80488C14.6282 6.80173 14.8087 6.93579 14.9784 7.10468C15.2805 7.40513 15.6824 7.42674 15.9662 7.16733C16.2551 6.90322 16.2624 6.48912 15.984 6.15892C15.4178 5.48746 14.3978 5.26779 13.5545 5.63572C12.7067 6.00566 12.233 6.82256 12.3546 7.72916C12.3922 8.00993 12.4639 8.28616 12.5213 8.57131C12.4302 8.59639 12.3452 8.61951 12.2605 8.64317C11.4048 8.88224 10.6999 9.34675 10.1634 10.0575C9.24196 11.2778 9.22657 12.8846 10.1219 14.0044C11.3962 15.5982 13.8687 15.2882 14.6453 13.4357C14.9287 12.7595 14.9201 12.0676 14.7323 11.3707Z" fill="#ffffff" />
+                    </svg>
+                  </div>
+                </template>
+                网易云音乐
+              </n-tooltip>
+            </n-space>
+          </div>
         </div>
         <!--
           能力状态栏：一眼看清「现在能不能干活、还剩多少资源」。
@@ -21,7 +86,7 @@
               <template #trigger>
                 <n-tag :type="c.ready ? 'success' : 'warning'" round size="small" class="cap-tag">
                   <span class="status-dot" :class="c.ready ? 'dot-ready' : 'dot-warn'"></span>
-                  {{ c.label }}<em v-if="c.num" class="cap-num">{{ c.num }}</em>
+                  {{ c.label }}<em v-if="c.num !== undefined" class="cap-num">{{ c.num }}</em>
                 </n-tag>
               </template>
               {{ c.detail || (c.ready ? '正常' : '不可用') }}
@@ -123,6 +188,9 @@
             <n-tab-pane name="design" tab="音色设计">
               <DesignTab />
             </n-tab-pane>
+            <n-tab-pane name="dialogue" tab="剧本模式">
+              <DialogueTab />
+            </n-tab-pane>
             <n-tab-pane name="suno" tab="AI 音乐">
               <SunoTab />
             </n-tab-pane>
@@ -155,765 +223,102 @@
 
 <script setup>
 /**
- * 核心视图层布局组件
- * 职责：挂载和分发全局状态与逻辑，管理轮询心跳和全局物理元素（样音播放器、全局Loading、弹窗状态）
- * API 来源：/api/status, /api/personas, /api/persona-audio, /api/tasks, /api/suno/status 等
+ * VoxFlow 应用布局。
+ * 职责：仅组织布局、选项卡与各领域 store 的初始化轮询。
+ * API：状态请求均由 stores/ 中对应领域的 action 发起。
  */
-import {ref, reactive, provide, onMounted, onBeforeUnmount, nextTick, computed } from 'vue';
-
+import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { storeToRefs } from 'pinia';
 import CloneTab from '../tabs/CloneTab.vue';
 import DesignTab from '../tabs/DesignTab.vue';
+import DialogueTab from '../tabs/DialogueTab.vue';
 import SunoTab from '../tabs/SunoTab.vue';
 import LibraryTab from '../tabs/LibraryTab.vue';
 import GlobalPlayer from './GlobalPlayer.vue';
 import TaskPanel from './TaskPanel.vue';
 import AddPersonaModal from './AddPersonaModal.vue';
+import { useCapabilitiesStore } from '../stores/capabilities';
+import { useLibraryStore } from '../stores/library';
+import { useSunoStore } from '../stores/suno';
+import { useSynthStore } from '../stores/synth';
+import { useTasksStore } from '../stores/tasks';
+import { useVoicesStore } from '../stores/voices';
 
-// ── 1. 全局响应式状态 ──
 const currentTab = ref('clone');
-const personas = ref({});
-const selectedPersona = ref(null);
-const designPresets = ref([]);
+const showAddPersona = ref(false);
+const capabilitiesStore = useCapabilitiesStore();
+const libraryStore = useLibraryStore();
+const sunoStore = useSunoStore();
+const synthStore = useSynthStore();
+const tasksStore = useTasksStore();
+const voicesStore = useVoicesStore();
+const { capBadges } = storeToRefs(capabilitiesStore);
+const { globalLoading, globalLoadingText } = storeToRefs(tasksStore);
+const { personas, selectedPersona, previewKey, previewProgress, previewPlayer } = storeToRefs(voicesStore);
+const { selectPersona, togglePreview, onPreviewProgress, onPreviewEnded, deletePersona } = voicesStore;
 
-const cloneForm = reactive({
-  persona: '',
-  text: '',
-  tone: '',
-  emotion: '',
-  emotionPriority: false,
-});
+let statusInterval;
+let capsInterval;
+let llmInterval;
 
-const designForm = reactive({
-  name: '',
-  text: '',
-  tone: '',
-  emotion: '',
-  commit: false,
-});
-
-const suno = reactive({
-  authenticated: false,
-  credits: 0,
-  total_credits_left: 0,
-  plan: '',
-  personas: {},
-  submitting: false,
-  error: '',
-});
-
-const sunoForm = reactive({
-  title: '',
-  tags: '',
-  lyrics: '',
-  persona: '',
-});
-
-const savedScripts = ref([]);
-
-const llm = reactive({
-  available: false,
-  checking: false,
-  base_url: '',
-  models: [],
-  genPrompt: '',
-  genWordCount: '',
-  genLoading: false,
-  polStyle: '',
-  polLoading: false,
-});
-
-const audioFiles = ref([]);
-
-const modelStatus = reactive({
-  base: { ready: false, downloading: false, loaded: false, progress: null },
-  design: { ready: false, downloading: false, loaded: false, progress: null },
-});
-
-const tasks = ref([]);
-const prevTaskStatus = {};
-const taskPanelCollapsed = ref(false);
-let _taskTimer = null;
-
-const player = reactive({
-  url: '',
-  filename: '',
-  visible: false,
-});
-
-const previewKey = ref(null);
-const previewProgress = ref(0);
-const previewPlayer = ref(null);
-
-const globalLoading = ref(false);
-const globalLoadingText = ref('');
-
-// ── 2. 状态格式化辅助函数 ──
-const getModelStatusType = (st) => {
-  if (st.loaded) return 'success';
-  if (st.downloading) return 'warning';
-  return 'default';
-};
-
-const getModelStatusDotClass = (st) => {
-  if (st.loaded) return 'dot-green';
-  if (st.downloading) return 'dot-orange animate-pulse';
-  return 'dot-gray';
-};
-
-const getModelStatusText = (st) => {
-  if (st.loaded) return '已装载';
-  if (st.downloading) return `下载中 ${st.progress}%`;
-  if (st.ready) return '已就绪 (未装载)';
-  return '未就绪';
-};
-
-// ── 3. 全局核心方法 ──
-
-const showToast = (msg, type = 'info') => {
-  if (!window.$message) {
-    console.log(`[Toast Fallback] [${type}] ${msg}`);
-    return;
+const runInitialLoads = async () => {
+  try {
+    await Promise.all([
+      capabilitiesStore.checkStatus(),
+      capabilitiesStore.loadCaps(),
+      capabilitiesStore.checkLLM(),
+      voicesStore.loadPersonas(),
+      libraryStore.loadAudioList(),
+      synthStore.loadScripts(),
+      sunoStore.loadSunoStatus(),
+    ]);
+  } catch (cause) {
+    tasksStore.showToast(cause.message || '初始化状态加载失败', 'error');
   }
-  if (type === 'success') window.$message.success(msg);
-  else if (type === 'error') window.$message.error(msg);
-  else if (type === 'warning') window.$message.warning(msg);
-  else window.$message.info(msg);
 };
 
-const showLoading = (text) => {
-  globalLoadingText.value = text;
-  globalLoading.value = true;
-};
-
-const hideLoading = () => {
-  globalLoading.value = false;
-  globalLoadingText.value = '';
-};
-
-// 切换选项卡
-const switchTab = (tab) => {
+const switchTab = async (tab) => {
   currentTab.value = tab;
   if (tab === 'library') {
-    loadAudioList();
-  }
-};
-
-// 模型与系统状态自检
-/**
- * 能力状态：本地模型 / Suno 积分 / 中台身份 / 文案助手。
- * 走后端聚合的 /api/capabilities —— 前端不必并发调四个接口各自处理失败，
- * 也不必自己拼「能不能开工」这个判断。
- */
-const caps = ref({});
-const capBadges = computed(() => {
-  const c = caps.value || {};
-  return [
-    { key: 'tts',    label: '语音',   ready: !!c.tts?.ready,    detail: c.tts?.detail },
-    { key: 'suno',   label: 'Suno',   ready: !!c.suno?.ready,   detail: c.suno?.detail, num: c.suno?.credits },
-    { key: 'studio', label: '中台',   ready: !!c.studio?.ready, detail: c.studio?.detail },
-    { key: 'llm',    label: '文案',   ready: !!c.llm?.ready,    detail: c.llm?.detail },
-  ];
-});
-const loadCaps = async () => {
-  try {
-    const r = await fetch('/api/capabilities');
-    caps.value = await r.json();
-  } catch { /* 拿不到就保持上一次的状态，不要闪成全红 */ }
-};
-
-const checkStatus = async () => {
-  try {
-    const res = await fetch('/api/status');
-    const data = await res.json();
-    modelStatus.base = {
-      ready: !!data.base_model,
-      downloading: !!data.base_downloading,
-      loaded: !!data.base_loaded,
-      progress: data.base_progress?.percent || 0
-    };
-    modelStatus.design = {
-      ready: !!data.design_model,
-      downloading: !!data.design_downloading,
-      loaded: !!data.design_loaded,
-      progress: data.design_progress?.percent || 0
-    };
-  } catch (e) {
-    console.error('获取系统状态失败:', e);
-  }
-};
-
-// 获取音色列表
-const loadPersonas = async () => {
-  try {
-    const res = await fetch('/api/personas');
-    const data = await res.json();
-    personas.value = data.personas || {};
-    designPresets.value = data.presets || [];
-    
-    // 如果没有选中音色且列表有数据，默认选中第一个
-    const keys = Object.keys(personas.value);
-    if (keys.length > 0 && !selectedPersona.value) {
-      selectPersona(keys[0]);
-    }
-  } catch (e) {
-    showToast('获取音色列表失败', 'error');
-  }
-};
-
-// 选中音色
-const selectPersona = (key) => {
-  selectedPersona.value = key;
-  cloneForm.persona = key;
-  const p = personas.value[key];
-  if (p && p.instruction) {
-    cloneForm.tone = p.instruction;
-  }
-};
-
-// 删除自定义音色
-const deletePersona = (key) => {
-  if (!window.$dialog) {
-    console.warn('dialog api 暂未加载');
-    return;
-  }
-  window.$dialog.warning({
-    title: '确认删除',
-    content: `确定要删除自定义音色 "${personas.value[key]?.name || key}" 吗？`,
-    positiveText: '确认',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      showLoading('正在删除音色...');
-      try {
-        const res = await fetch(`/api/personas/${key}`, { method: 'DELETE' });
-        const data = await res.json();
-        hideLoading();
-        if (data.status === 'ok') {
-          showToast('删除音色成功', 'success');
-          if (selectedPersona.value === key) {
-            selectedPersona.value = null;
-            cloneForm.persona = '';
-          }
-          await loadPersonas();
-        } else {
-          showToast(data.error || '删除失败', 'error');
-        }
-      } catch (e) {
-        hideLoading();
-        showToast('删除音色网络错误', 'error');
-      }
-    }
-  });
-};
-
-// 试听左侧音色预览
-const togglePreview = (key) => {
-  if (previewKey.value === key) {
-    // 暂停
-    previewPlayer.value.pause();
-    previewKey.value = null;
-    previewProgress.value = 0;
-  } else {
-    // 播放
-    previewKey.value = key;
-    previewPlayer.value.src = `/api/persona-audio?key=${key}`;
-    previewPlayer.value.load();
-    previewPlayer.value.play().catch((err) => {
-      showToast('样音播放失败或不存在', 'error');
-      previewKey.value = null;
-      previewProgress.value = 0;
-    });
-    
-    // 同步选中
-    selectPersona(key);
-  }
-};
-
-const onPreviewProgress = () => {
-  if (previewPlayer.value && previewPlayer.value.duration) {
-    previewProgress.value = (previewPlayer.value.currentTime / previewPlayer.value.duration) * 100;
-  }
-};
-
-const onPreviewEnded = () => {
-  previewKey.value = null;
-  previewProgress.value = 0;
-};
-
-// 载入生成音频列表
-const loadAudioList = async () => {
-  try {
-    const res = await fetch('/api/audio-list');
-    const data = await res.json();
-    audioFiles.value = data.files || [];
-  } catch (e) {
-    showToast('获取音频库列表失败', 'error');
-  }
-};
-
-// 物理删除音频
-const deleteAudio = (filename) => {
-  dialog.warning({
-    title: '确认删除',
-    content: `确定要物理删除该音频吗？该操作不可逆。`,
-    positiveText: '确认',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      try {
-        const res = await fetch(`/api/audio/${encodeURIComponent(filename)}`, { method: 'DELETE' });
-        const data = await res.json();
-        if (data.status === 'ok') {
-          showToast('音频删除成功', 'success');
-          if (player.filename === filename) {
-            player.visible = false;
-            player.url = '';
-            player.filename = '';
-          }
-          await loadAudioList();
-        } else {
-          showToast(data.error || '删除失败', 'error');
-        }
-      } catch (e) {
-        showToast('物理删除音频网络错误', 'error');
-      }
-    }
-  });
-};
-
-// 文案库加载
-const loadScripts = async () => {
-  try {
-    const res = await fetch('/api/scripts');
-    const data = await res.json();
-    savedScripts.value = data.scripts || [];
-  } catch (e) {
-    console.error('加载文案历史失败:', e);
-  }
-};
-
-// 载入单个文案
-const loadScript = (script) => {
-  cloneForm.text = script.content;
-  showToast('已载入选中文案', 'success');
-};
-
-// 保存当前文案
-const saveScript = async () => {
-  if (!cloneForm.text.trim()) {
-    showToast('文本框内容不能为空', 'warning');
-    return;
-  }
-  const title = cloneForm.text.trim().substring(0, 15);
-  try {
-    const res = await fetch('/api/scripts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, content: cloneForm.text }),
-    });
-    const data = await res.json();
-    if (data.status === 'ok') {
-      showToast('保存文案成功', 'success');
-      savedScripts.value = data.scripts || [];
-    } else {
-      showToast(data.error || '保存失败', 'error');
-    }
-  } catch (e) {
-    showToast('保存文案网络异常', 'error');
-  }
-};
-
-// 删除文案
-const deleteScript = async (id) => {
-  try {
-    const res = await fetch(`/api/scripts/${id}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (data.status === 'ok') {
-      showToast('文案已删除', 'success');
-      savedScripts.value = data.scripts || [];
-    } else {
-      showToast(data.error || '删除文案失败', 'error');
-    }
-  } catch (e) {
-    showToast('删除文案网络错误', 'error');
-  }
-};
-
-// 检查 LLM 文案助手状态
-const checkLLM = async () => {
-  llm.checking = true;
-  try {
-    const res = await fetch('/api/llm/status');
-    const data = await res.json();
-    llm.available = !!data.available;
-    llm.base_url = data.base_url || '';
-    llm.models = data.models || [];
-  } catch (e) {
-    llm.available = false;
-  } finally {
-    llm.checking = false;
-  }
-};
-
-// AI 文案生成
-const aiGenerate = async () => {
-  if (!llm.genPrompt.trim()) {
-    showToast('请填写提示词', 'warning');
-    return;
-  }
-  llm.genLoading = true;
-  try {
-    const res = await fetch('/api/llm/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: llm.genPrompt,
-        word_count: parseInt(llm.genWordCount) || 100
-      }),
-    });
-    const data = await res.json();
-    if (data.text) {
-      cloneForm.text = data.text;
-      showToast('✨ 文案生成成功', 'success');
-    } else {
-      showToast(data.error || '生成失败', 'error');
-    }
-  } catch (e) {
-    showToast('AI生成接口请求异常', 'error');
-  } finally {
-    llm.genLoading = false;
-  }
-};
-
-// AI 文案润色
-const aiPolish = async () => {
-  if (!cloneForm.text.trim()) {
-    showToast('文本框中没有可以润色的文案', 'warning');
-    return;
-  }
-  llm.polLoading = true;
-  try {
-    const res = await fetch('/api/llm/polish', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text: cloneForm.text,
-        style: llm.polStyle || '自然有亲和力'
-      }),
-    });
-    const data = await res.json();
-    if (data.text) {
-      cloneForm.text = data.text;
-      showToast('✨ 文案润色成功', 'success');
-    } else {
-      showToast(data.error || '润色失败', 'error');
-    }
-  } catch (e) {
-    showToast('AI润色接口请求异常', 'error');
-  } finally {
-    llm.polLoading = false;
-  }
-};
-
-// 提交声音克隆任务
-const doClone = async () => {
-  if (!cloneForm.persona) {
-    showToast('请选择音色', 'warning');
-    return;
-  }
-  if (!cloneForm.text.trim()) {
-    showToast('请填写需要合成的文案', 'warning');
-    return;
-  }
-  if (cloneForm.text.length > 400) {
-    showToast('合成文本字数不能超过400字', 'warning');
-    return;
-  }
-
-  showLoading('正在提交克隆任务...');
-  try {
-    const res = await fetch('/api/clone', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        persona: cloneForm.persona,
-        text: cloneForm.text,
-        tone: cloneForm.tone,
-        emotion: cloneForm.emotion,
-        emotion_priority: cloneForm.emotionPriority,
-      }),
-    });
-    const data = await res.json();
-    hideLoading();
-    if (data.task_id) {
-      showToast('克隆任务提交成功！', 'success');
-      taskPanelCollapsed.value = false;
-      pollTasks();
-    } else {
-      showToast(data.error || '提交失败', 'error');
-    }
-  } catch (e) {
-    hideLoading();
-    showToast('克隆请求接口异常', 'error');
-  }
-};
-
-// 提交音色设计任务
-const doDesign = async () => {
-  if (!designForm.name.trim()) {
-    showToast('请填写音色名称', 'warning');
-    return;
-  }
-  if (!designForm.text.trim()) {
-    showToast('请填写建模短句', 'warning');
-    return;
-  }
-
-  showLoading('正在提交音色设计...');
-  try {
-    const res = await fetch('/api/design', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        voice_name: designForm.name,
-        text: designForm.text,
-        tone: designForm.tone,
-        emotion: designForm.emotion,
-        commit: designForm.commit,
-      }),
-    });
-    const data = await res.json();
-    hideLoading();
-    if (data.task_id) {
-      showToast('音色设计任务提交成功！', 'success');
-      taskPanelCollapsed.value = false;
-      pollTasks();
-    } else {
-      showToast(data.error || '提交设计失败', 'error');
-    }
-  } catch (e) {
-    hideLoading();
-    showToast('提交设计接口异常', 'error');
-  }
-};
-
-// 全局播放器控制
-const playAudio = (url, filename) => {
-  player.url = url;
-  player.filename = filename;
-  player.visible = true;
-};
-
-// 取消/删除任务
-const cancelTask = async (taskId) => {
-  try {
-    const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (data.status === 'ok') {
-      showToast('任务已取消', 'success');
-      await pollTasks();
-    } else {
-      showToast(data.error || '取消失败', 'error');
-    }
-  } catch (e) {
-    showToast('取消任务接口异常', 'error');
-  }
-};
-
-// 任务队列轮询
-const pollTasks = async () => {
-  if (_taskTimer) clearTimeout(_taskTimer);
-  try {
-    const res = await fetch('/api/tasks');
-    const data = await res.json();
-    const newTasks = data.tasks || [];
-    
-    // 检测状态变化触发自动试听与刷新
-    for (const t of newTasks) {
-      const prevStatus = prevTaskStatus[t.id];
-      if (prevStatus && prevStatus !== t.status) {
-        if (t.status === 'done') {
-          showToast(`任务 [${t.type === 'clone' ? '声音克隆' : '音色设计'}] 完成！`, 'success');
-          // 自动播放
-          if (t.result && t.result.urls && t.result.urls.length > 0) {
-            playAudio(t.result.urls[0], t.result.files[0]);
-          }
-          // 刷新列表
-          loadAudioList();
-          if (t.result && t.result.committed) {
-            loadPersonas();
-          }
-        } else if (t.status === 'error') {
-          showToast(`任务 [${t.type === 'clone' ? '声音克隆' : '音色设计'}] 失败: ${t.error || ''}`, 'error');
-        }
-      }
-      prevTaskStatus[t.id] = t.status;
-    }
-
-    tasks.value = newTasks;
-    
-    // 是否还有正在排队或执行中的任务
-    const hasActive = newTasks.some(x => x.status === 'queued' || x.status === 'running');
-    const interval = hasActive ? 1500 : 5000;
-    
-    _taskTimer = setTimeout(pollTasks, interval);
-  } catch (e) {
-    // 网络错误静默降级为5秒重试
-    _taskTimer = setTimeout(pollTasks, 5000);
-  }
-};
-
-// ── Suno AI 音乐相关 ──
-const loadSunoStatus = async () => {
-  try {
-    const res = await fetch('/api/suno/status');
-    const data = await res.json();
-    suno.authenticated = !!data.authenticated;
-    suno.credits = data.credits || 0;
-    suno.total_credits_left = data.total_credits_left || 0;
-    suno.plan = data.plan || '';
-    suno.personas = data.personas || {};
-  } catch (e) {
-    suno.error = '获取 Suno 状态失败';
-  }
-};
-
-const submitSuno = async () => {
-  if (!sunoForm.title.trim()) {
-    showToast('请填写歌曲标题', 'warning');
-    return;
-  }
-  suno.submitting = true;
-  suno.error = '';
-  try {
-    const res = await fetch('/api/suno/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sunoForm),
-    });
-    const data = await res.json();
-    if (!data.task_id) {
-      suno.error = data.error || '提交失败';
-      suno.submitting = false;
-      return;
-    }
-    showToast('🎵 音乐生成已提交，完成后进音频库', 'success');
-    suno.submitting = false;
-    pollSunoTask(data.task_id);
-  } catch (e) {
-    suno.error = '提交失败: ' + e.message;
-    suno.submitting = false;
-  }
-};
-
-const pollSunoTask = async (taskId) => {
-  const check = async () => {
     try {
-      const res = await fetch('/api/tasks');
-      const data = await res.json();
-      const t = (data.tasks || []).find(x => x.id === taskId);
-      if (!t) return;
-      if (t.status === 'done' || t.status === 'error') {
-        suno.submitting = false;
-        if (t.status === 'done') {
-          showToast('🎵 Suno 音乐生成完成！', 'success');
-          loadAudioList();
-          if (t.result && t.result.urls && t.result.urls.length) {
-            playAudio(t.result.urls[0], t.result.files[0]);
-          }
-        } else {
-          suno.error = t.error || '生成失败';
-        }
-      } else {
-        setTimeout(check, 5000);
-      }
-    } catch (e) {
-      setTimeout(check, 5000);
+      await libraryStore.loadAudioList();
+    } catch (cause) {
+      tasksStore.showToast(cause.message || '加载音频库失败', 'error');
     }
-  };
-  setTimeout(check, 3000);
+  }
 };
 
-// ── 4. 依赖注入 SSOT 共享 ──
-provide('state', {
-  currentTab,
-  personas,
-  selectedPersona,
-  designPresets,
-  cloneForm,
-  designForm,
-  suno,
-  sunoForm,
-  savedScripts,
-  llm,
-  audioFiles,
-  modelStatus,
-  tasks,
-  taskPanelCollapsed,
-  player,
-  previewKey,
-  previewProgress,
-});
-
-provide('actions', {
-  selectPersona,
-  togglePreview,
-  loadAudioList,
-  deleteAudio,
-  loadScript,
-  saveScript,
-  deleteScript,
-  checkLLM,
-  aiGenerate,
-  aiPolish,
-  doClone,
-  doDesign,
-  cancelTask,
-  playAudio,
-  loadSunoStatus,
-  submitSuno,
-  loadPersonas,
-  showToast,
-  showLoading,
-  hideLoading
-});
-
-// ── 5. 生命周期挂载 ──
 onMounted(() => {
-  checkStatus();
-  loadCaps();
-  loadPersonas();
-  loadAudioList();
-  loadScripts();
-  checkLLM();
-  loadSunoStatus();
-  pollTasks();
-  
-  // 定时心跳轮询
-  window._statusInterval = setInterval(checkStatus, 10000);
-  // 能力状态变化慢（积分、登录态），30 秒够了 —— 太频繁会撞中台限流
-  window._capsInterval = setInterval(loadCaps, 30000);
-  window._llmInterval = setInterval(checkLLM, 30000);
+  void runInitialLoads();
+  void tasksStore.pollTasks();
+  statusInterval = window.setInterval(() => { void capabilitiesStore.checkStatus().catch(() => {}); }, 10000);
+  capsInterval = window.setInterval(() => { void capabilitiesStore.loadCaps().catch(() => {}); }, 30000);
+  llmInterval = window.setInterval(() => { void capabilitiesStore.checkLLM().catch(() => {}); }, 30000);
 });
 
 onBeforeUnmount(() => {
-  if (_taskTimer) clearTimeout(_taskTimer);
-  if (window._statusInterval) clearInterval(window._statusInterval);
-  if (window._llmInterval) clearInterval(window._llmInterval);
+  tasksStore.stopPolling();
+  sunoStore.stopPolling();
+  window.clearInterval(statusInterval);
+  window.clearInterval(capsInterval);
+  window.clearInterval(llmInterval);
 });
 </script>
+
 
 <style scoped>
 /* 头部样式 */
 .cap-tag { font-weight: 500; }
 .cap-num { font-style: normal; margin-left: 5px; opacity: .75; font-size: 11px; }
-.dot-ready { background: #63e2b7; }
-.dot-warn { background: #f2c97d; }
+.dot-ready { background: var(--vf-ok); }
+.dot-warn { background: var(--vf-warn); }
 .app-header {
   height: 60px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0 20px;
-  background-color: #18181c;
+  background-color: var(--vf-bg-1);
   box-sizing: border-box;
 }
 
@@ -931,12 +336,40 @@ onBeforeUnmount(() => {
 .app-title {
   font-size: 18px;
   font-weight: 600;
-  color: #fff;
+  color: var(--vf-text-1);
+}
+
+.header-platforms {
+  display: flex;
+  align-items: center;
+  margin-left: 20px;
+  border-left: 1px solid var(--vf-border);
+  padding-left: 20px;
+}
+
+.platforms-label {
+  font-size: 11px;
+  color: var(--vf-text-3);
+  margin-right: 8px;
+}
+
+.platform-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s, filter 0.2s;
+  filter: grayscale(25%) opacity(80%);
+}
+
+.platform-badge:hover {
+  transform: translateY(-2px) scale(1.1);
+  filter: grayscale(0%) opacity(100%);
 }
 
 .model-status-label {
   font-size: 13px;
-  color: #a0a0a5;
+  color: var(--vf-text-2);
 }
 
 .status-tag {
@@ -952,15 +385,15 @@ onBeforeUnmount(() => {
 }
 
 .dot-green {
-  background-color: #18a058;
+  background-color: var(--vf-ok);
 }
 
 .dot-orange {
-  background-color: #f0a020;
+  background-color: var(--vf-gold);
 }
 
 .dot-gray {
-  background-color: #707075;
+  background-color: var(--vf-text-3);
 }
 
 /* 侧边栏布局 */
@@ -969,14 +402,14 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   padding: 15px;
-  border-bottom: 1px solid #2d2d30;
+  border-bottom: 1px solid var(--vf-bg-4);
 }
 
 .sider-header h3 {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #e5e5e7;
+  color: var(--vf-text-1);
 }
 
 .sider-content {
@@ -991,16 +424,16 @@ onBeforeUnmount(() => {
 .empty-personas {
   text-align: center;
   padding: 40px 10px;
-  color: #707075;
+  color: var(--vf-text-3);
   font-size: 13px;
 }
 
 /* 音色卡片样式 */
 .persona-card {
   position: relative;
-  border: 1px solid #2d2d30;
+  border: 1px solid var(--vf-bg-4);
   border-radius: 6px;
-  background-color: #18181c;
+  background-color: var(--vf-bg-1);
   cursor: pointer;
   overflow: hidden;
   transition: border-color 0.2s, background-color 0.2s;
@@ -1008,11 +441,11 @@ onBeforeUnmount(() => {
 
 .persona-card:hover {
   border-color: #4a4a50;
-  background-color: #1e1e24;
+  background-color: var(--vf-bg-3);
 }
 
 .persona-card.is-selected {
-  border-color: #36ad6a;
+  border-color: var(--vf-ok);
   background-color: #1c2620;
 }
 
@@ -1043,12 +476,12 @@ onBeforeUnmount(() => {
 .persona-name {
   font-weight: 600;
   font-size: 14px;
-  color: #fff;
+  color: var(--vf-text-1);
 }
 
 .persona-key {
   font-size: 11px;
-  color: #808085;
+  color: var(--vf-text-3);
   background-color: rgba(255, 255, 255, 0.05);
   padding: 2px 6px;
   border-radius: 4px;
@@ -1056,7 +489,7 @@ onBeforeUnmount(() => {
 
 .persona-desc {
   font-size: 12px;
-  color: #a0a0a5;
+  color: var(--vf-text-2);
   margin: 0 0 10px 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;

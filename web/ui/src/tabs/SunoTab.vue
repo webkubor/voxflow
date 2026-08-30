@@ -91,10 +91,10 @@
  * 职责：连接 Suno 后端授权状态，收集风格歌词参数，提交生成音乐并启动异步轮询
  * API 来源：GET /api/suno/status, POST /api/suno/generate
  */
-import { computed, inject } from 'vue';
+import { computed } from 'vue';
+import { useSunoStore } from '../stores/suno';
 
-const { suno, sunoForm } = inject('state');
-const { loadSunoStatus, submitSuno } = inject('actions');
+const { suno, sunoForm, loadSunoStatus, submitSuno } = useSunoStore();
 
 // 将 suno.personas 对象格式化为 Naive UI Select 组件所需的 options
 const personaOptions = computed(() => {
@@ -126,7 +126,7 @@ const personaOptions = computed(() => {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #fff;
+  color: var(--vf-text-1);
 }
 
 .suno-auth-status {
@@ -137,41 +137,41 @@ const personaOptions = computed(() => {
 
 .warn-banner {
   background-color: rgba(240, 160, 32, 0.1);
-  border: 1px solid #f0a020;
+  border: 1px solid var(--vf-gold);
   border-radius: 6px;
-  color: #f0a020;
+  color: var(--vf-gold);
   padding: 10px 15px;
   font-size: 13px;
   margin-bottom: 16px;
 }
 
 .form-container {
-  background-color: #18181c;
-  border: 1px solid #2d2d30;
+  background-color: var(--vf-bg-1);
+  border: 1px solid var(--vf-bg-4);
   border-radius: 8px;
   padding: 20px;
 }
 
 .persona-help-tip {
   font-size: 11px;
-  color: #707075;
+  color: var(--vf-text-3);
   margin-top: 6px;
   line-height: 1.4;
 }
 
 .cost-tip {
   font-size: 12px;
-  color: #808085;
+  color: var(--vf-text-3);
 }
 
 .suno-footer-actions {
   margin-top: 16px;
-  border-top: 1px solid #2d2d30;
+  border-top: 1px solid var(--vf-bg-4);
   padding-top: 16px;
 }
 
 .suno-error-text {
-  color: #d03050;
+  color: var(--vf-err);
   font-size: 13px;
   margin-top: 8px;
   margin-bottom: 0;

@@ -82,17 +82,16 @@
  * 职责：连接中台 LLM 接口，提供按 Prompt 生成文案以及对现有文本框内容的一键润色
  * API 来源：GET /api/llm/status, POST /api/llm/generate, POST /api/llm/polish
  */
-import { inject } from 'vue';
+import { useCapabilitiesStore } from '../stores/capabilities';
 
-const { llm } = inject('state');
-const { checkLLM, aiGenerate, aiPolish } = inject('actions');
+const { llm, checkLLM, aiGenerate, aiPolish } = useCapabilitiesStore();
 </script>
 
 <style scoped>
 .ai-section-container {
-  border: 1px solid #2d2d30;
+  border: 1px solid var(--vf-bg-4);
   border-radius: 8px;
-  background-color: #1a1a1f;
+  background-color: var(--vf-bg-2);
   padding: 12px 16px;
   box-sizing: border-box;
   margin-bottom: 20px;
@@ -103,7 +102,7 @@ const { checkLLM, aiGenerate, aiPolish } = inject('actions');
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
-  border-bottom: 1px solid #2d2d30;
+  border-bottom: 1px solid var(--vf-bg-4);
   padding-bottom: 8px;
 }
 
@@ -117,15 +116,15 @@ const { checkLLM, aiGenerate, aiPolish } = inject('actions');
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #707075;
+  background-color: var(--vf-text-3);
 }
 
 .status-dot.is-online {
-  background-color: #18a058;
+  background-color: var(--vf-ok);
 }
 
 .status-dot.is-checking {
-  background-color: #f0a020;
+  background-color: var(--vf-gold);
   animation: pulse 1s infinite alternate;
 }
 
@@ -137,7 +136,7 @@ const { checkLLM, aiGenerate, aiPolish } = inject('actions');
 .status-text {
   font-size: 12px;
   font-weight: 500;
-  color: #a0a0a5;
+  color: var(--vf-text-2);
 }
 
 .ai-grid {
@@ -154,7 +153,7 @@ const { checkLLM, aiGenerate, aiPolish } = inject('actions');
 .panel-title {
   font-size: 13px;
   font-weight: 600;
-  color: #fff;
+  color: var(--vf-text-1);
   margin-bottom: 10px;
 }
 
@@ -171,12 +170,12 @@ const { checkLLM, aiGenerate, aiPolish } = inject('actions');
 
 .label-text {
   font-size: 12px;
-  color: #808085;
+  color: var(--vf-text-3);
 }
 
 .polish-tip {
   font-size: 11px;
-  color: #707075;
+  color: var(--vf-text-3);
   margin-top: 4px;
 }
 </style>

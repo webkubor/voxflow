@@ -10,12 +10,21 @@
 
     <!-- 历史生成音频卡片网格 -->
     <div v-if="audioFiles.length > 0" class="audio-grid-container">
-      <n-grid :cols="3" :x-gap="16" :y-gap="16">
-        <n-grid-item v-for="file in audioFiles" :key="file.filename">
+      <n-grid :cols="24" :x-gap="16" :y-gap="16">
+        <n-grid-item 
+          v-for="file in audioFiles" 
+          :key="file.filename" 
+          :span="24" 
+          :s="12" 
+          :m="8" 
+          :l="6"
+        >
           <n-card class="audio-file-card" size="small" hoverable>
             <template #header>
-              <div class="card-filename" :title="file.filename">
-                {{ file.filename }}
+              <div class="card-filename">
+                <n-ellipsis expand-trigger="click" line-clamp="1" :tooltip="{ width: 'trigger' }">
+                  {{ file.filename }}
+                </n-ellipsis>
               </div>
             </template>
             
@@ -82,10 +91,12 @@
  * 职责：渲染历史生成音频物理文件，承接点击试听及物理删除与统一下载
  * API 来源：GET /api/audio-list, DELETE /api/audio/{filename}
  */
-import { inject } from 'vue';
+import { useLibraryStore } from '../stores/library';
+import { storeToRefs } from 'pinia';
 
-const { audioFiles } = inject('state');
-const { loadAudioList, playAudio, deleteAudio } = inject('actions');
+const libraryStore = useLibraryStore();
+const { audioFiles } = storeToRefs(libraryStore);
+const { loadAudioList, playAudio, deleteAudio } = libraryStore;
 
 const formatBytes = (bytes) => {
   if (!bytes) return '0 Bytes';
@@ -124,7 +135,7 @@ const formatTime = (timestamp) => {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #fff;
+  color: var(--vf-text-1);
 }
 
 .audio-grid-container {
@@ -134,17 +145,14 @@ const formatTime = (timestamp) => {
 }
 
 .audio-file-card {
-  background-color: #18181c;
-  border-color: #2d2d30;
+  background-color: var(--vf-bg-1);
+  border-color: var(--vf-bg-4);
 }
 
 .card-filename {
   font-size: 13px;
   font-weight: 600;
-  color: #fff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--vf-text-1);
 }
 
 .audio-meta {
@@ -161,11 +169,11 @@ const formatTime = (timestamp) => {
 }
 
 .meta-label {
-  color: #707075;
+  color: var(--vf-text-3);
 }
 
 .meta-value {
-  color: #a0a0a5;
+  color: var(--vf-text-2);
   font-weight: 500;
 }
 
@@ -179,7 +187,7 @@ const formatTime = (timestamp) => {
 .empty-library {
   text-align: center;
   padding: 80px 20px;
-  color: #707075;
+  color: var(--vf-text-3);
 }
 
 .empty-icon {
@@ -191,12 +199,12 @@ const formatTime = (timestamp) => {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #a0a0a5;
+  color: var(--vf-text-2);
 }
 
 .empty-tip {
   font-size: 12px;
-  color: #606065;
+  color: var(--vf-text-3);
   margin-top: 6px;
   display: inline-block;
 }
