@@ -60,12 +60,26 @@
 </template>
 
 <script setup>
+import { onMounted } from 'vue';
 import { useLibraryStore } from '../stores/library';
 import { storeToRefs } from 'pinia';
+import { useTasksStore } from '../stores/tasks';
+import { toMessage } from '../api';
 
 const libraryStore = useLibraryStore();
+const tasksStore = useTasksStore();
 const { audioFiles } = storeToRefs(libraryStore);
 const { loadAudioList, playAudio, deleteAudio } = libraryStore;
+
+// 挂载即加载 —— 之前只挂在「刷新」按钮上，进 tab 永远显示 0 条记录，
+// 得手点一下刷新才有数据，看起来像文件全丢了。
+onMounted(async () => {
+  try {
+    await loadAudioList();
+  } catch (cause) {
+    tasksStore.showToast(`音频列表加载失败：${await toMessage(cause)}`, 'error');
+  }
+});
 
 const formatBytes = (bytes) => {
   if (!bytes || bytes === 0) return '0 B';
