@@ -9,7 +9,7 @@ from rich.table import Table
 from rich.syntax import Syntax
 from rich.panel import Panel
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
+from core.paths import DATA_DIR as BASE_DIR  # 数据根，不是代码目录
 PRESETS_DIR = BASE_DIR / "configs" / "presets"
 GENERATED_DIR = BASE_DIR / "configs" / "generated"
 

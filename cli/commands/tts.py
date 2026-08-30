@@ -15,7 +15,7 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
+from core.paths import DATA_DIR as BASE_DIR  # 数据根，不是代码目录
 sys.path.insert(0, str(BASE_DIR))
 
 from core.engine import TTSBaseEngine

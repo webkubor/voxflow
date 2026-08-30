@@ -26,18 +26,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # ── 路径设置 ──────────────────────────────────────────────
-BASE_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(BASE_DIR))
+# 代码和数据分开：代码在项目目录，数据在 ~/.voxflow。
+# 混在一起的话，换个目录 clone、git clean 一下，音色和歌就没了 ——
+# 代码 git clone 随时能拿，数据没了就没了，两者不该同生共死。
+# 真源见 core/paths.py。
+_PROJECT_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_PROJECT_DIR))
 
-OUT_DIR = BASE_DIR / "out"
-TEMP_DIR = BASE_DIR / "assets" / "temp"
-REF_DIR = BASE_DIR / "assets" / "reference_audio"
-PERSONAS_FILE = BASE_DIR / "configs" / "personas.json"
-SCRIPTS_FILE = BASE_DIR / "configs" / "scripts.json"
-MODELS_DIR = BASE_DIR / "models"
+from core.paths import (  # noqa: E402
+    DATA_DIR, OUT_DIR, TEMP_DIR, REF_DIR, MODELS_DIR,
+    PERSONAS_FILE, SCRIPTS_FILE, PROJECT_DIR, ensure_dirs,
+)
 
-for d in [OUT_DIR, TEMP_DIR, REF_DIR]:
-    d.mkdir(parents=True, exist_ok=True)
+# BASE_DIR 是数据根 —— personas.json 里的 ref 存的是相对它的路径
+BASE_DIR = DATA_DIR
+ensure_dirs()
 
 # ── 引擎单例（懒加载） ────────────────────────────────────
 _engine_lock = threading.Lock()
@@ -524,7 +527,10 @@ async def get_status():
 
 def _scan_design_presets() -> list:
     """扫描 configs/presets/ 目录，加载设计配方"""
-    preset_dir = BASE_DIR / "configs" / "presets"
+    # presets 是代码自带的内置预设，留在项目里跟着版本走；
+    # 你自己存的预设落在数据目录。两处都扫。
+    preset_dirs = [DATA_DIR / "configs" / "presets", PROJECT_DIR / "configs" / "presets"]
+    preset_dir = next((d for d in preset_dirs if d.is_dir()), preset_dirs[-1])
     result = []
     if not preset_dir.exists():
         return result
@@ -1379,6 +1385,26 @@ async def get_audio_subdir(subdir: str, filename: str):
         raise HTTPException(404, f"音频文件不存在: {safe_name}")
     media_type = MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
     return FileResponse(str(path), media_type=media_type, filename=safe_name)
+
+
+@app.get("/api/cover/{track_id}")
+async def get_cover(track_id: str):
+    """
+    作品封面。
+
+    封面落在 publish/ 下（平台规定的目录结构，跟可随时清理的 out/ 分开），
+    那一层没有静态挂载 —— 也不该挂：publish/ 里还有音频和 Excel，
+    整个目录暴露出去没必要。按 track_id 单点取图即可。
+    """
+    from core import pipeline
+    t = next((x for x in pipeline.list_tracks() if x["id"] == track_id), None)
+    if not t or not t.get("cover_file"):
+        raise HTTPException(404, "这首作品还没有封面")
+    path = BASE_DIR / t["cover_file"]
+    if not path.exists():
+        raise HTTPException(404, f"封面文件不在了：{t['cover_file']}")
+    return FileResponse(str(path), media_type=MEDIA_TYPES.get(path.suffix.lower(), "image/jpeg"),
+                        headers={"Cache-Control": "no-store"})
 
 
 # ── 启动入口 ──────────────────────────────────────────────

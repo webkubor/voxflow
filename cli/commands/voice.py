@@ -13,7 +13,7 @@ from rich.table import Table
 from rich.panel import Panel
 from rich import print as rprint
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
+from core.paths import DATA_DIR as BASE_DIR  # 数据根，不是代码目录
 sys.path.insert(0, str(BASE_DIR))
 
 from core.processor import AudioProcessor

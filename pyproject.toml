@@ -51,7 +51,10 @@ tts = "cli.app:app"
 qwen-tts-demo = "qwen_tts.cli.demo:main"
 
 [tool.setuptools]
-packages = { find = { where = ["."] , include = ["qwen_tts*", "cli*", "web*"] } }
+# core 之前漏在这里，一直靠调用方 sys.path.insert 才能 import ——
+# 侥幸能跑，但任何不设 sys.path 的入口（比如 .venv/bin/voice）都会
+# ModuleNotFoundError。它本来就是包的一部分。
+packages = { find = { where = ["."] , include = ["qwen_tts*", "cli*", "web*", "core*"] } }
 include-package-data = true
 
 [tool.setuptools.package-data]

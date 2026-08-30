@@ -4,7 +4,10 @@ import re
 from datetime import datetime
 from typing import Any, Dict, Tuple
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 数据根（~/.voxflow），不是代码目录 —— personas.json 里的 ref、design
+# 存的都是相对它的路径。真源见 core/paths.py。
+from core.paths import DATA_DIR as _DATA_DIR
+BASE_DIR = str(_DATA_DIR)
 PERSONA_CONFIG = os.path.join(BASE_DIR, "configs/personas.json")
 CONFIG_DIR = os.path.join(BASE_DIR, "configs")
 REFERENCE_AUDIO_DIR_REL = "assets/reference_audio"
@@ -190,9 +193,10 @@ def resolve_config_path(config_arg: str = "single") -> Tuple[str, str]:
 
     if alias in CORE_RUNTIME_CONFIGS:
         rel_path = CORE_RUNTIME_CONFIGS[alias]
-        cfg_path = os.path.join(CONFIG_DIR, rel_path)
-        if not _in_configs_dir(cfg_path):
-            raise ValueError(f"配置越界：{rel_path}")
+        # 先找你改过的（~/.voxflow/configs），没有就用项目自带的模板。
+        # 只认数据目录的话，分家之后这些模板全读不到。
+        from core.paths import find_config
+        cfg_path = str(find_config(rel_path))
         if not os.path.exists(cfg_path):
             raise ValueError(f"配置不存在：{rel_path}")
         return cfg_path, alias

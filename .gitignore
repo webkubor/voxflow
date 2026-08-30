@@ -113,3 +113,19 @@ publish/covers/
 
 # 艺人档案含真实姓名，属于个人信息，不进仓库
 configs/artist.json
+
+# 作品台账含歌词与发布配置，属于个人数据
+configs/pipeline.json
+
+# 数据已经搬到 ~/.voxflow —— 这些目录不该再出现在项目里。
+# 留着规则是防止将来手滑又在项目里生成数据。
+/out/
+/assets/temp/
+/assets/reference_audio/
+/models/
+/voice_designs/
+/configs/personas.json
+/configs/artist.json
+/configs/scripts.json
+/configs/publish_accounts.json
+/configs/generated/

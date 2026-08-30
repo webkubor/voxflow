@@ -38,9 +38,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-LEDGER = BASE_DIR / "configs" / "pipeline.json"
-PUBLISH_ACCOUNTS = BASE_DIR / "configs" / "publish_accounts.json"
+from core.paths import DATA_DIR, LEDGER_FILE, PUBLISH_ACCOUNTS_FILE
+
+BASE_DIR = DATA_DIR          # 台账里的相对路径都是相对数据根
+LEDGER = LEDGER_FILE
+PUBLISH_ACCOUNTS = PUBLISH_ACCOUNTS_FILE
 
 # 状态机的合法状态。顺序即流程顺序 —— 前端画进度条直接按这个数组来，
 # 不要在前端再抄一份，那样两边迟早对不上。
@@ -171,6 +173,14 @@ def list_tracks() -> list[dict[str, Any]]:
             "prompt": t.get("prompt", ""),   # 让 LLM 写歌词时给的描述
             "audio_file": t.get("audio_file", ""),
             "cover_file": t.get("cover_file", ""),
+            "album_desc": t.get("album_desc", ""),
+            # 现成可用的 URL —— 前端不该自己拼路径，
+            # 拼错了是静默 404，界面上只表现为「图不出来」
+            "cover_url": f"/api/cover/{tid}" if t.get("cover_file") else "",
+            "audio_url": (
+                "/api/audio/" + "/".join(t["audio_file"].split("/")[-2:])
+                if t.get("audio_file", "").startswith("out/") else ""
+            ),
         })
     tracks.sort(key=lambda x: x["updated_at"], reverse=True)
     return tracks
