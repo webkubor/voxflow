@@ -3,21 +3,27 @@
     <div v-if="player.visible" class="global-player-bar">
       <div class="player-container">
         
-        <!-- 左侧：音频文件名与极简指示 -->
+        <!-- 左侧：音频文件名与声波律动指示 -->
         <div class="audio-info">
           <div class="play-indicator" :class="{ 'is-playing': isPlaying }">
-            <span class="music-note">♪</span>
+            <div v-if="isPlaying" class="cold-equalizer">
+              <span class="eq-bar bar-1"></span>
+              <span class="eq-bar bar-2"></span>
+              <span class="eq-bar bar-3"></span>
+              <span class="eq-bar bar-4"></span>
+            </div>
+            <span v-else class="music-note">♪</span>
           </div>
           <div class="file-details">
             <div class="filename" :title="player.filename">{{ player.filename }}</div>
-            <div class="sub-text">产物试听</div>
+            <div class="sub-text">产物试听 · 高清音频</div>
           </div>
         </div>
 
-        <!-- 中间：精密播放控制 -->
+        <!-- 中间：精密冷光播放控制中心 -->
         <div class="player-control-center">
           <!-- 播放/暂停纯白高对比圆形按钮 -->
-          <button class="play-toggle-btn" @click="togglePlay" :title="isPlaying ? '暂停' : '播放'">
+          <button class="play-toggle-btn" :class="{ 'is-active': isPlaying }" @click="togglePlay" :title="isPlaying ? '暂停' : '播放'">
             <svg v-if="!isPlaying" class="icon-svg" viewBox="0 0 24 24" fill="currentColor">
               <path d="M8 5V19L19 12L8 5Z"/>
             </svg>
@@ -26,7 +32,7 @@
             </svg>
           </button>
 
-          <!-- 极细精密进度条 -->
+          <!-- 极细冷光流动渐变进度条 -->
           <div class="progress-container">
             <span class="time-label">{{ formatTime(currentTime) }}</span>
             <div 
@@ -35,7 +41,11 @@
               @mousedown="startDragProgress"
               @click="clickProgress"
             >
-              <div class="progress-slider-fill" :style="{ width: progressPercent + '%' }"></div>
+              <div 
+                class="progress-slider-fill" 
+                :class="{ 'stream-active': isPlaying }"
+                :style="{ width: progressPercent + '%' }"
+              ></div>
               <div class="progress-slider-thumb" :style="{ left: progressPercent + '%' }"></div>
             </div>
             <span class="time-label">{{ formatTime(duration) }}</span>
@@ -265,18 +275,23 @@ watch(
 </script>
 
 <style scoped>
+/* 终极液态毛玻璃底座 (Liquid Frosted Glass) */
 .global-player-bar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 64px;
-  background: rgba(14, 14, 18, 0.95) !important;
-  backdrop-filter: blur(20px) !important;
-  -webkit-backdrop-filter: blur(20px) !important;
-  border-top: 1px solid var(--vf-border) !important;
+  height: 68px;
+  background: rgba(10, 10, 14, 0.72) !important;
+  backdrop-filter: blur(32px) saturate(190%) contrast(105%) !important;
+  -webkit-backdrop-filter: blur(32px) saturate(190%) contrast(105%) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.12),
+    0 -12px 32px rgba(0, 0, 0, 0.6) !important;
   z-index: 1000;
   padding: 0 24px;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 .player-container {
@@ -284,7 +299,7 @@ watch(
   justify-content: space-between;
   align-items: center;
   height: 100%;
-  max-width: 1200px;
+  max-width: 1240px;
   margin: 0 auto;
 }
 
@@ -293,19 +308,26 @@ watch(
   display: flex;
   align-items: center;
   gap: 12px;
-  width: 25%;
-  min-width: 200px;
+  width: 26%;
+  min-width: 210px;
 }
 
 .play-indicator {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--vf-radius-xs);
-  background: var(--vf-bg-3);
-  border: 1px solid var(--vf-border);
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.25s ease;
+}
+
+.play-indicator.is-playing {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(129, 140, 248, 0.4);
+  box-shadow: 0 0 14px rgba(99, 102, 241, 0.25);
 }
 
 .music-note {
@@ -313,20 +335,42 @@ watch(
   color: var(--vf-text-2);
 }
 
-.play-indicator.is-playing .music-note {
-  color: #ffffff;
+/* 冷光声波柱 */
+.cold-equalizer {
+  display: flex;
+  align-items: flex-end;
+  gap: 2.5px;
+  height: 14px;
+}
+
+.eq-bar {
+  width: 2px;
+  background: #ffffff;
+  border-radius: 99px;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+}
+
+.bar-1 { height: 4px; animation: eq-bounce 0.8s infinite alternate ease-in-out; }
+.bar-2 { height: 12px; animation: eq-bounce 1.1s infinite alternate ease-in-out 0.15s; }
+.bar-3 { height: 7px; animation: eq-bounce 0.9s infinite alternate ease-in-out 0.3s; }
+.bar-4 { height: 14px; animation: eq-bounce 1.0s infinite alternate ease-in-out 0.45s; }
+
+@keyframes eq-bounce {
+  from { height: 3px; }
+  to { height: 14px; }
 }
 
 .file-details {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  gap: 2px;
 }
 
 .filename {
   font-size: 13px;
   font-weight: 600;
-  color: var(--vf-text-1);
+  color: #ffffff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -337,34 +381,41 @@ watch(
   color: var(--vf-text-3);
 }
 
-/* 中间控制 */
+/* 中间控制中心 */
 .player-control-center {
   flex: 1;
-  max-width: 540px;
+  max-width: 580px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
+/* 纯白高对比按钮 + 冷光呼吸 */
 .play-toggle-btn {
   background: #ffffff;
-  border: 1px solid #ffffff;
+  border: none;
   color: #000000;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   outline: none;
-  transition: all 0.15s ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 .play-toggle-btn:hover {
-  background: #e4e4e7;
-  transform: scale(1.05);
+  background: #f4f4f5;
+  transform: scale(1.08);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.6);
+}
+
+.play-toggle-btn.is-active {
+  box-shadow: 0 0 14px rgba(129, 140, 248, 0.5);
 }
 
 .icon-svg {
@@ -372,11 +423,11 @@ watch(
   height: 14px;
 }
 
-/* 进度条 */
+/* 进度条轨道与冷光流动动画 */
 .progress-container {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
 }
 
@@ -384,63 +435,80 @@ watch(
   font-size: 11px;
   color: var(--vf-text-3);
   font-family: monospace;
-  width: 32px;
+  width: 34px;
   text-align: center;
 }
 
 .progress-slider-track {
   flex: 1;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.1);
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 99px;
   position: relative;
   cursor: pointer;
-  transition: height 0.15s;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  transition: height 0.15s ease;
 }
 
 .progress-slider-track:hover {
-  height: 5px;
+  height: 6px;
 }
 
+/* 冷光流光渐变填充 */
 .progress-slider-fill {
   height: 100%;
-  background: #ffffff;
+  background: linear-gradient(90deg, #4f46e5 0%, #6366f1 35%, #a5b4fc 70%, #ffffff 100%);
   border-radius: 99px;
   position: absolute;
   left: 0;
   top: 0;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.6), 0 0 4px rgba(255, 255, 255, 0.8);
 }
 
+.progress-slider-fill.stream-active {
+  background-size: 200% 100%;
+  animation: shimmer-stream 2.2s linear infinite;
+}
+
+@keyframes shimmer-stream {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* 冷光光环 Thumb */
 .progress-slider-thumb {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: #ffffff;
   position: absolute;
   top: 50%;
   transform: translate(-50%, -50%) scale(0);
-  transition: transform 0.15s ease;
+  box-shadow: 
+    0 0 0 2px rgba(99, 102, 241, 0.5),
+    0 0 10px rgba(255, 255, 255, 0.9);
+  transition: transform 0.15s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 .progress-slider-track:hover .progress-slider-thumb {
   transform: translate(-50%, -50%) scale(1.3);
 }
 
-/* 右侧 */
+/* 右侧面板 */
 .player-right-panel {
   display: flex;
   align-items: center;
   gap: 16px;
-  width: 25%;
+  width: 26%;
   justify-content: flex-end;
-  min-width: 200px;
+  min-width: 210px;
 }
 
 .volume-container {
   display: flex;
   align-items: center;
-  gap: 6px;
-  width: 80px;
+  gap: 8px;
+  width: 90px;
 }
 
 .volume-btn {
@@ -451,23 +519,29 @@ watch(
   padding: 0;
   display: flex;
   align-items: center;
+  transition: color 0.15s;
 }
-.volume-btn:hover { color: var(--vf-text-1); }
-.vol-icon { width: 14px; height: 14px; }
+.volume-btn:hover { color: #ffffff; }
+.vol-icon { width: 15px; height: 15px; }
 
 .volume-slider-track {
   flex: 1;
   height: 3px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 99px;
   position: relative;
   cursor: pointer;
+  transition: height 0.15s;
 }
+.volume-slider-track:hover { height: 5px; }
 
 .volume-slider-fill {
   height: 100%;
-  background: var(--vf-text-2);
+  background: rgba(255, 255, 255, 0.7);
   border-radius: 99px;
+}
+.volume-slider-track:hover .volume-slider-fill {
+  background: #ffffff;
 }
 
 .player-actions {
@@ -478,28 +552,31 @@ watch(
 
 .clean-download-link {
   font-size: 12px;
-  color: var(--vf-text-2);
+  font-weight: 500;
+  color: #ffffff;
   text-decoration: none;
-  background: var(--vf-bg-3);
-  border: 1px solid var(--vf-border);
-  padding: 3px 10px;
-  border-radius: var(--vf-radius-xs);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 4px 12px;
+  border-radius: 6px;
   transition: all 0.15s ease;
 }
 
 .clean-download-link:hover {
-  background: var(--vf-bg-hover);
-  color: var(--vf-text-1);
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
 }
 
 .clean-close-btn {
   background: none;
   border: none;
   color: var(--vf-text-3);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
+  transition: color 0.15s;
 }
-.clean-close-btn:hover { color: var(--vf-text-1); }
+.clean-close-btn:hover { color: #ffffff; }
 
 .slide-up-enter-active,
 .slide-up-leave-active {
