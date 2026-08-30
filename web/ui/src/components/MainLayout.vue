@@ -270,13 +270,29 @@ const switchTab = (tab) => {
 
 let pollTimer = null;
 onMounted(async () => {
-  await Promise.all([
-    capabilitiesStore.fetchCapabilities(),
-    voicesStore.loadPersonas(),
-    tasksStore.loadTasks(),
-  ]);
+  // 用 allSettled 不用 all：Promise.all 里**任何一个 reject，后面的全不执行**。
+  // 上一版第一个调的是 capabilitiesStore.fetchCapabilities()，
+  // 而 store 里根本没这个方法 —— 第一步就 TypeError，音色库因此永远是空的，
+  // 界面上只显示「暂无音色资产」，一个错都不报。最难查的那种。
+  //
+  // 每项独立起来，一个上游挂了只影响它自己；而且失败要说出来，不能吞。
+  const jobs = [
+    ['能力状态', () => capabilitiesStore.loadCaps()],
+    ['音色库', () => voicesStore.loadPersonas()],
+    ['任务队列', () => tasksStore.pollTasks()],
+  ];
+  const results = await Promise.allSettled(jobs.map(([, fn]) => fn()));
+  results.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      const name = jobs[i][0];
+      console.error(`[VoxFlow] ${name}加载失败`, r.reason);
+      tasksStore.showToast(`${name}加载失败：${r.reason?.message || r.reason}`, 'error');
+    }
+  });
+
   pollTimer = setInterval(() => {
-    tasksStore.loadTasks();
+    // 标签页在后台时不轮询 —— 开三个标签页等于三倍压力
+    if (!document.hidden) tasksStore.pollTasks();
   }, 4000);
 });
 
