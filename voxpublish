@@ -28,8 +28,13 @@
 
 set -euo pipefail
 
-VOXFLOW_DIR="${VOXFLOW_DIR:-$HOME/dev/github/app/voxflow}"
-PUBLISH_ROOT="$VOXFLOW_DIR/out/publish"
+# 项目根：默认取脚本自己所在的目录，不写死路径 ——
+# 仓库目录名（voxcraft）和产品名（VoxFlow）不一样，写死哪个都会在另一边出错；
+# 而且别人 clone 到别的路径也该能跑。
+VOXFLOW_DIR="${VOXFLOW_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+# 发行物料在顶层 publish/（2026-08-30 目录重排：平台规定的结构单独一层，
+# 跟「可随时清理的产出」out/ 分开）
+PUBLISH_ROOT="$VOXFLOW_DIR/publish"
 TEMPLATE="/Users/webkubor/Downloads/batch_import_template.xlsx"
 SUNO_BIN="${SUNO_BIN:-}"
 if [ -z "$SUNO_BIN" ]; then
@@ -203,17 +208,33 @@ if not songs:
     print('⚠️ 该目录下没有歌曲子目录')
     sys.exit(1)
 
-# 清空示例行，写入真实数据（从第 2 行开始）
-# 模板第 2 行是示例数据、第 3 行是备注说明，都清掉（跳过 MergedCell 只读单元格）
+# 清空模板自带的示例与备注（第 2 行示例、第 3-4 行说明），只留第 1 行表头。
+#
+# **不要 except: pass 吞掉失败。** 上一版这么写，结果第 2 行三个带超链接的
+# 单元格清空时抛异常被静默跳过，示例数据留在了成品里 —— 上传时平台会把它
+# 当成一首歌（歌名为空、路径指向别人的链接）。这种错不报错、只是「没生效」，
+# 光看「生成成功」四个字发现不了。
+cleared, failed = 0, []
 for r in range(2, ws.max_row + 1):
     for c in range(1, ws.max_column + 1):
         cell = ws.cell(row=r, column=c)
         if cell.__class__.__name__ == 'MergedCell':
             continue
+        if cell.value in (None, ''):
+            continue
         try:
             cell.value = None
-        except Exception:
-            pass
+            # 超链接是独立于 value 的属性，不清的话 Excel 里仍是个可点的蓝字
+            if getattr(cell, 'hyperlink', None):
+                cell.hyperlink = None
+            cleared += 1
+        except Exception as e:
+            failed.append((cell.coordinate, str(e)[:40]))
+if failed:
+    print(f'  ⚠️ {len(failed)} 个示例单元格没清掉，成品里会残留假数据：')
+    for coord, err in failed[:5]:
+        print(f'     {coord}: {err}')
+    sys.exit(1)
 
 rel_root = f'/Audio/{date_dir}'
 # 模板结构：第1行表头、第2行示例、第3-4行备注说明 → 数据从第 5 行起
