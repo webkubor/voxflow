@@ -56,12 +56,26 @@ def _get_client():
     )
 
 
-def check_status() -> dict:
+# 探活结果缓存。改成「真实请求探活」是对的（GET /models 不是兼容协议的必需项，
+# 会误报未连接），但它的代价是每次调用都真的打一次 LLM —— 而前端是 30 秒轮询、
+# 还可能开着好几个标签页，叠加起来就是每分钟十几次真实请求，把单线程后端堵死。
+#
+# 连通性这种东西变化很慢，缓存 60 秒完全够用。
+_status_cache: dict = {"at": 0.0, "value": None}
+_STATUS_TTL = 60.0
+
+
+def check_status(force: bool = False) -> dict:
     """检测 LLM 后端是否可用（用一次真实的最小请求，不是 GET /models）
 
     返回:
         {"available": bool, "base_url": str, "model": str, "error": str}
     """
+    import time
+    now = time.time()
+    if not force and _status_cache["value"] and (now - _status_cache["at"] < _STATUS_TTL):
+        return _status_cache["value"]
+
     try:
         client = _get_client()
         # 用一次**极小的真实请求**探活，而不是 client.models.list()。
@@ -77,13 +91,15 @@ def check_status() -> dict:
             messages=[{"role": "user", "content": "hi"}],
             max_tokens=1,
         )
-        return {
+        result = {
             "available": True,
             "base_url": _default_base,
             "model": _default_model,
             "models": [_default_model],
             "error": "",
         }
+        _status_cache.update(at=now, value=result)
+        return result
     except Exception as e:
         # 429 是「暂时用太快了」，不是「没配好」。混为一谈的话，
         # 用户看到「未连接」会去翻配置、改 base_url，而其实等一分钟就好了。

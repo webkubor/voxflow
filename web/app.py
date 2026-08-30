@@ -112,9 +112,46 @@ def _task_worker():
                 _run_design_task(task_id, task["params"], _update_task)
             elif task["type"] == "suno":
                 _run_suno_task(task_id, task["params"], _update_task)
+            elif task["type"] == "dialogue":
+                _run_dialogue_task(task_id, task["params"], _update_task)
         except Exception as e:
             _update_task(task_id, status="error", error=str(e),
                          completed_at=datetime.now().strftime("%H:%M:%S"))
+
+
+def _run_dialogue_task(task_id: str, params: dict, update_fn):
+    """执行多角色剧本对话合成任务"""
+    import torch
+    from core.modes.cloner import CloneMode
+    from core.modes.dialogue import DialogueMode
+
+    update_fn(task_id, progress=10, stage="加载 Base 模型中...")
+    engine = _get_base_engine()
+    processor = _get_processor()
+    cloner = CloneMode(engine, processor)
+    dialogue = DialogueMode(engine, processor, cloner)
+
+    update_fn(task_id, progress=30, stage="生成剧本音频中...")
+    torch.manual_seed(42)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(42)
+
+    final_path = dialogue.run(params)
+    out_filename = os.path.basename(final_path)
+
+    update_fn(
+        task_id,
+        progress=100,
+        stage="完成",
+        status="done",
+        result={
+            "ok": True,
+            "filename": out_filename,
+            "urls": [f"/api/audio/{out_filename}"],
+            "files": [out_filename]
+        },
+        completed_at=datetime.now().strftime("%H:%M:%S")
+    )
 
 
 def _run_clone_task(task_id: str, params: dict, update_fn):
@@ -847,86 +884,160 @@ async def llm_status():
     return check_status()
 
 
+# ── 作品流水线（可观测：每首歌走到哪一步）──────────────────
+
+@app.get("/api/pipeline")
+async def pipeline_list():
+    """
+    作品看板数据。
+
+    这是「可观测流程」的数据源 —— 打开首页就能看到每首歌卡在哪一步，
+    而不是自己去几个目录里翻文件猜。状态机与理由见 core/pipeline.py。
+    """
+    from core import pipeline
+    return {
+        "stages": pipeline.STAGES,
+        "stage_labels": pipeline.STAGE_LABELS,
+        "platforms": pipeline.PLATFORMS,
+        "summary": pipeline.summary(),
+        "tracks": pipeline.list_tracks(),
+    }
+
+
+class PipelineStageRequest(BaseModel):
+    track_id: str
+    stage: str
+
+
+@app.post("/api/pipeline/stage")
+async def pipeline_set_stage(req: PipelineStageRequest):
+    """
+    推进作品状态。**每一步都要人点** —— 尤其 selected → publishing
+    那一下是「我确认要发这首」，不能因为文件齐了就自动跳。
+    """
+    from core import pipeline
+    try:
+        return {"ok": True, "track": pipeline.set_stage(req.track_id, req.stage)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class PipelineTrackRequest(BaseModel):
+    track_id: str
+    title: str | None = None
+    voice: str | None = None
+    clip_id: str | None = None
+    note: str | None = None
+
+
+@app.post("/api/pipeline/track")
+async def pipeline_upsert(req: PipelineTrackRequest):
+    """登记或更新一首作品。"""
+    from core import pipeline
+    return {"ok": True, "track": pipeline.upsert(
+        req.track_id, title=req.title, voice=req.voice,
+        clip_id=req.clip_id, note=req.note,
+    )}
+
+
+class PipelinePlatformRequest(BaseModel):
+    track_id: str
+    platform: str
+    status: str
+    url: str | None = None
+    note: str | None = None
+
+
+@app.post("/api/pipeline/platform")
+async def pipeline_platform(req: PipelinePlatformRequest):
+    """
+    记录某平台的发布状态。每个平台单独记 —— 同一首歌可能汽水已上架、
+    网易云还在审核，只有一个全局状态表达不出这种情况。
+    """
+    from core import pipeline
+    try:
+        return {"ok": True, "track": pipeline.set_platform_status(
+            req.track_id, req.platform, req.status, url=req.url, note=req.note,
+        )}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.get("/api/capabilities")
 async def capabilities():
     """
     一次拿全「现在能干什么、还剩多少资源」。
 
-    为什么要聚合成一个端点：这些状态本来散在三处（本地模型 /api/status、
-    Suno /api/suno/status、LLM /api/llm/status），前端要并发调三个、各自处理
+    为什么要聚合成一个端点：这些状态本来散在三处，前端要并发调三个、各自处理
     超时和失败，还要自己拼出「能不能开工」这个判断。更要命的是**中台的身份和
-    额度前端压根没调** —— 用户不知道自己是谁、还剩多少额度，点了生成才发现没了。
+    额度前端压根没调** —— 用户不知道自己是谁、还剩多少额度。
 
-    每一项都独立容错：某个上游挂了只是那一项 unavailable，不影响其余。
+    **四项并行探测**：串行做要 4.6 秒（Suno CLI 冷启动 + 中台往返 + LLM 探活），
+    而它们互不依赖。并行后总耗时取决于最慢的一项，不是四项之和。
+    每项独立容错 —— 某个上游挂了只是那一项 unavailable。
     """
-    import os, json as _json, subprocess
+    import os, json as _json, subprocess, asyncio
     from urllib import request as _req
 
-    caps = {}
+    def _probe_tts():
+        # downloaded 是文件在磁盘、loaded 是已读进内存。对用户来说都是「能用」
+        # （首次合成时才加载，约 10 秒），所以对外只给一个 ready，
+        # 不把「未装载」这种实现细节顶到界面上。
+        try:
+            ok = (MODELS_DIR / "Base-1.7B").exists() and (MODELS_DIR / "VoiceDesign-1.7B").exists()
+            return {"ready": ok, "detail": "本地模型" if ok else "模型未下载，跑 ./install.sh"}
+        except Exception as e:
+            return {"ready": False, "detail": str(e)[:60]}
 
-    # ① 本地 TTS 模型：downloaded 是文件在磁盘上，loaded 是已读进内存。
-    #    对用户来说都是「能用」—— 首次合成时才加载（约 10 秒），
-    #    所以对外只给一个 ready，不把「未装载」这种实现细节顶到界面上。
-    try:
-        base_ok = (MODELS_DIR / "Base-1.7B").exists()
-        design_ok = (MODELS_DIR / "VoiceDesign-1.7B").exists()
-        caps["tts"] = {
-            "ready": base_ok and design_ok,
-            "detail": "本地模型" if base_ok and design_ok else "模型未下载，跑 ./install.sh",
-        }
-    except Exception as e:
-        caps["tts"] = {"ready": False, "detail": str(e)[:60]}
+    def _probe_suno():
+        # 积分是硬约束 —— 没了就出不了歌，得让人提前看见
+        try:
+            r = subprocess.run([SUNO_BIN, "credits", "--json"],
+                               capture_output=True, text=True, timeout=15)
+            d = (_json.loads(r.stdout or "{}")).get("data", {})
+            left = d.get("total_credits_left", 0)
+            plan = (d.get("plan") or {}).get("name", "")
+            return {"ready": bool(d.get("is_active")), "credits": left,
+                    "plan": plan, "detail": f"{plan} · 剩 {left}"}
+        except Exception:
+            return {"ready": False, "credits": 0, "detail": "未登录或 CLI 不可用"}
 
-    # ② Suno：登录态 + 剩余积分。积分是硬约束 —— 没了就出不了歌。
-    try:
-        r = subprocess.run([SUNO_BIN, "credits", "--json"],
-                           capture_output=True, text=True, timeout=15)
-        d = (_json.loads(r.stdout or "{}")).get("data", {})
-        left = d.get("total_credits_left", 0)
-        caps["suno"] = {
-            "ready": bool(d.get("is_active")),
-            "credits": left,
-            "plan": (d.get("plan") or {}).get("name", ""),
-            "detail": f"{(d.get('plan') or {}).get('name', '')} · 剩 {left}",
-        }
-    except Exception as e:
-        caps["suno"] = {"ready": False, "credits": 0, "detail": f"未登录或 CLI 不可用"}
-
-    # ③ 中台：我是谁 + 额度。走 LLM 的同一把 key，所以它同时也验证了文案助手的通路。
-    base_url = os.environ.get("VOXFLOW_LLM_BASE_URL", "")
-    api_key = os.environ.get("VOXFLOW_LLM_API_KEY", "")
-    if base_url and api_key and "manager.museav" in base_url:
+    def _probe_studio():
+        base_url = os.environ.get("VOXFLOW_LLM_BASE_URL", "")
+        api_key = os.environ.get("VOXFLOW_LLM_API_KEY", "")
+        if not (base_url and api_key and "manager.museav" in base_url):
+            return {"ready": False, "identity": "", "detail": "未接中台（本地模式）"}
         try:
             # 必须带 User-Agent：默认的 Python-urllib/3.x 会被 CDN 当爬虫挡掉（403），
             # 而 curl 同样的请求是通的 —— 这种差异很容易被误判成「网络不通」。
             rq = _req.Request(f"{base_url}/me", headers={
-                "Authorization": f"Bearer {api_key}",
-                "User-Agent": "VoxFlow/0.3.0",
-            })
+                "Authorization": f"Bearer {api_key}", "User-Agent": "VoxFlow/0.3.0"})
             with _req.urlopen(rq, timeout=10) as resp:
                 me = _json.loads(resp.read().decode())
-            who = (me.get("tenant") or {}).get("nickname") or (me.get("tenant") or {}).get("name") or "未知"
-            caps["studio"] = {"ready": True, "identity": who, "detail": f"租户 {who}"}
+            t = me.get("tenant") or {}
+            who = t.get("nickname") or t.get("name") or "未知"
+            return {"ready": True, "identity": who, "detail": f"租户 {who}"}
         except Exception as e:
             msg = str(e)
-            hint = "凭据无效或被拦截" if "403" in msg or "401" in msg else "连不上中台"
-            caps["studio"] = {"ready": False, "identity": "", "detail": hint}
-    else:
-        # 没配中台就是本地模式，不算故障
-        caps["studio"] = {"ready": False, "identity": "", "detail": "未接中台（本地模式）"}
+            hint = "凭据无效或被拦截" if ("403" in msg or "401" in msg) else "连不上中台"
+            return {"ready": False, "identity": "", "detail": hint}
 
-    # ④ 文案助手：复用现成的探活
-    try:
-        from core.llm_client import check_status
-        st = check_status()
-        caps["llm"] = {
-            "ready": bool(st.get("available")),
-            "model": st.get("model", ""),
-            "detail": st.get("error") or st.get("model", ""),
-        }
-    except Exception as e:
-        caps["llm"] = {"ready": False, "model": "", "detail": str(e)[:60]}
+    def _probe_llm():
+        try:
+            from core.llm_client import check_status
+            st = check_status()      # 内部有 60 秒缓存，不会每次都真打一次
+            return {"ready": bool(st.get("available")), "model": st.get("model", ""),
+                    "detail": st.get("error") or st.get("model", "")}
+        except Exception as e:
+            return {"ready": False, "model": "", "detail": str(e)[:60]}
 
+    names = ["tts", "suno", "studio", "llm"]
+    probes = [_probe_tts, _probe_suno, _probe_studio, _probe_llm]
+    results = await asyncio.gather(*[asyncio.to_thread(f) for f in probes],
+                                   return_exceptions=True)
+    caps = {}
+    for name, res in zip(names, results):
+        caps[name] = res if isinstance(res, dict) else {"ready": False, "detail": "探测失败"}
     return caps
 
 
@@ -1078,6 +1189,19 @@ def _run_suno_task(task_id: str, params: dict, update_fn):
         result={"ok": True, "files": copied,
                 "urls": [f"/api/audio/{MUSIC_SUBDIR}/{os.path.basename(c)}" for c in copied]},
     )
+
+
+@app.post("/api/dialogue")
+async def dialogue(req: dict):
+    """提交多角色对话合成任务（异步）"""
+    if "lines" not in req or not isinstance(req["lines"], list):
+        raise HTTPException(400, "剧本格式错误，缺少台词 lines 列表")
+
+    title = req.get("title", "未命名剧目")
+    label = f"🎭 剧本: {title} ({len(req['lines'])} 句)"
+
+    task_id = _submit_task("dialogue", label, req)
+    return {"task_id": task_id, "status": "queued"}
 
 
 @app.get("/api/audio/{subdir}/{filename}")

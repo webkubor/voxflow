@@ -1,6 +1,6 @@
 import typer
 from cli.commands.voice import app as voice_app
-from cli.commands.tts import tts_clone, tts_design
+from cli.commands.tts import tts_clone, tts_design, tts_dialogue
 from cli.commands.job import app as job_app
 from cli.commands.preset import app as preset_app
 from cli.commands.doctor import doctor
@@ -16,6 +16,7 @@ app.add_typer(job_app, name="job")
 app.add_typer(preset_app, name="preset")
 app.command("clone")(tts_clone)
 app.command("design")(tts_design)
+app.command("dialogue")(tts_dialogue)
 app.command("doctor")(doctor)
 app.command("ai-script")(ai_script)
 app.command("ai-polish")(ai_polish)
@@ -32,7 +33,13 @@ def web(
     typer.echo(typer.style("  VoxFlow 声流 Web UI", fg=typer.colors.BRIGHT_YELLOW, bold=True))
     typer.echo(typer.style(f"  http://localhost:{port}", fg=typer.colors.CYAN))
     typer.echo(typer.style("=" * 50, fg=typer.colors.BRIGHT_YELLOW))
-    uvicorn.run("web.app:app", host=host, port=port, reload=False)
+    # 多 worker：默认单进程单线程，一个慢请求就把整个服务堵死 ——
+    # 实测开着几个标签页轮询时（每个都在打 status/capabilities），
+    # 后端队列被塞满、curl 都会超时。
+    #
+    # 不用太多：这是本地工具，2 个足够让「一个请求在等上游」时另一个还能响应。
+    # 更多 worker 只会让 4GB 的模型被重复加载进内存。
+    uvicorn.run("web.app:app", host=host, port=port, reload=False, workers=2)
 
 
 @app.callback(invoke_without_command=True)
@@ -44,6 +51,7 @@ def main(ctx: typer.Context):
       voice      音色素材管理（list / add / preview / show / rm / import）
       clone      从已有音色克隆合成
       design     从文字描述设计新音色
+      dialogue   根据剧本批量合成多角色对话
       web        启动 Web UI
       doctor     环境自检（Python / 依赖 / 模型 / 硬件 / 目录 / FreeLLMAPI）
       ai-script  AI 文案生成（需 FreeLLMAPI）
