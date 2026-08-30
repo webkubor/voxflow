@@ -40,6 +40,7 @@ from typing import Any
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 LEDGER = BASE_DIR / "configs" / "pipeline.json"
+PUBLISH_ACCOUNTS = BASE_DIR / "configs" / "publish_accounts.json"
 
 # 状态机的合法状态。顺序即流程顺序 —— 前端画进度条直接按这个数组来，
 # 不要在前端再抄一份，那样两边迟早对不上。
@@ -59,6 +60,26 @@ PLATFORMS = {
     "qishui": {"label": "汽水音乐", "cover": "1440x1440", "ai_field": "创作方式=AI"},
     "netease": {"label": "网易云", "cover": "1400x1400", "ai_field": "AI 音乐人身份"},
     "tencent": {"label": "腾讯系", "cover": "待确认", "ai_field": "待确认"},
+}
+
+DEFAULT_PUBLISH_ACCOUNTS = [
+    {"id": "qishui-main", "platform": "qishui", "label": "汽水音乐账号"},
+    {"id": "netease-main", "platform": "netease", "label": "网易云音乐人账号"},
+    {"id": "tencent-main", "platform": "tencent", "label": "腾讯音乐人账号"},
+]
+
+LOGIN_STATUS_LABELS = {
+    "connected": "已登录",
+    "expired": "登录失效",
+    "unconfigured": "未接入",
+    "unknown": "状态未知",
+}
+
+BACKUP_STATUS_LABELS = {
+    "backed_up": "已云备份",
+    "syncing": "同步中",
+    "failed": "备份失败",
+    "unrecorded": "未登记",
 }
 
 
@@ -81,6 +102,46 @@ def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+def _backup_record(track: dict[str, Any]) -> dict[str, str]:
+    backup = track.get("cloud_backup") or {}
+    status = backup.get("status", "unrecorded")
+    return {
+        "status": status,
+        "label": BACKUP_STATUS_LABELS.get(status, status),
+        "location": backup.get("location", ""),
+        "updated_at": backup.get("updated_at", ""),
+    }
+
+
+def _publish_accounts() -> list[dict[str, Any]]:
+    """读取非敏感账号元数据；缺失时返回三个待接入账号。"""
+    try:
+        data = json.loads(PUBLISH_ACCOUNTS.read_text(encoding="utf-8"))
+        accounts = data.get("accounts", [])
+    except (OSError, json.JSONDecodeError):
+        accounts = []
+
+    normalized = []
+    for account in accounts or DEFAULT_PUBLISH_ACCOUNTS:
+        platform = account.get("platform")
+        if platform not in PLATFORMS:
+            continue
+        login = account.get("login") or {}
+        status = login.get("status", "unconfigured")
+        normalized.append({
+            "id": account.get("id", platform),
+            "platform": platform,
+            "label": account.get("label", PLATFORMS[platform]["label"]),
+            "login": {
+                "status": status,
+                "label": LOGIN_STATUS_LABELS.get(status, status),
+                "detail": login.get("detail", "尚未接入登录态检测"),
+                "updated_at": login.get("updated_at", ""),
+            },
+        })
+    return normalized
+
+
 def list_tracks() -> list[dict[str, Any]]:
     """所有作品，按最近更新排序。前端看板直接吃这个。"""
     data = _load()
@@ -96,11 +157,34 @@ def list_tracks() -> list[dict[str, Any]]:
             "voice": t.get("voice"),          # 用了哪个音色
             "clip_id": t.get("clip_id"),      # Suno 的 clip
             "platforms": t.get("platforms", {}),
+            "cloud_backup": _backup_record(t),
             "updated_at": t.get("updated_at", ""),
             "note": t.get("note", ""),
         })
     tracks.sort(key=lambda x: x["updated_at"], reverse=True)
     return tracks
+
+
+def publication_board() -> dict[str, Any]:
+    """按发布账号聚合曲目，同时返回所有歌曲的云备份真值。"""
+    tracks = list_tracks()
+    accounts = _publish_accounts()
+    for account in accounts:
+        releases = []
+        for track in tracks:
+            release = track["platforms"].get(account["platform"])
+            if release is None:
+                continue
+            status = release.get("status", "unknown")
+            releases.append({
+                "id": track["id"],
+                "title": track["title"],
+                "status": status,
+                "updated_at": release.get("updated_at", ""),
+                "cloud_backup": track["cloud_backup"],
+            })
+        account["releases"] = releases
+    return {"accounts": accounts, "tracks": tracks}
 
 
 def upsert(track_id: str, **fields: Any) -> dict[str, Any]:

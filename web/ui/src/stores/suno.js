@@ -12,6 +12,8 @@ export const useSunoStore = defineStore('suno', () => {
     authenticated: false, credits: 0, total_credits_left: 0, plan: '', personas: {}, submitting: false, error: '',
   });
   const sunoForm = reactive({ title: '', tags: '', lyrics: '', persona: '' });
+  const lyricsPrompt = ref('');
+  const lyricsGenerating = ref(false);
   const error = ref('');
   let taskTimer = null;
 
@@ -79,10 +81,40 @@ export const useSunoStore = defineStore('suno', () => {
     }
   };
 
+  const generateLyrics = async () => {
+    error.value = '';
+    suno.error = '';
+    const prompt = lyricsPrompt.value.trim()
+      || [sunoForm.title.trim(), sunoForm.tags.trim()].filter(Boolean).join('，');
+    if (!prompt) throw new Error('请填写歌词主题，或先填写歌曲标题和风格标签');
+
+    lyricsGenerating.value = true;
+    try {
+      const res = await fetch('/api/llm/lyrics', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, style: sunoForm.tags.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || data.detail || 'AI 歌词生成失败');
+      sunoForm.lyrics = data.text;
+      useTasksStore().showToast('歌词已生成，可继续编辑、复制或直接出歌', 'success');
+      return data;
+    } catch (cause) {
+      suno.error = cause.message;
+      error.value = cause.message;
+      throw cause;
+    } finally {
+      lyricsGenerating.value = false;
+    }
+  };
+
   const stopPolling = () => {
     if (taskTimer) window.clearTimeout(taskTimer);
     taskTimer = null;
   };
 
-  return { suno, sunoForm, error, loadSunoStatus, submitSuno, stopPolling };
+  return {
+    suno, sunoForm, lyricsPrompt, lyricsGenerating, error,
+    loadSunoStatus, submitSuno, generateLyrics, stopPolling,
+  };
 });

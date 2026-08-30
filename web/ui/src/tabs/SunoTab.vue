@@ -51,13 +51,31 @@
         <!-- 右侧歌词 -->
         <n-grid-item>
           <n-form label-placement="top">
-            <n-form-item label="📝 歌词（支持 [Verse] [Chorus] 结构）">
+            <n-form-item>
+              <template #label>
+                <div class="lyrics-label-row">
+                  <span>📝 歌词（支持 [Verse] [Chorus] 结构）</span>
+                  <n-space size="small">
+                    <n-button size="tiny" secondary :loading="lyricsGenerating" @click="generateLyrics">
+                      AI 生成
+                    </n-button>
+                    <n-button size="tiny" secondary :disabled="!sunoForm.lyrics.trim()" @click="copyLyrics">
+                      复制歌词
+                    </n-button>
+                  </n-space>
+                </div>
+              </template>
+              <n-input
+                v-model:value="lyricsPrompt"
+                placeholder="歌词主题（留空则根据标题和风格生成）"
+                class="lyrics-prompt-input"
+              />
               <n-input 
                 v-model:value="sunoForm.lyrics" 
                 type="textarea" 
                 :rows="8" 
+                class="lyrics-input"
                 placeholder="[Verse 1]&#10;月下竹林深&#10;我踏碎霜痕&#10;&#10;[Chorus]&#10;月下竹林 我独行&#10;江湖夜雨十年灯"
-                style="font-family: monospace;"
               />
             </n-form-item>
           </n-form>
@@ -92,9 +110,20 @@
  * API 来源：GET /api/suno/status, POST /api/suno/generate
  */
 import { computed } from 'vue';
+import copy from 'copy-to-clipboard';
 import { useSunoStore } from '../stores/suno';
 
-const { suno, sunoForm, loadSunoStatus, submitSuno } = useSunoStore();
+const {
+  suno, sunoForm, lyricsPrompt, lyricsGenerating,
+  loadSunoStatus, submitSuno, generateLyrics,
+} = useSunoStore();
+
+const copyLyrics = () => {
+  const copied = copy(sunoForm.lyrics);
+  window.$message?.[copied ? 'success' : 'error'](
+    copied ? '歌词已复制，可直接粘贴到自动化流程' : '复制失败，请手动选择歌词复制',
+  );
+};
 
 // 将 suno.personas 对象格式化为 Naive UI Select 组件所需的 options
 const personaOptions = computed(() => {
@@ -157,6 +186,22 @@ const personaOptions = computed(() => {
   color: var(--vf-text-3);
   margin-top: 6px;
   line-height: 1.4;
+}
+
+.lyrics-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--vf-space-2);
+  width: 100%;
+}
+
+.lyrics-prompt-input {
+  margin-bottom: var(--vf-space-2);
+}
+
+.lyrics-input :deep(textarea) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .cost-tip {

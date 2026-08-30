@@ -11,6 +11,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
   const platforms = ref([]);
   const summary = ref({});
   const tracks = ref([]);
+  const publishAccounts = ref([]);
   const error = ref('');
 
   const request = async (url, method = 'GET', body) => {
@@ -41,6 +42,15 @@ export const usePipelineStore = defineStore('pipeline', () => {
   const setStage = (trackId, stage) => request('/api/pipeline/stage', 'POST', { track_id: trackId, stage });
   const upsertTrack = (track) => request('/api/pipeline/track', 'POST', track);
   const setPlatformStatus = (platform) => request('/api/pipeline/platform', 'POST', platform);
+  const loadPublishBoard = async () => {
+    const data = await request('/api/publish-board');
+    publishAccounts.value = data.accounts || [];
+    tracks.value = data.tracks || [];
+    return data;
+  };
 
-  return { stages, stageLabels, platforms, summary, tracks, error, loadPipeline, setStage, upsertTrack, setPlatformStatus };
+  return {
+    stages, stageLabels, platforms, summary, tracks, publishAccounts, error,
+    loadPipeline, loadPublishBoard, setStage, upsertTrack, setPlatformStatus,
+  };
 });

@@ -194,6 +194,9 @@
             <n-tab-pane name="suno" tab="AI 音乐">
               <SunoTab />
             </n-tab-pane>
+            <n-tab-pane name="publish" tab="自动发布">
+              <PublishTab />
+            </n-tab-pane>
             <n-tab-pane name="library" tab="音频库">
               <LibraryTab />
             </n-tab-pane>
@@ -233,6 +236,7 @@ import CloneTab from '../tabs/CloneTab.vue';
 import DesignTab from '../tabs/DesignTab.vue';
 import DialogueTab from '../tabs/DialogueTab.vue';
 import SunoTab from '../tabs/SunoTab.vue';
+import PublishTab from '../tabs/PublishTab.vue';
 import LibraryTab from '../tabs/LibraryTab.vue';
 import GlobalPlayer from './GlobalPlayer.vue';
 import TaskPanel from './TaskPanel.vue';

@@ -21,7 +21,8 @@ import {
   // 表单
   NForm, NFormItem, NInput, NSelect, NSwitch, NButton, NButtonGroup,
   // 展示
-  NCard, NTag, NBadge, NSpin, NEllipsis, NTabs, NTabPane, NCollapse, NCollapseItem,
+  NAlert, NCard, NEmpty, NList, NListItem, NTag, NThing, NBadge, NSpin, NEllipsis,
+  NTabs, NTabPane, NCollapse, NCollapseItem,
   // 浮层
   NModal, NTooltip,
   // provider（useMessage / useDialog 依赖它们）
@@ -32,7 +33,8 @@ const naive = create({
   components: [
     NLayout, NLayoutHeader, NLayoutContent, NLayoutSider, NGrid, NGridItem, NSpace,
     NForm, NFormItem, NInput, NSelect, NSwitch, NButton, NButtonGroup,
-    NCard, NTag, NBadge, NSpin, NEllipsis, NTabs, NTabPane, NCollapse, NCollapseItem,
+    NAlert, NCard, NEmpty, NList, NListItem, NTag, NThing, NBadge, NSpin, NEllipsis,
+    NTabs, NTabPane, NCollapse, NCollapseItem,
     NModal, NTooltip,
     NConfigProvider, NMessageProvider, NDialogProvider,
   ],

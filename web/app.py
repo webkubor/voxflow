@@ -927,6 +927,11 @@ class LLMPolishRequest(BaseModel):
     style: str = ""
 
 
+class LLMLyricsRequest(BaseModel):
+    prompt: str
+    style: str = ""
+
+
 @app.get("/api/llm/status")
 async def llm_status():
     """检测 LLM 后端是否可用"""
@@ -952,6 +957,13 @@ async def pipeline_list():
         "summary": pipeline.summary(),
         "tracks": pipeline.list_tracks(),
     }
+
+
+@app.get("/api/publish-board")
+async def publish_board():
+    """发布账号、已发布曲目与云备份状态的同源看板数据。"""
+    from core import pipeline
+    return pipeline.publication_board()
 
 
 class PipelineStageRequest(BaseModel):
@@ -1109,6 +1121,18 @@ async def llm_polish(req: LLMPolishRequest):
     try:
         result = polish_script(req.text, req.style)
         return {"ok": True, "text": result}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/llm/lyrics")
+async def llm_lyrics(req: LLMLyricsRequest):
+    """生成可直接提交给 Suno 的结构化歌词。"""
+    if not req.prompt.strip():
+        raise HTTPException(400, "请填写歌词主题，或先填写歌曲标题和风格标签")
+    from core.llm_client import generate_lyrics
+    try:
+        return {"ok": True, "text": generate_lyrics(req.prompt, req.style)}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 

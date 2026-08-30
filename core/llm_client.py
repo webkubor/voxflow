@@ -45,6 +45,16 @@ _POLISH_SYSTEM = """\
 5. 输出纯文本，不包含任何 Markdown 标记
 6. 不要输出任何解释说明，只输出优化后的文案"""
 
+_LYRICS_SYSTEM = """\
+你是专业的中文流行音乐作词人。根据主题和风格创作适合 Suno 的完整歌词。
+
+规则:
+1. 只输出歌词，不要解释、标题或 Markdown 围栏。
+2. 使用 [Verse 1]、[Chorus]、[Verse 2]、[Bridge]、[Chorus] 段落标记。
+3. 每段 4 到 8 行，句子适合演唱，有可记忆的副歌。
+4. 保持中文自然、意象连贯；不要照抄用户提示中的现有歌词。
+5. 不要添加曲风说明、和弦、演唱提示或括号旁白。"""
+
 
 def _get_client():
     """懒加载 OpenAI 客户端"""
@@ -146,6 +156,22 @@ def generate_script(prompt: str, word_count: Optional[int] = None) -> str:
         ],
         temperature=0.8,
         max_tokens=2048,
+    )
+    return resp.choices[0].message.content.strip()
+
+
+def generate_lyrics(prompt: str, style: str = "") -> str:
+    """根据创作提示生成带 Suno 段落标记的歌词。"""
+    client = _get_client()
+    style_hint = f"\n曲风参考：{style}" if style.strip() else ""
+    resp = client.chat.completions.create(
+        model=_default_model,
+        messages=[
+            {"role": "system", "content": _LYRICS_SYSTEM},
+            {"role": "user", "content": f"创作主题：{prompt.strip()}{style_hint}"},
+        ],
+        temperature=0.9,
+        max_tokens=1600,
     )
     return resp.choices[0].message.content.strip()
 
