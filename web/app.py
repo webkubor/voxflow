@@ -110,6 +110,8 @@ def _task_worker():
                 _run_clone_task(task_id, task["params"], _update_task)
             elif task["type"] == "design":
                 _run_design_task(task_id, task["params"], _update_task)
+            elif task["type"] == "suno":
+                _run_suno_task(task_id, task["params"], _update_task)
         except Exception as e:
             _update_task(task_id, status="error", error=str(e),
                          completed_at=datetime.now().strftime("%H:%M:%S"))
@@ -773,13 +775,23 @@ async def delete_script(script_id: str):
     return {"ok": True, "scripts": scripts}
 
 
+AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".flac", ".ogg"}
+MEDIA_TYPES = {
+    ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".flac": "audio/flac",
+    ".ogg": "audio/ogg",
+}
+
+
 @app.get("/api/audio-list")
 async def audio_list():
-    """列出已生成的音频文件"""
+    """列出已生成的音频文件（TTS wav + Suno 音乐 mp3/m4a 统一管理）"""
     files = []
     if OUT_DIR.exists():
         for f in sorted(OUT_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
-            if f.suffix.lower() == ".wav":
+            if f.suffix.lower() in AUDIO_EXTS:
                 stat = f.stat()
                 files.append({
                     "filename": f.name,
@@ -789,6 +801,7 @@ async def audio_list():
                     "created": datetime.fromtimestamp(stat.st_mtime).strftime(
                         "%Y-%m-%d %H:%M:%S"
                     ),
+                    "kind": "suno" if "[Suno]" in f.name else "tts",
                 })
     return {"files": files}
 
@@ -801,7 +814,8 @@ async def get_audio(filename: str):
     path = OUT_DIR / safe
     if not path.exists():
         raise HTTPException(404, f"音频文件不存在: {safe}")
-    return FileResponse(str(path), media_type="audio/wav", filename=safe)
+    media_type = MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
+    return FileResponse(str(path), media_type=media_type, filename=safe)
 
 
 @app.delete("/api/audio/{filename}")
@@ -853,6 +867,146 @@ async def llm_polish(req: LLMPolishRequest):
         return {"ok": True, "text": result}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+# ── Suno AI 音乐（voxsuno 集成）────────────────────────────
+#
+# 声音一条龙工作台的最后一环：用 VoxCraft 复刻的声音（或任何已建 persona）
+# 在 Suno 生成音乐，产物落回 out/ 由音频库统一管理。
+# persona 在 suno.com 网页端创建（无公开 API），本模块负责登录态/生成/入库。
+
+SUNO_BIN = os.path.expanduser("~/.cargo/bin/suno")
+if not os.path.exists(SUNO_BIN):
+    SUNO_BIN = "suno"  # 回退到 PATH
+SUNO_STATE = os.path.expanduser("~/.voxsuno/personas.json")
+MUSIC_SUBDIR = "music"  # Suno 音乐单独放 out/music，跟 TTS wav 分开
+
+
+class SunoGenerateRequest(BaseModel):
+    title: str = "Untitled"
+    tags: str = ""
+    lyrics: str = ""
+    lyrics_file: Optional[str] = None
+    persona: Optional[str] = None  # persona 名（查 ~/.voxsuno/personas.json）
+    model: str = "v5.5"
+    wait: bool = False
+    download: bool = True  # 生成后拉回本地入库
+
+
+@app.get("/api/suno/status")
+async def suno_status():
+    """Suno 登录态 + 余额 + 已保存 persona"""
+    import subprocess
+    try:
+        r = subprocess.run(
+            [SUNO_BIN, "credits", "--json"],
+            capture_output=True, text=True, timeout=15,
+        )
+        data = json.loads(r.stdout or "{}")
+        cred = data.get("data", {})
+        authenticated = r.returncode == 0 and cred.get("is_active", False)
+    except Exception:
+        authenticated, cred = False, {}
+    personas = {}
+    if os.path.exists(SUNO_STATE):
+        try:
+            personas = json.load(open(SUNO_STATE))
+        except Exception:
+            personas = {}
+    return {
+        "ok": True,
+        "authenticated": authenticated,
+        "credits": cred.get("credits", 0),
+        "total_credits_left": cred.get("total_credits_left", 0),
+        "plan": (cred.get("plan") or {}).get("name", "") if isinstance(cred.get("plan"), dict) else "",
+        "personas": personas,
+        "suno_bin": SUNO_BIN,
+    }
+
+
+@app.post("/api/suno/generate")
+async def suno_generate(req: SunoGenerateRequest):
+    """提交 Suno 音乐生成任务（异步，走现有任务队列）"""
+    task_id = _submit_task("suno", f"🎵 {req.title or 'Suno 音乐'}", req.model_dump())
+    return {"task_id": task_id, "status": "queued"}
+
+
+def _run_suno_task(task_id: str, params: dict, update_fn):
+    """执行 Suno 音乐生成：调 suno CLI → 产物拷回 out/music"""
+    import subprocess, shutil, glob
+
+    req = SunoGenerateRequest(**params)
+    if not os.path.exists(SUNO_BIN):
+        raise ValueError(f"suno CLI 不存在: {SUNO_BIN}（先 cargo install suno）")
+
+    music_dir = OUT_DIR / MUSIC_SUBDIR
+    music_dir.mkdir(parents=True, exist_ok=True)
+
+    # 解析 persona ID
+    persona_id = None
+    if req.persona:
+        try:
+            personas = json.load(open(SUNO_STATE))
+            persona_id = (personas.get(req.persona) or {}).get("id")
+        except Exception:
+            persona_id = None
+        if not persona_id and req.persona.startswith("{"):
+            persona_id = req.persona  # 直接传 ID
+
+    update_fn(task_id, progress=15, stage="调用 Suno 生成中...")
+    cmd = [SUNO_BIN, "generate", "--title", req.title, "--model", req.model, "--wait"]
+    if req.tags:
+        cmd += ["--tags", req.tags]
+    if req.lyrics:
+        cmd += ["--lyrics", req.lyrics]
+    elif req.lyrics_file and os.path.exists(req.lyrics_file):
+        cmd += ["--lyrics-file", req.lyrics_file]
+    if persona_id:
+        cmd += ["--persona", persona_id]
+
+    # 临时下载目录，生成后拷回 out/music
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="voxsuno_")
+    cmd += ["--download", tmp]
+    update_fn(task_id, progress=30, stage="Suno 生成中（约 1-3 分钟）...")
+
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=360)
+    if r.returncode != 0:
+        err = (r.stderr or r.stdout or "")[-500:]
+        raise ValueError(f"Suno 生成失败: {err}")
+
+    update_fn(task_id, progress=85, stage="入库音频库...")
+    # 把下载的音频拷回 out/music，带 [Suno] 前缀便于音频库识别
+    copied = []
+    for f in glob.glob(os.path.join(tmp, "*")):
+        if os.path.splitext(f)[1].lower() in AUDIO_EXTS:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_title = re.sub(r"[^\w\u4e00-\u9fff-]", "_", req.title)[:30]
+            dest = music_dir / f"[Suno]{safe_title}_{ts}{os.path.splitext(f)[1].lower()}"
+            shutil.copy2(f, dest)
+            copied.append(str(dest))
+
+    shutil.rmtree(tmp, ignore_errors=True)
+    if not copied:
+        raise ValueError("Suno 生成成功但没拿到音频文件（下载链路可能受 Suno schema drift 影响，见网页端）")
+
+    update_fn(
+        task_id, status="done", progress=100, stage="完成",
+        result={"ok": True, "files": copied,
+                "urls": [f"/api/audio/{MUSIC_SUBDIR}/{os.path.basename(c)}" for c in copied]},
+    )
+
+
+@app.get("/api/audio/{subdir}/{filename}")
+async def get_audio_subdir(subdir: str, filename: str):
+    """获取子目录音频（out/music/...）"""
+    safe_sub = os.path.basename(subdir)
+    safe_name = os.path.basename(filename)
+    path = OUT_DIR / safe_sub / safe_name
+    if not path.exists():
+        raise HTTPException(404, f"音频文件不存在: {safe_name}")
+    media_type = MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
+    return FileResponse(str(path), media_type=media_type, filename=safe_name)
 
 
 # ── 启动入口 ──────────────────────────────────────────────

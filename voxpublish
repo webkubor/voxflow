@@ -1,0 +1,317 @@
+#!/usr/bin/env bash
+# voxpublish — 批量发布打包工具（抖音/汽水音乐内容分发平台）
+#
+# 把 voxcraft/Suno 产出的歌曲，整理成平台要求的发布物料结构 + 自动填 Excel 引入模板。
+# 平台流程（见用户提供的发布说明）：
+#   1. 申请 SFTP 账号（管理员分配）
+#   2. 上传物料到 /Audio/年月日 文件夹（音源 wav/mp3/m4a + 歌词 txt + 封面 jpg/png）
+#   3. 上传填好的 Excel 引入模板（每行一首歌，字段与 SFTP 路径一致）
+#
+# 本工具做什么：
+#   - 从 Suno 拉歌曲元数据（标题/歌词/风格）
+#   - 生成平台要求的目录结构：out/publish/YYYYMMDD/<歌名>/ 下放 Audio/歌词/Cover
+#   - 生成歌词 txt、填 Excel 模板（自动处理必填/选填/预置内容）
+#   - 输出一份「待补信息清单」（艺人 UID、ISRC、授权等需要你手动补的）
+#
+# 用法：
+#   voxpublish pack <clip_id> [clip_id ...]   # 从 Suno 拉歌打包（需先下载音频到本地）
+#   voxpublish list                           # 列出 Suno 歌曲
+#   voxpublish cover <clip_id> [--prompt ...] # 按歌词意境用 museav 生成专属封面
+#   voxpublish excel <日期目录>               # 为已打包的日期目录生成 Excel
+#
+# 配置（环境变量）：
+#   ARTIST_NAME   艺人名（默认：月栖洲）
+#   RELEASE_TYPE  发行类型（默认：抖音及其旗下产品）
+#   MUSIC_TYPE    音乐类型（默认：原创）
+#   PLATFORMS     上架平台（默认：网易云音乐）
+#   COVER_IMG     默认封面图路径（1440x1440+，1:1）
+
+set -euo pipefail
+
+VOXCRAFT_DIR="${VOXCRAFT_DIR:-$HOME/dev/github/app/voxcraft}"
+PUBLISH_ROOT="$VOXCRAFT_DIR/out/publish"
+TEMPLATE="/Users/webkubor/Downloads/batch_import_template.xlsx"
+SUNO_BIN="${SUNO_BIN:-}"
+if [ -z "$SUNO_BIN" ]; then
+  if command -v suno >/dev/null 2>&1; then SUNO_BIN="suno"
+  elif [ -x "$HOME/.cargo/bin/suno" ]; then SUNO_BIN="$HOME/.cargo/bin/suno"
+  fi
+fi
+
+ARTIST_NAME="${ARTIST_NAME:-月栖洲}"
+RELEASE_TYPE="${RELEASE_TYPE:-抖音及其旗下产品}"
+MUSIC_TYPE="${MUSIC_TYPE:-原创}"
+PLATFORMS="${PLATFORMS:-网易云音乐}"
+
+log() { echo "  $*"; }
+die() { echo "❌ $*" >&2; exit 1; }
+
+[ -n "$SUNO_BIN" ] || die "找不到 suno CLI"
+[ -f "$TEMPLATE" ] || die "找不到引入模板: $TEMPLATE"
+mkdir -p "$PUBLISH_ROOT"
+
+# ── 列出 Suno 歌曲 ──
+cmd_list() {
+  "$SUNO_BIN" list 2>/dev/null | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+for c in d.get('data',{}).get('clips',[]):
+    print(f\"{c['id']}  {c['title']}  {c['status']}\")
+"
+}
+
+# ── 从 Suno 拉单曲元数据 + 下载音频 ──
+fetch_clip() {
+  local clip_id="$1"
+  local out_dir="$2"
+  "$SUNO_BIN" info "$clip_id" 2>/dev/null | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['data']
+m=d.get('metadata',{})
+print(json.dumps({
+    'id': d.get('id'),
+    'title': d.get('title'),
+    'tags': (m.get('tags') or '').split(': ')[-1] if ':' in (m.get('tags') or '') else (m.get('tags') or ''),
+    'lyrics': m.get('prompt') or '',
+    'duration': m.get('duration'),
+}, ensure_ascii=False))
+" > "$out_dir/meta.json"
+}
+
+# ── 打包单曲 ──
+cmd_pack() {
+  local clip_id="${1:?用法: voxpublish pack <clip_id>}"
+  local date_dir
+  date_dir=$(date +%Y%m%d)
+  local song_root="$PUBLISH_ROOT/$date_dir"
+
+  log "🎵 拉取歌曲元数据: $clip_id"
+  # 先拿标题，建每首歌一个子目录（平台标准：YYYYMMDD/<歌名>/Audio|歌词|Cover）
+  local title
+  title=$("$SUNO_BIN" info "$clip_id" 2>/dev/null | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(d.get('data',{}).get('title') or '未命名')
+" 2>/dev/null || echo "未命名")
+  local safe_title
+  safe_title=$(echo "$title" | sed 's/[\/:*?"<>|]//g' | tr -s ' ')
+  song_root="$song_root/$safe_title"
+  mkdir -p "$song_root" "$song_root/Audio" "$song_root/歌词" "$song_root/Cover"
+
+  log "📁 歌曲目录: $song_root"
+  fetch_clip "$clip_id" "$song_root"
+
+  # 下载音频（Suno 加密限制时提示手动下载）
+  log "⬇️  下载音频（可能受 Suno 加密限制，失败则手动下载）..."
+  if "$SUNO_BIN" download "$clip_id" -o "$song_root/Audio/" 2>/dev/null && ls "$song_root/Audio/"* >/dev/null 2>&1; then
+    log "  ✅ 音频下载完成"
+  else
+    log "  ⚠️ 自动下载失败（Suno 加密），请手动下载音频到: $song_root/Audio/"
+  fi
+
+  # 生成歌词 txt
+  python3 -c "
+import json, os
+meta = json.load(open('$song_root/meta.json'))
+lyrics = meta.get('lyrics') or ''
+if lyrics:
+    # 去掉 [Verse]/[Chorus] 结构标记（平台要求每句一行）
+    lines = []
+    for ln in lyrics.split(chr(10)):
+        s = ln.strip()
+        if not s or s.startswith('['):
+            continue
+        lines.append(s)
+    with open('$song_root/歌词/歌词.txt', 'w') as f:
+        f.write(chr(10).join(lines))
+    print(f'  歌词 {len(lines)} 行')
+else:
+    print('  ⚠️ 无歌词')
+" 2>/dev/null || log "  ⚠️ 歌词生成失败"
+
+  # 封面：优先用 Suno 生成的封面（公开 CDN），放大到 1440x1440
+  log "🎨 下载歌曲封面..."
+  local cover_url
+  cover_url=$("$SUNO_BIN" info "$clip_id" 2>/dev/null | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(d.get('data',{}).get('image_large_url') or d.get('data',{}).get('image_url') or '')
+" 2>/dev/null || echo "")
+  if [ -n "$cover_url" ]; then
+    if curl -s -o "$song_root/Cover/封面.jpg" "$cover_url" 2>/dev/null; then
+      # 放大到 1440x1440（平台要求）
+      (cd "$VOXCRAFT_DIR" && source .venv/bin/activate 2>/dev/null && python3 -c "
+from PIL import Image
+p = '$song_root/Cover/封面.jpg'
+img = Image.open(p).convert('RGB')
+if img.size[0] < 1440 or img.size[1] < 1440:
+    img = img.resize((1440, 1440), Image.LANCZOS)
+img.save(p, 'JPEG', quality=95)
+print(f'  封面已处理: {img.size[0]}x{img.size[1]}')
+" 2>/dev/null) || log "  ⚠️ 封面已下载但未放大（缺 PIL）"
+      log "  ✅ 封面就绪"
+    else
+      log "  ⚠️ 封面下载失败，请手动放到 $song_root/Cover/（1440x1440+，1:1）"
+    fi
+  else
+    log "  ⚠️ 拿不到封面，请手动放到 $song_root/Cover/（1440x1440+，1:1）"
+  fi
+
+  log "✅ 打包完成: $song_root"
+  log "   下一步: 补充物料 → voxpublish excel $date_dir"
+}
+
+# ── 生成 Excel ──
+cmd_excel() {
+  local date_dir="${1:?用法: voxpublish excel <日期目录>}"
+  local song_root="$PUBLISH_ROOT/$date_dir"
+  [ -d "$song_root" ] || die "目录不存在: $song_root"
+
+  cd "$VOXCRAFT_DIR" && source .venv/bin/activate 2>/dev/null || true
+  python3 - "$song_root" "$TEMPLATE" "$PUBLISH_ROOT/$date_dir.xlsx" "$ARTIST_NAME" "$RELEASE_TYPE" "$MUSIC_TYPE" "$PLATFORMS" "$date_dir" <<'PYEOF'
+import sys, json, os, glob
+import openpyxl
+
+song_root, template, out_xlsx, artist, rtype, mtype, platforms, date_dir = sys.argv[1:9]
+wb = openpyxl.load_workbook(template)
+ws = wb['信息表单']
+
+# 找到表头行（第一行是表头），从第 2 行起是示例，第 3 行是备注
+headers = [c.value for c in ws[1]]
+col = {h: i for i, h in enumerate(headers)}
+
+# 收集该目录下的歌曲（每个歌名子目录一首）
+songs = []
+for d in sorted(glob.glob(os.path.join(song_root, '*'))):
+    if not os.path.isdir(d):
+        continue
+    name = os.path.basename(d)
+    audio = glob.glob(os.path.join(d, 'Audio', '*')) 
+    lyric = glob.glob(os.path.join(d, '歌词', '*.txt'))
+    cover = glob.glob(os.path.join(d, 'Cover', '*'))
+    meta_file = os.path.join(d, 'meta.json')
+    meta = json.load(open(meta_file)) if os.path.exists(meta_file) else {}
+    songs.append({
+        'name': name,
+        'title': meta.get('title') or name,
+        'audio': audio[0] if audio else '',
+        'lyric': lyric[0] if lyric else '',
+        'cover': cover[0] if cover else '',
+    })
+
+if not songs:
+    print('⚠️ 该目录下没有歌曲子目录')
+    sys.exit(1)
+
+# 清空示例行，写入真实数据（从第 2 行开始）
+# 模板第 2 行是示例数据、第 3 行是备注说明，都清掉（跳过 MergedCell 只读单元格）
+for r in range(2, ws.max_row + 1):
+    for c in range(1, ws.max_column + 1):
+        cell = ws.cell(row=r, column=c)
+        if cell.__class__.__name__ == 'MergedCell':
+            continue
+        try:
+            cell.value = None
+        except Exception:
+            pass
+
+rel_root = f'/Audio/{date_dir}'
+# 模板结构：第1行表头、第2行示例、第3-4行备注说明 → 数据从第 5 行起
+DATA_START = 5
+for i, s in enumerate(songs):
+    r = DATA_START + i
+    def setv(field, val):
+        if field in col:
+            cell = ws.cell(row=r, column=col[field] + 1)
+            if cell.__class__.__name__ == 'MergedCell':
+                return  # 合并单元格只读，跳过（罕见，通常表头才有）
+            cell.value = val
+    setv('发行类型（必填）', rtype)
+    setv('发行地区（必填）', '无' if '抖音' in rtype else '全球')
+    setv('音乐类型（必填）', mtype)
+    setv('音频路径（必填）', f'{rel_root}/{s["name"]}/Audio/' + os.path.basename(s['audio']) if s['audio'] else '')
+    setv('歌曲标题（必填）', s['title'])
+    setv('表演者（必填）', artist)
+    setv('词作者（必填）', artist)
+    setv('曲作者（必填）', artist)
+    setv('上架时间（选填）', '审核通过立即上架')
+    setv('歌词路径（选填）', f'{rel_root}/{s["name"]}/歌词/' + os.path.basename(s['lyric']) if s['lyric'] else '')
+    setv('专辑封面（必填）', f'{rel_root}/{s["name"]}/Cover/' + os.path.basename(s['cover']) if s['cover'] else '')
+    setv('专辑名称（必填）', f'{artist}专辑')
+    setv('专辑歌手（必填）', artist)
+    setv('是否已发行（必填）', '否')
+
+# 只保留数据行数 + 表头
+wb.save(out_xlsx)
+print(f'✅ 已生成: {out_xlsx}')
+print(f'   共 {len(songs)} 首歌，艺人: {artist}')
+print('   待补：表演者 UID、ISRC、授权证明等（见平台模板备注）')
+PYEOF
+}
+
+# ── 按歌词意境生成专属封面（museav 出图） ──
+cmd_cover() {
+  local clip_id="${1:?用法: voxpublish cover <clip_id> [--prompt ...]}"
+  shift
+  # 收集歌词（从 Suno 拉）作为意境参考
+  local lyrics
+  lyrics=$("$SUNO_BIN" info "$clip_id" 2>/dev/null | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print((d.get('data',{}).get('metadata',{}).get('prompt') or '')[:300])
+" 2>/dev/null || echo "")
+  local prompt="${*:-}"
+  if [ -z "$prompt" ]; then
+    prompt="网易云音乐风格的歌曲封面插画，1:1 方形。歌词意境参考：${lyrics:-（无歌词）}。整体氛围清冷有诗意，构图干净留白，高级感专辑封面质感，画面下方留出干净区域适合放歌名"
+  fi
+  log "🎨 用 museav 生成封面..."
+  log "   prompt: ${prompt:0:80}..."
+  local url
+  url=$(museav gen -p "$prompt" --ratio 1:1 --model gpt-image-2 --quality high 2>/dev/null | tail -1)
+  [ -n "$url" ] || die "museav 出图失败（看 stderr）"
+  log "   成图: $url"
+  # 下载 + 处理 1440x1440
+  local tmp
+  tmp=$(mktemp -d)
+  curl -s -o "$tmp/cover.png" "$url"
+  sips -z 1440 1440 "$tmp/cover.png" --out "$tmp/cover.jpg" >/dev/null 2>&1 || cp "$tmp/cover.png" "$tmp/cover.jpg"
+  # 找到该 clip 对应的歌名子目录（pack 后会有 meta.json 标记 clip_id）
+  local song_root target
+  target=""
+  for d in "$PUBLISH_ROOT"/*/*/; do
+    if [ -f "$d/meta.json" ] && grep -q "$clip_id" "$d/meta.json" 2>/dev/null; then
+      target="$d"; break
+    fi
+  done
+  song_root="$target"
+  if [ -n "$song_root" ]; then
+    mkdir -p "$song_root/Cover"
+    cp "$tmp/cover.jpg" "$song_root/Cover/封面.jpg"
+    log "   ✅ 已替换: ${song_root}Cover/封面.jpg"
+  else
+    log "   ⚠️ 没找到该歌的打包目录，封面已存: $tmp/cover.jpg"
+  fi
+  rm -rf "$tmp"
+  echo "$url"
+}
+
+case "${1:-}" in
+  list)  cmd_list ;;
+  pack)  cmd_pack "${2:-}" ;;
+  cover) cmd_cover "${2:-}" "${@:3}" ;;
+  excel) cmd_excel "${2:-}" ;;
+  *) cat <<'EOF'
+voxpublish — 批量发布打包工具（抖音/汽水音乐）
+
+用法:
+  voxpublish list                         列出 Suno 歌曲
+  voxpublish pack <clip_id>               打包单曲（拉元数据+歌词+音频）
+  voxpublish cover <clip_id> [--prompt]   按歌词意境用 museav 生成专属封面（替换默认封面）
+  voxpublish excel <日期目录>             为已打包目录生成 Excel 引入模板
+
+环境变量:
+  ARTIST_NAME=月栖洲   RELEASE_TYPE=抖音及其旗下产品
+  MUSIC_TYPE=原创      PLATFORMS=网易云音乐   COVER_IMG=/path/cover.jpg
+EOF
+    ;;
+esac
