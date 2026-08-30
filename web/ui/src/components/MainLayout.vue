@@ -130,21 +130,24 @@
                   <span class="persona-name">{{ p.name }}</span>
                   <span class="persona-key">{{ key }}</span>
                 </div>
-                
-                <p class="persona-desc">{{ p.instruction || '暂无描述' }}</p>
-                
+
+                <!-- desc 是人写的描述，instruction 是送给模型的基础指令 ——
+                     两回事。以前这里只显示 instruction，于是「描述」这一栏
+                     写的其实是技术参数。 -->
+                <p class="persona-desc">{{ p.desc || p.instruction || '暂无描述' }}</p>
+
                 <div class="persona-footer-row" @click.stop>
                   <n-space size="small">
-                    <n-tag v-if="p.has_ref" type="success" size="mini" round>✓ 样音</n-tag>
-                    <n-tag v-else type="error" size="mini" round>✗ 无样音</n-tag>
+                    <n-tag v-if="p.has_audio" type="success" size="small" round>✓ 样音</n-tag>
+                    <n-tag v-else type="error" size="small" round>✗ 无样音</n-tag>
                   </n-space>
-                  
+
                   <div class="persona-actions">
-                    <n-button 
-                      v-if="p.has_ref" 
-                      circle 
-                      size="tiny" 
-                      type="primary" 
+                    <n-button
+                      v-if="p.has_audio"
+                      circle
+                      size="tiny"
+                      type="primary"
                       secondary
                       @click="togglePreview(key)"
                     >
@@ -152,13 +155,18 @@
                         {{ previewKey === key ? '⏸' : '▶' }}
                       </template>
                     </n-button>
-                    <n-button 
-                      v-if="p.source === 'user'" 
-                      circle 
-                      size="tiny" 
-                      type="error" 
+                    <n-button circle size="tiny" secondary @click="openEditPersona(key)">
+                      ✎
+                    </n-button>
+                    <!-- 这里原来是 v-if="p.source === 'user'"，而后端返回的
+                         source 一直是 'registered' —— 条件永不成立，删除按钮
+                         从来没出现过。不报错，就是不显示，最难查的那一类。 -->
+                    <n-button
+                      circle
+                      size="tiny"
+                      type="error"
                       secondary
-                      @click="deletePersona(key)"
+                      @click="confirmDeletePersona(key, p)"
                     >
                       🗑️
                     </n-button>
@@ -212,6 +220,11 @@
 
       <!-- 添加音色弹窗 -->
       <AddPersonaModal v-model:show="showAddPersona" />
+      <EditPersonaModal
+        v-model:show="showEditPersona"
+        :persona-key="editingKey"
+        :persona="personas[editingKey] || {}"
+      />
 
       <!-- 隐藏的样音试听播放器 -->
       <audio 
@@ -241,6 +254,7 @@ import LibraryTab from '../tabs/LibraryTab.vue';
 import GlobalPlayer from './GlobalPlayer.vue';
 import TaskPanel from './TaskPanel.vue';
 import AddPersonaModal from './AddPersonaModal.vue';
+import EditPersonaModal from './EditPersonaModal.vue';
 import { useCapabilitiesStore } from '../stores/capabilities';
 import { useLibraryStore } from '../stores/library';
 import { useSunoStore } from '../stores/suno';
@@ -250,6 +264,8 @@ import { useVoicesStore } from '../stores/voices';
 
 const currentTab = ref('clone');
 const showAddPersona = ref(false);
+const showEditPersona = ref(false);
+const editingKey = ref('');
 const capabilitiesStore = useCapabilitiesStore();
 const libraryStore = useLibraryStore();
 const sunoStore = useSunoStore();
@@ -260,6 +276,34 @@ const { capBadges } = storeToRefs(capabilitiesStore);
 const { globalLoading, globalLoadingText } = storeToRefs(tasksStore);
 const { personas, selectedPersona, previewKey, previewProgress, previewPlayer } = storeToRefs(voicesStore);
 const { selectPersona, togglePreview, onPreviewProgress, onPreviewEnded, deletePersona } = voicesStore;
+
+const openEditPersona = (key) => {
+  editingKey.value = key;
+  showEditPersona.value = true;
+};
+
+/**
+ * 删音色前问一句。
+ *
+ * 删的只是 personas.json 里的登记，参考音频文件不动 —— 这一点要在弹窗里
+ * 说清楚，否则「删除」看起来像是要把素材一起毁掉，没人敢点。
+ */
+const confirmDeletePersona = (key, p) => {
+  window.$dialog.warning({
+    title: `删除音色「${p?.name || key}」？`,
+    content: '只删除音色登记，参考音频文件保留在 assets/ 下，之后可以重新注册。',
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await deletePersona(key);
+        tasksStore.showToast('已删除', 'success');
+      } catch (cause) {
+        tasksStore.showToast(cause.message || '删除失败', 'error');
+      }
+    },
+  });
+};
 
 let statusInterval;
 let capsInterval;

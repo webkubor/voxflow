@@ -82,6 +82,31 @@ export const useVoicesStore = defineStore('voices', () => {
     }
   };
 
+  /**
+   * 改名字 / 改描述。
+   *
+   * 名字跟文件路径已经解耦（后端只从 ref 字段读音频），所以这里就是改两个
+   * 字段，不会牵动任何文件 —— 想叫什么叫什么，中文、空格、标点都行。
+   */
+  const updatePersona = async (key, { name, desc }) => {
+    error.value = '';
+    try {
+      const body = new FormData();
+      // 只提交真正要改的字段：desc 允许改成空串（清空描述），
+      // 所以判 undefined 不判真值，否则清空这个操作会被吞掉。
+      if (name !== undefined) body.append('name', name);
+      if (desc !== undefined) body.append('desc', desc);
+      const res = await fetch(`/api/personas/${encodeURIComponent(key)}`, { method: 'PATCH', body });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || data.detail || '保存失败');
+      await loadPersonas();
+      return data;
+    } catch (cause) {
+      error.value = cause.message;
+      throw cause;
+    }
+  };
+
   const addPersona = async (formData) => {
     error.value = '';
     try {
@@ -98,6 +123,7 @@ export const useVoicesStore = defineStore('voices', () => {
 
   return {
     personas, selectedPersona, previewKey, previewProgress, previewPlayer, error,
-    loadPersonas, selectPersona, togglePreview, onPreviewProgress, onPreviewEnded, deletePersona, addPersona,
+    loadPersonas, selectPersona, togglePreview, onPreviewProgress, onPreviewEnded,
+    deletePersona, addPersona, updatePersona,
   };
 });
