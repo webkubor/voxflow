@@ -2,24 +2,29 @@
  * 作品流水线看板状态。
  * API：GET /api/pipeline、POST /api/pipeline/stage、/track、/platform
  */
-import { reactive, ref } from 'vue';
+import { ref } from 'vue';
 import { defineStore } from 'pinia';
+import type {
+  Album, PipelineResponse, PlatformAccount, PlatformKey, Stage, Track,
+} from '../types/api';
 
 export const usePipelineStore = defineStore('pipeline', () => {
-  const stages = ref([]);
-  const stageLabels = ref({});
-  const platforms = ref([]);
-  const summary = ref({});
-  const tracks = ref([]);            // 流水线作品：走到哪一步
+  const stages = ref<Stage[]>([]);
+  const stageLabels = ref<Record<string, string>>({});
+  // 平台是**对象**不是数组 —— 模板里遍历要用 (值, 键)。
+  // 上一版按数组遍历，复选框 value 是 undefined，勾了等于没勾。
+  const platforms = ref<PipelineResponse['platforms']>({} as PipelineResponse['platforms']);
+  const summary = ref<Record<string, number>>({});
+  const tracks = ref<Track[]>([]);   // 流水线作品：走到哪一步
   // 云备份台账是另一份数据（同一批歌，但字段是「备份在哪」不是「走到哪步」）。
   // 曾经跟 tracks 共用一个 ref —— 两个接口写同一个字段、结构还不一样，
   // 谁后加载谁把对方覆盖掉，表现为「看板刷新一下内容就变了」。
-  const backupTracks = ref([]);
-  const publishAccounts = ref([]);
+  const backupTracks = ref<Track[]>([]);
+  const publishAccounts = ref<PlatformAccount[]>([]);
   const artist = ref(null);
   const error = ref('');
 
-  const request = async (url, method = 'GET', body) => {
+  const request = async <T = any>(url: string, method = 'GET', body?: unknown): Promise<T> => {
     error.value = '';
     try {
       const res = await fetch(url, body === undefined ? { method } : {
@@ -29,13 +34,13 @@ export const usePipelineStore = defineStore('pipeline', () => {
       if (!res.ok || data.ok === false) throw new Error(data.error || data.detail || '流水线操作失败');
       return data;
     } catch (cause) {
-      error.value = cause.message;
+      error.value = (cause as Error).message;
       throw cause;
     }
   };
 
   const loadPipeline = async () => {
-    const data = await request('/api/pipeline');
+    const data = await request<PipelineResponse>('/api/pipeline');
     stages.value = data.stages || [];
     stageLabels.value = data.stage_labels || {};
     platforms.value = data.platforms || [];
@@ -44,9 +49,9 @@ export const usePipelineStore = defineStore('pipeline', () => {
     return data;
   };
 
-  const setStage = (trackId, stage) => request('/api/pipeline/stage', 'POST', { track_id: trackId, stage });
-  const upsertTrack = (track) => request('/api/pipeline/track', 'POST', track);
-  const setPlatformStatus = (platform) => request('/api/pipeline/platform', 'POST', platform);
+  const setStage = (trackId: string, stage: Stage) => request('/api/pipeline/stage', 'POST', { track_id: trackId, stage });
+  const upsertTrack = (track: Partial<Track>) => request('/api/pipeline/track', 'POST', track);
+  const setPlatformStatus = (platform: { track_id: string; platform: PlatformKey; status: string }) => request('/api/pipeline/platform', 'POST', platform);
   const loadPublishBoard = async () => {
     const data = await request('/api/publish-board');
     publishAccounts.value = data.accounts || [];

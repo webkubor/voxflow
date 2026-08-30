@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/branding/logo-icon.png" width="132" alt="VoxFlow 声流" />
+  <img src="assets/branding/logo-icon.png" width="120" alt="VoxFlow 声流" />
 </p>
 
 <h1 align="center">VoxFlow 声流</h1>
@@ -14,261 +14,171 @@
 </p>
 
 <p align="center">
-  <b>本地运行的中文语音克隆 + 音色设计工具台。</b>
+  <b>本地运行的中文语音克隆、音色设计与全网音乐发行工作台。</b>
   <br />
-  一条命令出音频，<b>不联网、不要 API Key、音频永不上传</b>。
+  一条命令合成音频，<b>不联网、无需商业 API Key、私密音频永不离机</b>。
   <br />
-  给人用，也给 AI / Agent 直接调用。
+  面向创作者、独立音乐人，以及 AI / Agent 自动化工作流。
 </p>
 
 <p align="center">
-  <a href="#-一分钟装好"><strong>装</strong></a> ·
-  <a href="#-和其它方案的区别"><strong>差异对比</strong></a> ·
-  <a href="#-三种核心模式"><strong>核心模式</strong></a> ·
-  <a href="#-给-ai--agent-调用"><strong>Agent 调用</strong></a> ·
-  <a href="README_EN.md"><strong>English</strong></a>
+  <a href="#-快速开始"><strong>快速开始</strong></a> ·
+  <a href="#-核心能力与命令"><strong>核心命令</strong></a> ·
+  <a href="#-web-ui-工作台"><strong>Web 工作台</strong></a> ·
+  <a href="#-全网音乐发行集成"><strong>全网发行</strong></a> ·
+  <a href="#-agent--ai-调用"><strong>Agent 调用</strong></a>
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/web-ui-main.png" width="860" alt="VoxFlow Web UI" />
+  <img src="assets/screenshots/web-ui-main.png" width="860" alt="VoxFlow 现代音频工作台" />
 </p>
 
 ---
 
-## ⚖️ 和其它方案的区别
+## ⚖️ 核心优势与方案对比
 
-| | ElevenLabs | 云 TTS（阿里/腾讯/Azure） | 剪映配音 | **VoxFlow** |
-|---|:---:|:---:|:---:|:---:|
-| 音频上传服务器 | ✅ 要 | ✅ 要 | ✅ 要 | ❌ **全程本地** |
-| 声音克隆 | ✅ | ⚠️ 多需企业认证 | ❌ | ✅ 一段样音即可 |
-| **文字描述造音色** | ⚠️ 有限 | ❌ | ❌ | ✅ **不需要任何参考音频** |
-| 按量计费 | ✅ | ✅ | 免费但限平台内 | ❌ **一次装好，之后免费** |
-| 可脚本化 / Agent 调用 | ✅ API | ✅ API | ❌ | ✅ CLI + HTTP API |
-| 中文表现 | 良 | 优 | 优 | 优（Qwen3-TTS） |
-| 前置成本 | 注册 + 付费 | 注册 + 实名 | 装客户端 | **下 4.2GB 模型** |
-
-**最实在的差异是第一行**：克隆真人声音时，样音要不要交给别人的服务器。
-做 IP 角色音、给客户配音、处理未公开的素材时，这条往往不是偏好问题而是合规问题。
-
-**第三行是能力上的差异**：VoiceDesign 能用「低沉沙哑的中年男声」这样一句话凭空造出音色，
-不需要任何参考音频 —— 想要一个不存在的人的声音时，只有这条路。
-
-> 换个角度：如果你只是偶尔配几句、不在乎音频上传，云服务更省事。
-> VoxFlow 的价值在**批量**（不计次收费）与**私密**（音频不出本机）这两件事上。
+| 特性 | ElevenLabs / 商业云 | 剪映配音 / 在线平台 | **VoxFlow 声流** |
+|---|:---:|:---:|:---:|
+| **音频隐私安全** | ❌ 必须上传云端 | ❌ 依赖平台服务器 | 🛡️ **全程本地运行，绝不出机** |
+| **声音克隆** | ⚠️ 按月订阅 / 计次计费 | ❌ 不支持自定义 | ✅ **一段 5~10 秒样音即刻克隆** |
+| **文字描述造音色** | ⚠️ 支持有限 | ❌ 无此能力 | 🎨 **无需参考音，一句话提示词凭空捏音** |
+| **持续使用成本** | 💸 按 Token/字符持续扣费 | 🔒 绑定特定生态 | 🎁 **一次部署，永久免费** |
+| **全网发行集成** | ❌ 需手动分发 | ❌ 仅限内置分发 | 🚀 **汽水音乐 / QQ音乐 / 网易云发行台账集成** |
+| **开发与自动化** | ✅ REST API | ❌ 封闭 GUI | ⚡ **统一 CLI + FastAPI 后端 + Agent Skill** |
 
 ---
 
-## 📦 一分钟装好
+## 🚀 快速开始
+
+### 1. 一键安装与环境初始化
 
 ```bash
+# 克隆仓库
 git clone https://github.com/webkubor/voxflow.git
 cd voxflow
+
+# 运行自动化安装脚本（自动创建 .venv、安装依赖并下载基础模型）
 chmod +x install.sh && ./install.sh
+
+# 激活虚拟环境
 source .venv/bin/activate
-voice --help
+
+# 查看环境就绪状态
+voice doctor
 ```
 
-脚本自动完成：创建 `.venv` → 安装 Python 依赖 → 下载 Base 模型；交互安装时可选择是否继续下载 VoiceDesign 模型。
-
-### 运行环境与依赖
-
-| 项目 | 要求 / 说明 |
-|:---|:---|
-| 操作系统 | **macOS Apple Silicon 为一等支持平台**；没有 MPS 时会回退到 CPU，推理会明显变慢。 |
-| Python | 3.10–3.13（项目最低要求为 3.10）。 |
-| 磁盘 | Base-1.7B 与 VoiceDesign-1.7B 模型各约 4.2GB；仅克隆合成只需要 Base。 |
-| FFmpeg | 建议安装，用于 MP3 参考音频与自动裁剪；macOS：`brew install ffmpeg`。 |
-| Node.js / npm | 日常运行已构建的 Web UI 不需要；修改或重新构建前端时需要（在 `web/ui` 执行 `npm install && npm run build`）。 |
-
-`install.sh` 会安装项目 Python 包、`pydub` 和 `modelscope`。手动安装或 `voice doctor` 提示缺少 PyTorch 时，在已激活的虚拟环境中执行：
-
-```bash
-pip install -e .
-pip install modelscope torch torchaudio
-```
-
----
-
-## ⚡ 真实效果
-
-```bash
-# 克隆已有角色音色生成台词
-voice clone narrator "霜叶红于二月花，山色空蒙雨亦奇"
-# → out/narrator_20260421_143201.wav  [2.3s]
-
-# 用文字描述设计新音色
-voice design xiao_jing "这是一段建模短句" --tone "温柔、清晰、偏少女"
-# → voice 'xiao_jing' saved to personas.json
-
-# 多角色对白（配置驱动）
-voice dialogue configs/dialogue.json
-# → out/ 下按行生成并合并
-
-# 跑现成的武侠预设
-voice preset list                # 看 configs/presets/ 里有哪些
-voice preset run 武侠_老朽_江湖啊
-```
-
----
-
-## 🧩 当前能力
-
-| 功能 | 状态 | 命令 / 入口 |
-|:---|:---:|:---|
-| 声音克隆（角色复用） | ✅ | `voice clone <persona> "台词"` / Web UI「克隆合成」 |
-| 音色设计（文字描述） | ✅ | `voice design <name> "短句" --tone` / Web UI「音色设计」 |
-| 多角色对话生成 | ✅ | `voice dialogue configs/dialogue.json` / Web UI「多角色对话」 |
-| 预设任务 | ✅ | `voice preset list` / `voice preset run <名>` |
-| 音色列表管理 | ✅ | `voice voice list` |
-| **Web UI** | ✅ | `voice web` → http://localhost:8866 |
-| 文案库（持久化常用台词） | ✅ | Web UI「克隆合成」文案 chip 条 |
-| 异步任务队列（进度可见） | ✅ | Web UI 右下角任务队列 |
-| 模型状态与下载进度 | ✅ | Web UI 顶部状态栏 |
-| 环境自检 | ✅ | `voice doctor`（含 LLM 后端连通性检测） |
-| Agent 无交互安装 | ✅ | `./install.sh --yes` |
-| **AI 文案生成 / 润色** | ✅ | `voice ai-script` / `voice ai-polish` / Web UI AI 助手（可选 OpenAI 兼容后端） |
-
----
-
-## 🖥 Web UI
+### 2. 启动 Web UI 创作工作台
 
 ```bash
 voice web
-# → http://localhost:8866
+# → 浏览器访问 http://localhost:8866
 ```
 
-### 界面预览
+---
 
-<p align="center">
-  <img src="assets/screenshots/web-ui-clone-workflow.png" width="100%" alt="克隆合成 + 文案库 + 任务队列"/>
-  <br/>
-  <img src="assets/screenshots/web-ui-voice-design.png" width="100%" alt="音色设计 + 预设配方"/>
-</p>
+## ⚡ 核心能力与命令
 
-### 🎛 三种核心模式
+VoxFlow 提供现代化 Typer CLI 工具链，支持本地音频处理全流程：
 
-| 模式 | 作用 | 典型流程 |
-|:---|:---|:---|
-| **音色库** | 管理已有音色 persona | 上传参考音频 → 自动注册命名 → 左侧点击试听 / 切换 |
-| **克隆合成** | 用已有音色生成台词 | 选音色 → 输入 / 选择文案 → 异步合成 → 在线试听 / 下载 |
-| **音色设计** | 用文字描述创造新音色 | 填音色名称、建模短句、音色描述 → 一键生成 → 入库复用 |
-| **多角色对话** | 将 JSON 剧本批量合成为一条音频 | 在 Web UI 填写剧本，或运行 `voice dialogue <配置文件>` |
-
-### 辅助模块
-
-- **文案库**：常用台词保存在 `configs/scripts.json`，切换音色时文案不丢失，点击 chip 条一键载入。
-- **音频库**：历史生成列表，支持播放、下载、删除。
-- **任务队列**：克隆 / 设计 / 对话均为后台异步任务，带进度条，UI 不阻塞，可随时查看队列状态。
-- **模型状态栏**：顶部实时显示 Base / VoiceDesign 模型下载状态（未下载 / 下载中 / 已就绪），模型未就绪时对应功能自动禁用。
-- **AI 文案助手**：接入任意 OpenAI 兼容后端后，可在克隆合成 Tab 中生成或润色文案。未接入时功能自动隐藏，不影响核心 TTS 流程。
-
-### AI 文案助手（可选）
-
-VoxFlow 通过 OpenAI 兼容协议接入 AI 文案后端。默认指向本地 [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi)，也可改接自己的网关或中台。
+### 🎙️ 1. 声音克隆 (Voice Clone)
+使用已有音色角色批量合成台词文本：
 
 ```bash
-# 1. 安装并启动 FreeLLMAPI（可选，Docker 一键启动）
-curl -fsSL https://freellmapi.co/install.sh | bash
+# 基础克隆
+voice clone narrator "霜叶红于二月花，山色空蒙雨亦奇"
 
-# 2. 或指定任意 OpenAI 兼容后端
-export VOXFLOW_LLM_BASE_URL="https://your-gateway.example/v1"
-export VOXFLOW_LLM_API_KEY="通过环境变量注入"
-export VOXFLOW_LLM_MODEL="your-model"
-
-# 3. 在 VoxFlow 中使用
-voice ai-script "写一段武侠旁白，讲剑客归隐山林" --words 200
-voice ai-polish "霜叶红于二月花" --style "更激昂"
-
-# 或在 Web UI → 克隆合成 → AI 文案助手
+# 指定语气与情绪修饰
+voice clone xiao_jing "今天天气真好，我们一起去散步吧！" --tone "轻快活泼" --emotion "happy" -o out/morning.wav
 ```
 
-不配置 LLM 后端也不影响核心 TTS 功能，AI 助手会显示「未连接」并禁用。
+### 🎨 2. 音色设计 (Voice Design)
+**无需任何参考音频**，仅通过自然语言描述创造专属音色：
+
+```bash
+# 通过文字描述设计新音色并入库
+voice design sword_master "十步杀一人，千里不留行。" --tone "苍劲豪迈的江湖侠客，沉稳威严"
+```
+
+### 📜 3. 多角色对白合成 (Dialogue)
+根据剧本配置文件一键批量合成完整对话音轨：
+
+```bash
+voice dialogue configs/dialogue.json -o out/story_episode_1.wav
+```
+
+### 📦 4. 音色库管理 (Voice Assets)
+
+```bash
+voice voice list                        # 查看本地所有已注册音色
+voice voice add my_voice sample.wav     # 从参考音频注册新音色
+voice voice preview narrator            # 试听音色预设样音
+voice voice rm old_voice                # 删除指定音色
+```
 
 ---
 
-## 🧠 为什么选 Qwen3-TTS
+## 🖥 Web UI 工作台
 
-- 中文 52 种方言支持（普通话 / 粤语 / 闽南语 / 吴语…）
-- Apple Silicon MPS 加速，M 系芯片本地实时推理
-- 完全开源，不需要联网，不需要 API Key
+VoxFlow 内置高对比、纯净深色的现代音频创作界面：
+
+<p align="center">
+  <img src="assets/screenshots/web-ui-clone-workflow.png" width="100%" alt="VoxFlow 声音克隆与工作台"/>
+</p>
+
+- **音色工坊**：左侧统一管理所有已装载的音色艺人，支持快捷试听波形律动与样音状态。
+- **创作控制台**：包含快速氛围预设（温柔治愈 / 激情旁白 / 午夜低语 / 武侠江湖）、情绪优先级控制与草稿箱管理。
+- **全网发行枢纽**：直连 **汽水音乐、QQ音乐、网易云音乐** 发行台账，管理歌手档案、歌曲 ID 映射及平台元数据。
+- **媒体资产库**：历史音频一键在线试听、波形查看与批量物理下载。
+- **全定制纯净播放器**：完全剔除原生浏览器控件，提供极细时间轨、高精度拖拽定位与无损播放。
 
 ---
 
-## 📁 项目结构
+## 🌐 全网音乐发行集成
+
+VoxFlow 不仅是语音合成引擎，更是面向独立创作者的**音乐与音频发行管理中枢**：
+
+- **歌手身份台账 (`configs/artist.json`)**：统一维护公开艺名、实名版权主体、各平台主页与平台歌手 ID。
+- **多平台数据对齐**：支持自动解析与校验汽水音乐、QQ 音乐、网易云音乐已上架曲目 ID 与播放外链。
+- **标准分发规范**：一键打包 Audio、Cover 与歌词 Meta 资产包，对齐各大音乐发行渠道规范。
+
+---
+
+## 🤖 Agent / AI 自动化调用
+
+VoxFlow 原生面向自动化 Agent 体系设计：
+
+### 1. 无交互自动化部署 (CI/CD)
+
+```bash
+./install.sh --yes                      # 全自动安装：依赖 + Base + VoiceDesign 模型
+./install.sh --yes --skip-voice-design  # 仅装依赖与 Base 模型（省 4.2GB）
+```
+
+### 2. 环境诊断与健康检查
+
+```bash
+voice doctor           # 终端表格检查报告
+voice doctor --json    # 输出 JSON 格式供 Agent 决策解析
+```
+
+---
+
+## 📁 项目架构
 
 ```
 voxflow/
-├── cli/            # CLI 入口与子命令
-├── core/           # 语音引擎 / 模式调度 / 音频处理
-├── web/            # Web UI（FastAPI + 前端单页）
-├── configs/        # 运行配置与 personas 映射
-├── assets/         # 参考音频 / 标准样音 / 产出
-├── models/         # 本地模型目录
-└── out/            # 默认输出目录
+├── cli/            # Typer CLI 命令入口 (clone / design / dialogue / web / doctor 等)
+├── core/           # 核心业务引擎 (克隆器 / 提示词设计 / 数据库 / 管道分发)
+├── web/            # FastAPI 后端路由与静态服务
+│   ├── app.py      # RESTful API 端点 (合成、音色、艺人档案、任务队列)
+│   └── ui/         # Vue 3 + Pinia + Vite 现代纯黑工作台前端源码
+├── configs/        # 平台 SOP、模板及初始配置
+└── assets/         # 品牌图标与官方工作台截图
 ```
 
 ---
 
-## 🤖 给 AI / Agent 调用
+## 📄 开源协议
 
-### 无交互安装
-
-Agent / CI/CD 场景下，一条命令全自动安装，不弹任何确认：
-
-```bash
-./install.sh --yes                    # 全自动：依赖 + Base + VoiceDesign 模型
-./install.sh --yes --skip-voice-design  # 仅依赖 + Base 模型（省 4GB）
-./install.sh --yes --skip-models        # 仅装依赖，不下载模型
-```
-
-### 环境自检
-
-Agent 调用前先跑 `voice doctor` 确认环境就绪，支持 `--json` 输出方便解析：
-
-```bash
-voice doctor           # 人类可读表格报告
-voice doctor --json    # JSON 格式（agent 解析）
-voice doctor --fix     # 尝试自动修复
-```
-
-检查项：Python 版本、虚拟环境、12 个核心依赖、PyTorch 硬件加速（MPS/CUDA）、qwen_tts SDK、模型完整性、FFmpeg、目录结构、音色库、CLI 入口、Web UI 依赖、预设配方。
-
-### Agent 调用示例
-
-项目根目录提供 `.claude/skills/tts.md`，Claude Code 可以直接读取后无歧义执行 TTS 任务：
-
-```bash
-# Claude Code 调用示例
-voice clone <persona> "<台词>" -o <output.wav>
-```
-
-Agent 调用前请先确认 `source .venv/bin/activate` 已执行，或使用 `.venv/bin/voice`。
-
----
-
-## 🗺 路线图
-
-- [x] Phase 1 — 命名统一、README 清晰化
-- [x] Phase 2a — CLI 稳定（clone / design / dialogue / voice list / preset）
-- [x] dialogue CLI 与 Web UI 对话页
-- [x] Phase 2b — `voice doctor` 环境自检
-- [x] Phase 3 — WebUI MVP（上传音频 / 试听 / 下载）
-- [x] Phase 4 — Agent 无交互安装模式
-
----
-
-## 👤 适合谁
-
-- 本地跑中文配音的创作者（有声书 / 短剧 / 游戏 NPC）
-- 想把配音流程接给 AI 助手的开发者
-- 武侠 / 古风 / 方言内容生产者
-
----
-
-## 📄 License
-
-Apache-2.0 · 基于 Qwen3-TTS 二次开发
-
----
-
-**完整命令参考 → [docs/COMMANDS.md](docs/COMMANDS.md)**
+本项目采用 **Apache-2.0** 许可证开源。
+底层语音建模基于 Qwen3-TTS 深度定制开发。
