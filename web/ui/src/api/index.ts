@@ -34,15 +34,18 @@ import type {
 /**
  * 统一实例。
  *
- * - `prefix: 'api'` —— 端点写 `pipeline` 而不是 `/api/pipeline`，
+ * - `prefix: '/api'` —— 端点写 `pipeline` 而不是 `/api/pipeline`，
  *   前缀改了只动这一处。
+ *   **必须带前导斜杠**：ky 是「把 prefix 和输入拼成字符串」再交给 fetch
+ *   解析的，写 `'api'` 是相对路径，按页面地址解析 —— vite base 是
+ *   `/static/`，dev 模式页面地址就是 `/static/`，于是所有请求都打到
+ *   `/static/api/...` 然后 404，整页加载失败（能力/模型/音色库全挂）。
+ *   带前导斜杠则永远按 origin 解析：dev（5173 代理到后端）和生产都正确。
  * - `timeout` 20 秒：本地服务，比这久基本就是挂了；无限等只会让页面一直转。
  * - `retry` 只对幂等方法生效（ky 默认不重试 POST），够用。
  */
 const http = ky.create({
-  // ky 2.x 把 prefixUrl 改名成了 prefix —— 类型检查一秒抓到，
-  // 换 JS 就是运行时所有请求打到根路径上，全 404
-  prefix: 'api',
+  prefix: '/api',
   timeout: 20_000,
   retry: { limit: 2, methods: ['get'] },
 });
