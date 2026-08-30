@@ -110,3 +110,6 @@ publish/2*/
 publish/covers/
 # 但模板要进 git —— 它是项目资产不是产物，丢了打包会在最后一步失败
 !publish/templates/
+
+# 艺人档案含真实姓名，属于个人信息，不进仓库
+configs/artist.json
