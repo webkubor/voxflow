@@ -1,6 +1,9 @@
 <template>
   <n-spin :show="globalLoading" :description="globalLoadingText" size="large" style="min-height: 100vh;">
-    <n-layout style="height: 100vh; display: flex; flex-direction: column;">
+    <n-layout style="height: 100vh; display: flex; flex-direction: column; position: relative; overflow: hidden;">
+      <!-- 底层极光液态流光球 -->
+      <div class="glass-glow-blob blob-1"></div>
+      <div class="glass-glow-blob blob-2"></div>
       <!-- Header 顶部栏 -->
       <n-layout-header bordered class="app-header">
         <div class="header-left">
@@ -493,8 +496,9 @@ onBeforeUnmount(() => {
 }
 
 .persona-card.is-selected {
-  border-color: var(--vf-ok);
-  background-color: #1c2620;
+  border-color: var(--vf-primary) !important;
+  background-color: rgba(129, 140, 248, 0.08) !important;
+  box-shadow: 0 0 16px rgba(129, 140, 248, 0.16) !important;
 }
 
 /* 播放进度背景 */
@@ -503,7 +507,7 @@ onBeforeUnmount(() => {
   top: 0;
   left: 0;
   height: 100%;
-  background-color: rgba(24, 160, 88, 0.08);
+  background-color: rgba(129, 140, 248, 0.12);
   pointer-events: none;
   transition: width 0.1s linear;
 }
@@ -555,5 +559,42 @@ onBeforeUnmount(() => {
 .persona-actions {
   display: flex;
   gap: 6px;
+}
+
+/* 底层极光液态流光球 */
+.glass-glow-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.35;
+  z-index: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+.blob-1 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(129, 140, 248, 0.6) 0%, rgba(99, 102, 241, 0) 70%);
+  top: 10%;
+  left: 20%;
+  animation: float-blob-1 25s infinite alternate ease-in-out;
+}
+.blob-2 {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(236, 72, 153, 0.4) 0%, rgba(236, 72, 153, 0) 70%);
+  bottom: 15%;
+  right: 15%;
+  animation: float-blob-2 30s infinite alternate ease-in-out;
+}
+@keyframes float-blob-1 {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(100px, 80px) scale(1.2); }
+  100% { transform: translate(-50px, 150px) scale(0.9); }
+}
+@keyframes float-blob-2 {
+  0% { transform: translate(0, 0) scale(1.1); }
+  50% { transform: translate(-120px, -60px) scale(0.8); }
+  100% { transform: translate(80px, -120px) scale(1.2); }
 }
 </style>

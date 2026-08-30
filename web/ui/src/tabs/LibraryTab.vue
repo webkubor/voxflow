@@ -145,8 +145,20 @@ const formatTime = (timestamp) => {
 }
 
 .audio-file-card {
-  background-color: var(--vf-bg-1);
-  border-color: var(--vf-bg-4);
+  background: rgba(22, 22, 26, 0.48) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.audio-file-card:hover {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(129, 140, 248, 0.3) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(129, 140, 248, 0.12) !important;
 }
 
 .card-filename {

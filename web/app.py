@@ -1063,6 +1063,66 @@ async def publish_board():
     return pipeline.publication_board()
 
 
+@app.get("/api/artist")
+async def get_artist():
+    """获取艺人档案与平台绑定信息"""
+    from core.paths import ARTIST_FILE
+    import json
+    if not ARTIST_FILE.exists():
+        return {
+            "real_name": "",
+            "stage_name": "",
+            "roles": {},
+            "platform_profiles": [],
+            "defaults": {}
+        }
+    try:
+        return json.loads(ARTIST_FILE.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(500, f"读取艺人档案失败: {str(e)}")
+
+
+class ArtistUpdateRequest(BaseModel):
+    real_name: str | None = None
+    stage_name: str | None = None
+    roles: dict | None = None
+    platform_profiles: list | None = None
+    defaults: dict | None = None
+
+
+@app.post("/api/artist")
+async def update_artist(req: ArtistUpdateRequest):
+    """更新艺人档案"""
+    from core.paths import CONFIG_DIR, ARTIST_FILE
+    import json
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    
+    current_data = {}
+    if ARTIST_FILE.exists():
+        try:
+            current_data = json.loads(ARTIST_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    # 局部更新
+    if req.real_name is not None:
+        current_data["real_name"] = req.real_name
+    if req.stage_name is not None:
+        current_data["stage_name"] = req.stage_name
+    if req.roles is not None:
+        current_data["roles"] = req.roles
+    if req.platform_profiles is not None:
+        current_data["platform_profiles"] = req.platform_profiles
+    if req.defaults is not None:
+        current_data["defaults"] = req.defaults
+
+    try:
+        ARTIST_FILE.write_text(json.dumps(current_data, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {"ok": True, "artist": current_data}
+    except Exception as e:
+        raise HTTPException(500, f"保存艺人档案失败: {str(e)}")
+
+
 class PipelineStageRequest(BaseModel):
     track_id: str
     stage: str

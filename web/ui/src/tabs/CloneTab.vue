@@ -186,21 +186,25 @@ const { modelStatus } = useCapabilitiesStore();
 
 .script-chip {
   cursor: pointer;
-  background-color: var(--vf-bg-3);
-  border-color: var(--vf-bg-4);
-  transition: background-color 0.2s, border-color 0.2s;
+  background-color: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 .script-chip:hover {
-  background-color: #262630;
-  border-color: var(--vf-ok);
+  background-color: rgba(129, 140, 248, 0.12) !important;
+  border-color: var(--vf-primary) !important;
+  color: var(--vf-primary) !important;
 }
 
 .form-container {
-  background-color: var(--vf-bg-1);
-  border: 1px solid var(--vf-bg-4);
-  border-radius: 8px;
-  padding: 20px;
+  background: rgba(22, 22, 26, 0.42) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
 }
 
 .form-actions-row {

@@ -30,6 +30,13 @@ const tasksStore = useTasksStore();
 const { stages, stageLabels, platforms, summary, tracks, error } = storeToRefs(pipelineStore);
 
 const busyId = ref('');            // 正在提交的作品，避免连点
+const expanded = ref(new Set());   // 展开看详情的作品
+
+const toggleExpand = (id) => {
+  const n = new Set(expanded.value);
+  n.has(id) ? n.delete(id) : n.add(id);
+  expanded.value = n;   // 换新 Set 才触发响应式，原地 add/delete 不会
+};
 const showPublish = ref(false);    // 确认发版弹窗
 const publishTrack = ref(null);
 const pickedPlatforms = ref([]);
@@ -149,10 +156,20 @@ const statusLabel = (s) => PLATFORM_STATUS[s] || s;
     <div v-else class="track-list">
       <div v-for="t in tracks" :key="t.id" class="track">
         <div class="track-head">
-          <span class="track-title">{{ t.title }}</span>
-          <n-tag size="small" round :type="t.stage === 'published' ? 'success' : 'info'">
-            {{ t.stage_label }}
-          </n-tag>
+          <!-- 封面：有就显示，没有给个占位。作品有脸才不像台账 -->
+          <img v-if="t.cover_url" :src="t.cover_url" class="track-cover" :alt="t.title" />
+          <div v-else class="track-cover track-cover-empty">♪</div>
+
+          <div class="track-main">
+            <div class="track-title-row">
+              <span class="track-title">{{ t.title }}</span>
+              <n-tag size="small" round :type="t.stage === 'published' ? 'success' : 'info'">
+                {{ t.stage_label }}
+              </n-tag>
+            </div>
+            <p v-if="t.album_desc" class="track-desc">{{ t.album_desc }}</p>
+            <audio v-if="t.audio_url" :src="t.audio_url" controls preload="none" class="track-audio" />
+          </div>
         </div>
 
         <!-- 进度点：走过的实心，当前的高亮，没到的空心 -->
@@ -181,15 +198,49 @@ const statusLabel = (s) => PLATFORM_STATUS[s] || s;
             </n-tag>
           </n-space>
 
-          <n-button
-            v-if="nextAction(t)"
-            size="small"
-            :type="nextAction(t).type"
-            :loading="busyId === t.id"
-            @click="advance(t)"
-          >
-            {{ nextAction(t).label }}
-          </n-button>
+          <n-space size="small">
+            <n-button v-if="t.lyrics || Object.keys(t.platforms || {}).length"
+                      size="tiny" quaternary @click="toggleExpand(t.id)">
+              {{ expanded.has(t.id) ? '收起' : '详情' }}
+            </n-button>
+            <n-button
+              v-if="nextAction(t)"
+              size="small"
+              :type="nextAction(t).type"
+              :loading="busyId === t.id"
+              @click="advance(t)"
+            >
+              {{ nextAction(t).label }}
+            </n-button>
+          </n-space>
+        </div>
+
+        <!-- 详情：歌词和发布配置。默认收起 —— 一屏放六首歌，
+             全展开就没法一眼看清整体进度了 -->
+        <div v-if="expanded.has(t.id)" class="track-detail">
+          <div v-if="t.tags" class="detail-block">
+            <span class="detail-label">风格</span>
+            <span class="detail-tags">{{ t.tags }}</span>
+          </div>
+          <div v-if="t.lyrics" class="detail-block">
+            <span class="detail-label">歌词</span>
+            <pre class="detail-lyrics">{{ t.lyrics }}</pre>
+          </div>
+          <div v-for="(info, pk) in t.platforms" :key="pk" class="detail-block">
+            <span class="detail-label">{{ platformLabel(pk) }}</span>
+            <div class="detail-platform">
+              <n-tag size="small" type="warning" :bordered="false">{{ statusLabel(info.status) }}</n-tag>
+              <span v-if="info.submitted_at" class="detail-meta">提交于 {{ info.submitted_at.replace('T', ' ') }}</span>
+              <p v-if="info.note" class="detail-meta">{{ info.note }}</p>
+              <div v-if="info.config" class="detail-config">
+                <template v-for="(v, k) in info.config" :key="k">
+                  <div v-if="!k.startsWith('_') && typeof v !== 'object'" class="config-row">
+                    <span class="config-k">{{ k }}</span><span class="config-v">{{ v }}</span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -267,11 +318,62 @@ const statusLabel = (s) => PLATFORM_STATUS[s] || s;
 }
 .track-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
   gap: var(--vf-space-3);
 }
+.track-cover {
+  width: 64px; height: 64px; flex: none;
+  border-radius: var(--vf-radius-md);
+  object-fit: cover;
+  background: var(--vf-bg-3);
+}
+.track-cover-empty {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--vf-text-3); font-size: 22px;
+}
+.track-main { flex: 1; min-width: 0; }
+.track-title-row {
+  display: flex; align-items: center; gap: var(--vf-space-2);
+  margin-bottom: var(--vf-space-1);
+}
 .track-title { font-weight: 600; color: var(--vf-text-1); }
+.track-desc {
+  margin: 0 0 var(--vf-space-2);
+  font-size: 12px; line-height: 1.6;
+  color: var(--vf-text-2);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.track-audio { width: 100%; height: 30px; margin-top: var(--vf-space-1); }
+
+.track-detail {
+  margin-top: var(--vf-space-3);
+  padding-top: var(--vf-space-3);
+  border-top: 1px solid var(--vf-border);
+  display: flex; flex-direction: column; gap: var(--vf-space-3);
+}
+.detail-block { display: flex; gap: var(--vf-space-3); font-size: 12px; }
+.detail-label {
+  flex: none; width: 56px;
+  color: var(--vf-text-3);
+}
+.detail-tags { color: var(--vf-text-2); line-height: 1.6; }
+.detail-lyrics {
+  margin: 0; flex: 1;
+  max-height: 220px; overflow-y: auto;
+  font-family: inherit; font-size: 12px; line-height: 1.8;
+  color: var(--vf-text-2);
+  white-space: pre-wrap;
+}
+.detail-platform { flex: 1; display: flex; flex-direction: column; gap: var(--vf-space-1); }
+.detail-meta { margin: 0; font-size: 11px; color: var(--vf-text-3); }
+.detail-config {
+  margin-top: var(--vf-space-1);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.config-row { display: flex; gap: var(--vf-space-2); font-size: 11px; }
+.config-k { flex: none; width: 96px; color: var(--vf-text-3); }
+.config-v { color: var(--vf-text-2); }
 
 .steps {
   display: flex;

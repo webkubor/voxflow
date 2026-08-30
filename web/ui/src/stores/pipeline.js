@@ -16,6 +16,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
   // 谁后加载谁把对方覆盖掉，表现为「看板刷新一下内容就变了」。
   const backupTracks = ref([]);
   const publishAccounts = ref([]);
+  const artist = ref(null);
   const error = ref('');
 
   const request = async (url, method = 'GET', body) => {
@@ -50,11 +51,23 @@ export const usePipelineStore = defineStore('pipeline', () => {
     const data = await request('/api/publish-board');
     publishAccounts.value = data.accounts || [];
     backupTracks.value = data.tracks || [];
+    try {
+      const artistData = await request('/api/artist');
+      artist.value = artistData;
+    } catch (e) {
+      console.warn('加载艺人档案失败', e);
+    }
+    return data;
+  };
+
+  const saveArtist = async (updatedArtist) => {
+    const data = await request('/api/artist', 'POST', updatedArtist);
+    artist.value = data.artist;
     return data;
   };
 
   return {
-    stages, stageLabels, platforms, summary, tracks, backupTracks, publishAccounts, error,
-    loadPipeline, loadPublishBoard, setStage, upsertTrack, setPlatformStatus,
+    stages, stageLabels, platforms, summary, tracks, backupTracks, publishAccounts, artist, error,
+    loadPipeline, loadPublishBoard, setStage, upsertTrack, setPlatformStatus, saveArtist,
   };
 });

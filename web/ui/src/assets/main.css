@@ -28,3 +28,201 @@ html, body {
 ::-webkit-scrollbar-thumb:hover {
   background: #44444a;
 }
+
+/* ==========================================
+   苹果风毛玻璃与液态玻璃（Glassmorphism）全局重置
+   ========================================== */
+
+/* 全局底层微调 */
+html, body {
+  background-color: #070709 !important; /* 更沉静的背景底色 */
+  overflow: hidden;
+}
+
+/* 强制使 Naive UI 的布局组件完全透明，从而露出底层的流光 */
+.n-layout,
+.n-layout-scroll-container,
+.n-layout-sider,
+.n-layout-header,
+.n-layout-content {
+  background-color: transparent !important;
+}
+
+/* 顶部 Header：极致毛玻璃质感 */
+.app-header {
+  background: rgba(10, 10, 12, 0.72) !important;
+  backdrop-filter: blur(20px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
+  position: relative;
+  z-index: 10;
+}
+
+/* 左侧 Sidebar：毛玻璃质感，边缘 1px 细线勾勒 */
+.n-layout-sider {
+  background: rgba(14, 14, 18, 0.62) !important;
+  backdrop-filter: blur(20px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+  position: relative;
+  z-index: 5;
+}
+
+/* 音色卡片：苹果悬浮毛玻璃 */
+.persona-card {
+  background: rgba(25, 25, 30, 0.42) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+  border-radius: 12px !important; /* 优雅大圆角 */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+}
+
+.persona-card:hover {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(129, 140, 248, 0.3) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(129, 140, 248, 0.12) !important;
+}
+
+/* 选中卡片的微发光渐变 */
+.persona-card.is-selected {
+  background: rgba(129, 140, 248, 0.08) !important;
+  border-color: var(--vf-primary) !important;
+  box-shadow: 0 0 16px rgba(129, 140, 248, 0.22), inset 0 0 12px rgba(129, 140, 248, 0.06) !important;
+}
+
+/* 底部播放器：毛玻璃 */
+.global-player-bar {
+  background: rgba(12, 12, 16, 0.78) !important;
+  backdrop-filter: blur(24px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(160%) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Naive UI tabs 面板与卡片升级 */
+.n-card {
+  background: rgba(22, 22, 26, 0.6) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 14px !important;
+}
+
+/* 提升主要文字的高级排版对比度（苹果排版律） */
+.app-title, h3, h2, h1 {
+  letter-spacing: -0.01em;
+}
+
+/* ==========================================
+   Naive UI 全局细节深度磨砂与苹果风微交互优化
+   ========================================== */
+
+/* 1. 全局输入框与文本域玻璃化 */
+.n-input {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 10px !important;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+}
+
+.n-input:hover {
+  border-color: rgba(129, 140, 248, 0.3) !important;
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.n-input--focus,
+.n-input:focus-within {
+  background-color: rgba(129, 140, 248, 0.02) !important;
+  border-color: var(--vf-primary) !important;
+  box-shadow: 0 0 12px rgba(129, 140, 248, 0.2) !important;
+}
+
+/* 2. Naive UI 弹出层、下拉菜单与气泡框深度毛玻璃化 */
+.n-popover, 
+.n-dropdown-menu,
+.n-select-menu,
+.n-modal,
+.n-card.n-modal {
+  background: rgba(16, 16, 22, 0.8) !important;
+  backdrop-filter: blur(28px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(160%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45) !important;
+}
+
+/* 下拉菜单项悬停蓝紫柔光 */
+.n-dropdown-option-content:hover,
+.n-select-option:hover,
+.n-select-option--selected {
+  background-color: rgba(129, 140, 248, 0.12) !important;
+  color: var(--vf-primary) !important;
+}
+
+/* 3. 折叠面板 Collapse 极简化 */
+.n-collapse, .n-collapse-item {
+  background: transparent !important;
+}
+.n-collapse-item__header {
+  padding: 12px var(--vf-space-3) !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+  border-radius: 10px !important;
+  transition: all 0.2s ease !important;
+}
+.n-collapse-item__header:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(129, 140, 248, 0.2) !important;
+}
+
+/* 4. 按钮苹果物理交互律 (按压/悬停) */
+.n-button {
+  border-radius: 10px !important;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+}
+
+/* 当按钮被点击/悬浮时有微缩放 */
+.n-button:not(.n-button--disabled):active {
+  transform: scale(0.96);
+}
+
+.n-button--primary-type {
+  box-shadow: 0 4px 12px rgba(129, 140, 248, 0.25) !important;
+}
+.n-button--primary-type:hover {
+  box-shadow: 0 6px 16px rgba(129, 140, 248, 0.4) !important;
+}
+
+/* 5. 选项卡 Tab Bar 磨砂微光 */
+.n-tabs-tab-wrapper {
+  transition: transform 0.2s !important;
+}
+.n-tabs-tab:hover {
+  transform: translateY(-1px);
+}
+.n-tabs-bar {
+  background-color: var(--vf-primary) !important;
+  box-shadow: 0 0 10px rgba(129, 140, 248, 0.5) !important;
+  height: 3px !important;
+  border-radius: 99px !important;
+}
+
+/* 6. 全局滚动条微调为细滑暗色风格 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-radius: 99px !important;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(129, 140, 248, 0.3) !important;
+}
