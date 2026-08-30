@@ -22,6 +22,7 @@
  */
 import { computed, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
+import { api, toMessage } from '../api';
 import { usePipelineStore } from '../stores/pipeline';
 import { useTasksStore } from '../stores/tasks';
 
@@ -50,6 +51,47 @@ const load = async () => {
 };
 onMounted(load);
 defineExpose({ load });
+
+// ── 从下载目录导入（Suno 下载后接管入库）──
+// 后端 /api/inbox 扫下载目录列候选、/api/inbox/import 复制入库并登记
+// generated。入口一直缺 —— 下载后的文件只会躺在 Downloads 里没人管。
+const showInbox = ref(false);
+const inboxFiles = ref([]);
+const inboxLoading = ref(false);
+const inboxImporting = ref(false);
+const pickedFiles = ref([]);
+
+const openInbox = async () => {
+  showInbox.value = true;
+  pickedFiles.value = [];
+  inboxLoading.value = true;
+  try {
+    const data = await api.inbox();
+    inboxFiles.value = data.files || [];
+  } catch (cause) {
+    tasksStore.showToast(await toMessage(cause), 'error');
+  } finally {
+    inboxLoading.value = false;
+  }
+};
+
+const doInboxImport = async () => {
+  if (!pickedFiles.value.length) {
+    tasksStore.showToast('先勾选要导入的文件', 'warning');
+    return;
+  }
+  inboxImporting.value = true;
+  try {
+    const data = await api.inboxImport(pickedFiles.value);
+    tasksStore.showToast(`已导入 ${data.count} 个文件到「已出歌」`, 'success');
+    showInbox.value = false;
+    await load();
+  } catch (cause) {
+    tasksStore.showToast(await toMessage(cause), 'error');
+  } finally {
+    inboxImporting.value = false;
+  }
+};
 
 /** 顶部计数条：只显示主流程五步，archived 不占位（那是支线不是进度）。 */
 const counters = computed(() =>
@@ -138,7 +180,10 @@ const statusLabel = (s) => PLATFORM_STATUS[s] || s;
 <template>
   <n-card title="作品流水线" size="small" class="board">
     <template #header-extra>
-      <n-button size="tiny" secondary @click="load">刷新</n-button>
+      <n-space size="small">
+        <n-button size="tiny" secondary @click="openInbox">📥 从下载导入</n-button>
+        <n-button size="tiny" secondary @click="load">刷新</n-button>
+      </n-space>
     </template>
 
     <!-- 计数条：一眼看清整体卡在哪一段 -->
@@ -274,6 +319,50 @@ const statusLabel = (s) => PLATFORM_STATUS[s] || s;
         <n-space justify="end">
           <n-button @click="showPublish = false">取消</n-button>
           <n-button type="primary" :loading="!!busyId" @click="confirmPublish">确认发版</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <!-- 从下载目录导入 -->
+    <n-modal
+      v-model:show="showInbox"
+      preset="card"
+      title="从下载目录导入"
+      style="max-width: 560px"
+    >
+      <p class="modal-hint">
+        Suno 下载的音频进 Downloads 后不会自动入库。挑要收的，工具复制进
+        音乐库并登记为「已出歌」（原文件不动，重名自动加后缀）。
+      </p>
+      <n-spin :show="inboxLoading">
+        <n-empty v-if="!inboxLoading && !inboxFiles.length" description="最近一周没有可导入的音频" />
+        <div v-else class="inbox-list">
+          <label v-for="f in inboxFiles" :key="f.path" class="inbox-item">
+            <input
+              type="checkbox"
+              :value="f.path"
+              v-model="pickedFiles"
+              :disabled="f.in_library"
+            />
+            <span class="inbox-name" :title="f.path">{{ f.name }}</span>
+            <span class="inbox-meta">
+              {{ f.size_mb }} MB
+              <n-tag v-if="f.in_library" size="tiny" :bordered="false" type="success">已在库</n-tag>
+            </span>
+          </label>
+        </div>
+      </n-spin>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showInbox = false">取消</n-button>
+          <n-button
+            type="primary"
+            :loading="inboxImporting"
+            :disabled="!pickedFiles.length"
+            @click="doInboxImport"
+          >
+            导入选中（{{ pickedFiles.length }}）
+          </n-button>
         </n-space>
       </template>
     </n-modal>
