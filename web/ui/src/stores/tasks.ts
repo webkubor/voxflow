@@ -5,6 +5,7 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import { api, toMessage } from '../api';
+import { TASKS_POLL_MS, TASKS_POLL_BUSY_MS } from '../config/constants';
 import { useLibraryStore } from './library';
 import { useVoicesStore } from './voices';
 
@@ -76,7 +77,7 @@ export const useTasksStore = defineStore('tasks', () => {
       error.value = await toMessage(cause);
     } finally {
       const isBusy = tasks.value.some((task) => RUNNING_TASK_STATUSES.has(task.status));
-      pollTimer = window.setTimeout(pollTasks, isBusy ? 1500 : 5000);
+      pollTimer = window.setTimeout(pollTasks, isBusy ? TASKS_POLL_BUSY_MS : TASKS_POLL_MS);
     }
   };
 

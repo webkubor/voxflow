@@ -5,6 +5,7 @@
 import { reactive, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { api, toMessage } from '../api';
+import { SUNO_TASK_POLL_MS } from '../config/constants';
 import { useLibraryStore } from './library';
 import { useTasksStore } from './tasks';
 import type { TaskItem } from './tasks';
@@ -76,7 +77,7 @@ export const useSunoStore = defineStore('suno', () => {
       suno.error = msg;
       error.value = msg;
     }
-    taskTimer = window.setTimeout(() => pollSunoTask(taskId), 5000);
+    taskTimer = window.setTimeout(() => pollSunoTask(taskId), SUNO_TASK_POLL_MS);
   };
 
   const submitSuno = async (): Promise<{ task_id: string }> => {

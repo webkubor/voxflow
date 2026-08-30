@@ -130,7 +130,6 @@
             type="line" 
             animated 
             style="height: 100%; display: flex; flex-direction: column;"
-            @update:value="switchTab"
           >
             <n-tab-pane name="clone" tab="声音克隆">
               <CloneTab />
@@ -187,7 +186,10 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { BOARD_POLL_MS } from '../config/constants';
+import { TAB_NAMES } from '../router';
 import { storeToRefs } from 'pinia';
 import CloneTab from '../tabs/CloneTab.vue';
 import DesignTab from '../tabs/DesignTab.vue';
@@ -227,7 +229,16 @@ const { globalLoading, globalLoadingText } = storeToRefs(tasksStore);
 // 省掉「改了没效果，先怀疑是不是忘了 build」那一轮
 const buildTime = __BUILD_TIME__;
 
-const currentTab = ref('clone');
+// 当前 tab = 路由名。刷新/分享链接后仍停在那一屏 —— 以前是普通变量，
+// 刷新必回默认页，也没法把某一屏的链接发给别人。
+const route = useRoute();
+const router = useRouter();
+const currentTab = computed({
+  get: () => (TAB_NAMES.has(route.name) ? route.name : 'clone'),
+  set: (tab) => {
+    if (route.name !== tab) router.push({ name: tab });
+  },
+});
 const showAddPersona = ref(false);
 const showEditPersona = ref(false);
 const editingKey = ref('');
@@ -283,10 +294,6 @@ const confirmDeletePersona = (key, p) => {
   }
 };
 
-const switchTab = (tab) => {
-  currentTab.value = tab;
-};
-
 let pollTimer = null;
 onMounted(async () => {
   // 用 allSettled 不用 all：Promise.all 里**任何一个 reject，后面的全不执行**。
@@ -317,7 +324,7 @@ onMounted(async () => {
   pollTimer = setInterval(() => {
     // 标签页在后台时不轮询 —— 开三个标签页等于三倍压力
     if (!document.hidden) tasksStore.pollTasks();
-  }, 4000);
+  }, BOARD_POLL_MS);
 });
 
 onBeforeUnmount(() => {

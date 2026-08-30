@@ -26,6 +26,7 @@
  */
 
 import ky, { HTTPError, TimeoutError } from 'ky';
+import { API_TIMEOUT_MS, API_RETRY_LIMIT } from '../config/constants';
 import type {
   Album, CapabilitiesResponse, PersonasResponse, PipelineResponse,
   PlatformAccount, PlatformKey, Stage, Track,
@@ -46,8 +47,8 @@ import type {
  */
 const http = ky.create({
   prefix: '/api',
-  timeout: 20_000,
-  retry: { limit: 2, methods: ['get'] },
+  timeout: API_TIMEOUT_MS,
+  retry: { limit: API_RETRY_LIMIT, methods: ['get'] },
 });
 
 /** 把 ky 的异常转成人能看懂的一句话。抛给调用方，由它决定怎么提示。 */

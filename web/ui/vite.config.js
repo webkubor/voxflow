@@ -1,3 +1,4 @@
+import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { agentEyes, agentProxy } from 'vite-plugin-agent-eyes';
@@ -7,6 +8,14 @@ import { NaiveUiResolver } from 'unplugin-vue-components/resolvers';
 
 // https://vite.dev/config/
 export default defineConfig({
+  // 路径 alias：@ → src/。tsconfig 的 paths 早就配了，这里没配的话
+  // @/ 导入在编辑器里不报错、跑起来却 404 —— 两层必须都在。
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+    dedupe: ['vue'],
+  },
   // 把构建时间烧进产物 —— 页面上显示它，刷新后时间没变就说明没重新构建。
   // 之前没有这个，改了代码看不到效果时永远要先怀疑一遍「是不是没 build」。
   define: {
@@ -41,9 +50,6 @@ export default defineConfig({
     agentEyes(),
   ],
   base: '/static/',
-  resolve: {
-    dedupe: ['vue']
-  },
   build: {
     outDir: '../static',
     // 每次构建先清空。之前设 false 是怕误删 static 下的其它资产，但实际查过 ——
