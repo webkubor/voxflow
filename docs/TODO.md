@@ -42,14 +42,13 @@
 - [ ] 抓账号、专辑、已上架曲目，回填台账
 - [ ] 艺人主页已知：`y.qq.com/n/ryqq_v2/singer/002Rcy0a0YpQ7L`
 
-### 4. R2 云同步
+### 4. 台账本身备份到 R2
 
-`cloud_backup` 字段早就占好位了（`{status, location, updated_at}`），
-一直是空的。
+音频 + 封面同步已落地（`scripts/sync_r2.py`，见 docs/DATA.md「云端同步」），
+但 **voxflow.db / configs 仍只在本机** —— 「唯一备份」差最后一块。
 
-- [ ] 音频 + 封面同步到 R2，位置写回台账
-- [ ] 走 `cs resource policy`：**r2 是当前主力，picx 已冻结新增**
-- [ ] 这也是目前唯一的备份 —— `~/.voxflow` 里的东西全都不在 git 里
+- [ ] 把库和关键 config 扔进 R2（music 桶的 `voxflow/` 前缀，或另开私有桶）
+- [ ] 恢复演练：从 R2 拉下来能起服务、能读台账
 
 ### 5. 台账里只有 1 首有歌词和本地音频
 

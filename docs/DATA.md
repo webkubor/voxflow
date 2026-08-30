@@ -135,12 +135,28 @@ voice_designs/        音色设计配方（personas.json 的 design 指这里）
 
 ---
 
-## 云端同步（还没做）
+## 云端同步（音频资产）
 
-`cloud_backup` 字段已经立好了（`{status, location, updated_at}`），
-同步到 R2 之后往里写。字段先占位是为了**避免到时候改结构还要迁移已有台账**。
+音频 + 封面同步到 R2 已经落地：`scripts/sync_r2.py`。
 
-R2 的位置和分类走 `cs resource policy`（r2 是当前主力，picx 已冻结新增）。
+对每首**本地有音频**的作品上传到 music 桶：
+
+```
+masters/<year>/<slug>/master.wav   母带（优先同目录 .wav，只有 mp3 就用它）
+masters/<year>/<slug>/cover.jpg    封面（有就传，保留原扩展名）
+masters/<year>/<slug>/meta.json    元数据（版权链凭证）
+```
+
+上传成功后 `cloud_backup` 写成 `{status: "backed_up", location, updated_at}`，
+location 是 R2 key 前缀。`--dry-run` 只看不传，`--public` 额外镜像
+`public/<slug>.<ext>` 对外播放版（默认不传 —— 母带目录是备份真源，
+public 需要时从母带重建即可）。
+
+凭证走 `cs kyvault get secret://cloudflare/api-token`（或 `CF_API_TOKEN`
+环境变量），桶 `music`、公开域名 music.webkubor.online —— R2 的位置和分类
+以 CortexOS 的 `cs resource policy` 为真源（r2 是当前主力，picx 已冻结新增）。
+
+**台账本身（voxflow.db / configs）还没进 R2**，见 docs/TODO.md #4。
 
 ---
 
