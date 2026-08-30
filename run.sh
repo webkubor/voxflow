@@ -61,5 +61,23 @@ if [ "${1:-}" = "dev" ]; then
   cd web/ui && exec npm run dev
 fi
 
+# 起 Web 前先看一眼前端产物是不是过期了。
+#
+# 浏览器不认 .vue，所以源码必须先编译成 JS —— 这一步跑在本地，跟部署无关。
+# 但"改了代码忘记重新编译"是个必然会发生的事：页面显示旧的、不报错、
+# 于是开始怀疑是不是缓存、是不是没保存。已经踩过一次。
+#
+# 所以别靠人记得：源码比产物新就自动编译。多花 2 秒，换掉一整类假问题。
+if [ "${1:-web}" = "web" ]; then
+  if [ -d web/ui/src ]; then
+    NEWEST_SRC=$(find web/ui/src web/ui/index.html -type f -newer web/static/index.html 2>/dev/null | head -1 || true)
+    if [ ! -f web/static/index.html ] || [ -n "$NEWEST_SRC" ]; then
+      echo "  前端有改动，重新编译…"
+      [ -d web/ui/node_modules ] || (cd web/ui && npm install >/dev/null 2>&1)
+      (cd web/ui && npm run build >/dev/null) || { echo "✗ 前端编译失败，跑 cd web/ui && npm run build 看详情"; exit 1; }
+    fi
+  fi
+fi
+
 exec "$CS_BIN" kyvault run --env VOXFLOW_LLM_API_KEY=secret://museav/voxcraft-tenant-key \
   -- .venv/bin/voice "${@:-web}"
