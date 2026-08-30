@@ -1478,6 +1478,58 @@ async def platform_accounts():
     return data
 
 
+@app.get("/api/albums")
+async def list_albums():
+    """
+    专辑台账。
+
+    专辑是**独立实体**，不是歌的附属字段：它有自己的封面、发行时间、简介、
+    曲目数，发别的平台时整张一起走。之前只在歌里存了个专辑名字符串，
+    等于把一个实体压成了标签。
+    """
+    from core.paths import CONFIG_DIR
+    f = CONFIG_DIR / "albums.json"
+    if not f.exists():
+        return {"albums": {}}
+    data = json.loads(f.read_text(encoding="utf-8"))
+
+    # 把每张专辑下的曲目挂上去 —— 前端不该自己做这个 join
+    from core import pipeline
+    tracks = pipeline.list_tracks()
+    for key, a in data.get("albums", {}).items():
+        aid = a.get("album_id")
+        a["tracks"] = sorted(
+            [
+                {"id": t["id"], "title": t["title"],
+                 "no": (t["platforms"].get(a["platform"], {}) or {}).get("track_no"),
+                 "duration": (t["platforms"].get(a["platform"], {}) or {}).get("duration"),
+                 "url": (t["platforms"].get(a["platform"], {}) or {}).get("song_url", "")}
+                for t in tracks
+                if (t["platforms"].get(a["platform"], {}) or {}).get("album_id") == aid
+            ],
+            key=lambda x: x["no"] or 999,
+        )
+        a["cover_api"] = f"/api/album-cover/{key}" if a.get("cover_local") else ""
+    return data
+
+
+@app.get("/api/album-cover/{album_key}")
+async def album_cover(album_key: str):
+    """专辑封面（同步时下到本地的那份，不依赖平台图床）。"""
+    from core.paths import CONFIG_DIR, DATA_DIR
+    f = CONFIG_DIR / "albums.json"
+    if not f.exists():
+        raise HTTPException(404, "还没同步过专辑")
+    a = json.loads(f.read_text(encoding="utf-8")).get("albums", {}).get(album_key)
+    if not a or not a.get("cover_local"):
+        raise HTTPException(404, "这张专辑没有本地封面")
+    path = DATA_DIR / a["cover_local"]
+    if not path.exists():
+        raise HTTPException(404, "封面文件不在了")
+    return FileResponse(str(path), media_type="image/jpeg",
+                        headers={"Cache-Control": "no-store"})
+
+
 @app.get("/api/cover/{track_id}")
 async def get_cover(track_id: str):
     """

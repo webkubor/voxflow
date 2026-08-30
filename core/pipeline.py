@@ -104,6 +104,40 @@ def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+# 只能存、不能显示的字段。
+#
+# 界面是可以给人看的地方 —— 演示、截图、录屏都可能发生。真实姓名、证件号、
+# 手机号这类东西的用途是**填平台表单**，不是展示；它们留在台账里供脚本读取，
+# 但不该经 API 出去。
+#
+# 在**后端**过滤而不是前端不渲染：前端漏一处就泄露了，而且 API 本身也可能
+# 被别的地方调用。数据不出后端，才叫真的不显示。
+SENSITIVE_KEY_HINTS = ("真实姓名", "身份证", "手机", "电话", "银行", "证件", "id_card", "phone")
+
+
+def _redact(config: dict[str, Any]) -> dict[str, Any]:
+    """抹掉配置里的敏感字段，只留一个标记说明「填过了」。"""
+    if not isinstance(config, dict):
+        return config
+    out = {}
+    for k, v in config.items():
+        if any(h in str(k) for h in SENSITIVE_KEY_HINTS):
+            out[k] = "···（已填，不在界面展示）"
+        else:
+            out[k] = v
+    return out
+
+
+def _public_platforms(platforms: dict[str, Any]) -> dict[str, Any]:
+    """平台状态的对外版本：配置脱敏，其余照旧。"""
+    out = {}
+    for pk, info in (platforms or {}).items():
+        if isinstance(info, dict) and isinstance(info.get("config"), dict):
+            info = {**info, "config": _redact(info["config"])}
+        out[pk] = info
+    return out
+
+
 def _backup_record(track: dict[str, Any]) -> dict[str, str]:
     backup = track.get("cloud_backup") or {}
     status = backup.get("status", "unrecorded")
@@ -159,7 +193,7 @@ def list_tracks() -> list[dict[str, Any]]:
             "voice": t.get("voice"),          # 用了哪个音色
             "clip_id": t.get("clip_id"),      # Suno 的 clip
             "clip_ids": t.get("clip_ids", []),   # 一次出两首，两个都留着
-            "platforms": t.get("platforms", {}),
+            "platforms": _public_platforms(t.get("platforms", {})),
             "cloud_backup": _backup_record(t),
             "updated_at": t.get("updated_at", ""),
             "note": t.get("note", ""),

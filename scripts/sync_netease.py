@@ -58,14 +58,18 @@ raw = js(f"""(async () => {{
     artist: a.artist ? {{
       id: a.artist.id, name: a.artist.name, alias: a.artist.alias,
       musicSize: a.artist.musicSize, albumSize: a.artist.albumSize,
+      picUrl: a.artist.picUrl, briefDesc: a.artist.briefDesc,
     }} : null,
     songs: (a.hotSongs || []).map(s => ({{
-      id: s.id, name: s.name, album: s.album?.name,
+      id: s.id, name: s.name, alias: s.alias || [], no: s.no,
       duration: Math.round((s.duration || 0) / 1000),
-      publishTime: s.album?.publishTime,
+      album_id: s.album?.id, album: s.album?.name,
+      album_pic: s.album?.picUrl, publishTime: s.album?.publishTime,
     }})),
     albums: (al.hotAlbums || []).map(x => ({{
       id: x.id, name: x.name, size: x.size, publishTime: x.publishTime,
+      picUrl: x.picUrl, company: x.company, subType: x.subType,
+      description: (x.description || '').slice(0, 500), tags: x.tags,
     }})),
   }}
 }})()""")
@@ -79,6 +83,61 @@ songs = raw["songs"]
 albums = raw["albums"]
 print(f"✓ {art['name']}（{'/'.join(art.get('alias') or [])}）  {art['musicSize']} 首 · {art['albumSize']} 张专辑")
 
+# ── 下载专辑封面 ──────────────────────────────────────────
+# 平台图床 URL 会变会失效，而封面是发别的平台时要复用的物料。
+# 只存 URL 等于把资产押在别人的 CDN 上。
+import urllib.request
+COVER_DIR = DATA_DIR / "library" / "covers" / "netease"
+COVER_DIR.mkdir(parents=True, exist_ok=True)
+print("\n下载专辑封面…")
+got = 0
+for a in albums:
+    if not a.get("picUrl"):
+        continue
+    dst = COVER_DIR / f"{a['id']}.jpg"
+    if dst.exists():
+        continue
+    try:
+        req = urllib.request.Request(a["picUrl"], headers={"User-Agent": "VoxFlow/0.3.0"})
+        with urllib.request.urlopen(req, timeout=30) as r, open(dst, "wb") as f:
+            f.write(r.read())
+        got += 1
+    except Exception as e:
+        print(f"  ✗ {a['name']}: {str(e)[:40]}")
+print(f"  新下 {got} 张，本地共 {len(list(COVER_DIR.glob('*.jpg')))} 张")
+
+# ── 专辑台账 ──────────────────────────────────────────────
+# 专辑是独立实体，不是歌的附属字段：一张专辑有自己的封面、发行时间、
+# 简介、曲目数，发别的平台时整张一起走。
+ALBUMS = DATA_DIR / "configs" / "albums.json"
+alb_data = json.loads(ALBUMS.read_text(encoding="utf-8")) if ALBUMS.exists() else {"albums": {}}
+alb = alb_data.setdefault("albums", {})
+_now = time.strftime("%Y-%m-%dT%H:%M:%S")
+for a in albums:
+    key = f"netease-{a['id']}"
+    cover_local = COVER_DIR / f"{a['id']}.jpg"
+    alb[key] = {
+        **alb.get(key, {}),
+        "platform": "netease",
+        "album_id": a["id"],
+        "title": a["name"],
+        "track_count": a["size"],
+        "publish_date": (time.strftime("%Y-%m-%d", time.localtime(a["publishTime"] / 1000))
+                         if a.get("publishTime") else ""),
+        "company": a.get("company") or "",
+        "description": a.get("description") or "",
+        "tags": a.get("tags") or "",
+        "cover_url": a.get("picUrl") or "",
+        "cover_local": str(cover_local.relative_to(DATA_DIR)) if cover_local.exists() else "",
+        "url": f"https://music.163.com/#/album?id={a['id']}",
+        "synced_at": _now,
+    }
+ALBUMS.write_text(json.dumps(alb_data, ensure_ascii=False, indent=2), encoding="utf-8")
+print(f"\n✓ 专辑台账 {len(albums)} 张：")
+for a in albums:
+    d = alb[f"netease-{a['id']}"]
+    print(f"    {d['title']:20} {d['track_count']:>2} 首  {d['publish_date']}  封面={'✓' if d['cover_local'] else '✗'}")
+
 # ── 平台账号台账 ──────────────────────────────────────────
 ACCOUNTS.parent.mkdir(parents=True, exist_ok=True)
 acc = json.loads(ACCOUNTS.read_text(encoding="utf-8")) if ACCOUNTS.exists() else {"accounts": {}}
@@ -87,6 +146,8 @@ acc.setdefault("accounts", {})["netease"] = {
     "artist_id": art["id"],
     "artist_name": art["name"],
     "alias": art.get("alias") or [],
+    "avatar_url": art.get("picUrl") or "",
+    "brief": art.get("briefDesc") or "",
     "artist_url": f"https://music.163.com/#/artist?id={art['id']}",
     "user_id": USER_ID,
     "user_url": f"https://music.163.com/#/user/home?id={USER_ID}",
@@ -94,7 +155,7 @@ acc.setdefault("accounts", {})["netease"] = {
                        "user_url 是个人主页（听歌记录、动态），证明不了音乐人身份。",
     "song_count": art["musicSize"],
     "album_count": art["albumSize"],
-    "albums": [{"name": a["name"], "size": a["size"]} for a in albums],
+    "albums": [{"id": a["id"], "name": a["name"], "size": a["size"]} for a in albums],
     "synced_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
     "_来源": "公开 API /api/artist/{id}，不需要登录；音乐人后台（收益、审核状态）才要登录",
 }
@@ -159,15 +220,27 @@ for s in songs:
     # 但**不动 stage**：本地流程阶段是我们自己的进度记录，
     # 平台上架不代表本地那套流程走完了（比如物料可能还没归档）。
     plats = t.setdefault("platforms", {})
+    cover_local = COVER_DIR / f"{s.get('album_id')}.jpg"
     plats["netease"] = {
         "status": "online",
         "song_id": s["id"],
+        "song_url": f"https://music.163.com/#/song?id={s['id']}",
+        "album_id": s.get("album_id"),
         "album": s.get("album"),
-        "url": f"https://music.163.com/#/song?id={s['id']}",
+        "album_url": f"https://music.163.com/#/album?id={s['album_id']}" if s.get("album_id") else "",
+        "track_no": s.get("no"),
+        "alias": s.get("alias") or [],
         "duration": s.get("duration"),
+        "publish_date": (time.strftime("%Y-%m-%d", time.localtime(s["publishTime"] / 1000))
+                         if s.get("publishTime") else ""),
+        "cover_url": s.get("album_pic") or "",
+        "cover_local": str(cover_local.relative_to(DATA_DIR)) if cover_local.exists() else "",
         "updated_at": now,
         "note": "网易云回填",
     }
+    # 本地没封面的用平台封面兜底 —— 总比看板上一片空白强
+    if not t.get("cover_file") and cover_local.exists():
+        t["cover_file"] = str(cover_local.relative_to(DATA_DIR))
     t.setdefault("updated_at", now)
 
 LEDGER.write_text(json.dumps(ledger, ensure_ascii=False, indent=2), encoding="utf-8")
