@@ -32,15 +32,21 @@
 
 ## 二、数据侧（优先级最高的自建工作）
 
-### 3. QQ 音乐同步
+### 3. QQ 音乐同步 ✅ 2026-08-31
 
 网易云那套已经跑通（`scripts/sync_netease.py`），照着做即可。
 
-- [ ] 探 QQ 音乐有没有类似的公开 API（网易云是 `/api/artist/{id}`）。
-      **优先找 API，不要解析页面** —— 网易云的艺人页有反爬字符插入，
-      「雪夜无名」在 DOM 里是「雪·要治提·夜无名」
-- [ ] 抓账号、专辑、已上架曲目，回填台账
-- [ ] 艺人主页已知：`y.qq.com/n/ryqq_v2/singer/002Rcy0a0YpQ7L`
+- [x] 探公开 API —— 旧 c.y.qq.com v8 fcg 端点已 404 废弃，现走
+      `u.y.qq.com/cgi-bin/musicu.fcg`（JSON 信封，module/method 指定业务，
+      无需登录）。歌手歌曲 `musichall.song_list_server/GetSingerSongList`、
+      专辑 `music.musichallAlbum.AlbumListServer/GetAlbumList`
+- [x] 实现 `scripts/sync_qq.py`：抓账号（平台键 tencent=腾讯系）、专辑、
+      已上架曲目回填台账；专辑封面下到本地；匹配策略照网易云
+- [x] 已跑：月栖洲在 QQ 上有 **1 首**（宝贝闺女，你慢慢长大，2026-01-17 发行）
+      —— 与网易云 33 首差距巨大，腾讯音乐人那边还没铺开。新曲目已登记，
+      标题「宝贝闺女，你慢慢长大」未匹配本地任何作品（是不是你的、要不要
+      保留，人工确认）
+- [x] 艺人主页已知：`y.qq.com/n/ryqq_v2/singer/002Rcy0a0YpQ7L`
 
 ### 4. 台账本身备份到 R2
 
