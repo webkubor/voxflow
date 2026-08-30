@@ -108,3 +108,5 @@ publish/
 # 发布物料：音频和封面体积大，且都能从台账 + Suno 重新生成
 publish/2*/
 publish/covers/
+# 但模板要进 git —— 它是项目资产不是产物，丢了打包会在最后一步失败
+!publish/templates/
