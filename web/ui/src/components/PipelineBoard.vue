@@ -163,6 +163,50 @@ const confirmPublish = async () => {
   }
 };
 
+// ── 批量操作：勾选多首一起推进到下一步 ──
+const selectedIds = ref(new Set());
+const batchBusy = ref(false);
+
+const toggleSelect = (id) => {
+  const n = new Set(selectedIds.value);
+  n.has(id) ? n.delete(id) : n.add(id);
+  selectedIds.value = n;
+};
+
+// 能不能批量推进：有「下一步」且不需要选平台（发版那步必须人单选平台）
+const canBatchAdvance = (t) => {
+  const action = nextAction(t);
+  return !!action && !action.needsPlatform;
+};
+
+const batchAdvance = async () => {
+  const targets = tracks.value.filter((t) => selectedIds.value.has(t.id) && canBatchAdvance(t));
+  if (!targets.length) {
+    tasksStore.showToast('勾选的作品里没有可批量推进的（发版那步需单独选平台）', 'warning');
+    return;
+  }
+  batchBusy.value = true;
+  let okCount = 0;
+  const failed = [];
+  for (const t of targets) {
+    const action = nextAction(t);
+    try {
+      await pipelineStore.setStage(t.id, action.to);
+      okCount += 1;
+    } catch (cause) {
+      failed.push(t.title);
+    }
+  }
+  batchBusy.value = false;
+  selectedIds.value = new Set();
+  await load();
+  if (failed.length) {
+    tasksStore.showToast(`推进 ${okCount} 首；失败 ${failed.length} 首（${failed.slice(0, 3).join('、')}…）`, 'warning');
+  } else {
+    tasksStore.showToast(`已批量推进 ${okCount} 首`, 'success');
+  }
+};
+
 const platformLabel = (key) => platforms.value?.[key]?.label || key;
 
 // 平台状态是后端存的自由字符串，界面上不能直接甩英文给人看。
@@ -199,8 +243,30 @@ const statusLabel = (s) => PLATFORM_STATUS[s] || s;
     <n-empty v-if="!tracks.length" description="还没有作品。去「AI 音乐」出一首，会自动登记到这里。" />
 
     <div v-else class="track-list">
+      <!-- 批量工具条：勾选了才出现 -->
+      <div v-if="selectedIds.size" class="batch-bar">
+        <span class="batch-count">已选 {{ selectedIds.size }} 首</span>
+        <n-space size="small">
+          <n-button size="tiny" secondary @click="selectedIds = new Set()">取消选择</n-button>
+          <n-button size="tiny" type="primary" :loading="batchBusy" @click="batchAdvance">
+            批量推进到下一步
+          </n-button>
+        </n-space>
+        <span class="batch-hint">发版那步（selected → publishing）需单独选平台，不在批量内</span>
+      </div>
+
       <div v-for="t in tracks" :key="t.id" class="track">
         <div class="track-head">
+          <!-- 批量勾选：只有能推进的作品才给勾选框 -->
+          <input
+            v-if="canBatchAdvance(t)"
+            type="checkbox"
+            class="track-check"
+            :checked="selectedIds.has(t.id)"
+            @change="toggleSelect(t.id)"
+            :title="`勾选「${t.title}」`"
+          />
+
           <!-- 封面：有就显示，没有给个占位。作品有脸才不像台账 -->
           <img v-if="t.cover_url" :src="t.cover_url" class="track-cover" :alt="t.title" />
           <div v-else class="track-cover track-cover-empty">♪</div>
@@ -404,6 +470,20 @@ const statusLabel = (s) => PLATFORM_STATUS[s] || s;
   border: 1px solid var(--vf-border);
   border-radius: var(--vf-radius-lg);
   background: var(--vf-bg-2);
+}
+.batch-bar {
+  display: flex; align-items: center; gap: var(--vf-space-3);
+  padding: var(--vf-space-2) var(--vf-space-3);
+  border: 1px dashed var(--vf-primary);
+  border-radius: var(--vf-radius-md);
+  background: var(--vf-primary-soft);
+}
+.batch-count { font-weight: 600; color: var(--vf-primary); }
+.batch-hint { margin-left: auto; font-size: 11px; color: var(--vf-text-3); }
+.track-check {
+  width: 15px; height: 15px; margin-top: 24px; flex: none;
+  accent-color: var(--vf-primary);
+  cursor: pointer;
 }
 .track-head {
   display: flex;
