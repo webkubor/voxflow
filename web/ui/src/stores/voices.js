@@ -4,6 +4,7 @@
  */
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
+import { api, toMessage } from '../api';
 import { useSynthStore } from './synth';
 
 export const useVoicesStore = defineStore('voices', () => {
@@ -17,9 +18,7 @@ export const useVoicesStore = defineStore('voices', () => {
   const loadPersonas = async () => {
     error.value = '';
     try {
-      const res = await fetch('/api/personas');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.detail || '加载音色库失败');
+      const data = await api.personas();
       personas.value = data.personas || {};
       useSynthStore().designPresets = data.presets || [];
       if (!selectedPersona.value) {
@@ -70,9 +69,7 @@ export const useVoicesStore = defineStore('voices', () => {
   const deletePersona = async (key) => {
     error.value = '';
     try {
-      const res = await fetch(`/api/personas/${encodeURIComponent(key)}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || data.detail || '删除音色失败');
+      const data = await api.deletePersona(key);
       if (selectedPersona.value === key) selectedPersona.value = null;
       await loadPersonas();
       return data;
@@ -96,9 +93,7 @@ export const useVoicesStore = defineStore('voices', () => {
       // 所以判 undefined 不判真值，否则清空这个操作会被吞掉。
       if (name !== undefined) body.append('name', name);
       if (desc !== undefined) body.append('desc', desc);
-      const res = await fetch(`/api/personas/${encodeURIComponent(key)}`, { method: 'PATCH', body });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || data.detail || '保存失败');
+      const data = await api.updatePersona(key, body);
       await loadPersonas();
       return data;
     } catch (cause) {
@@ -110,9 +105,7 @@ export const useVoicesStore = defineStore('voices', () => {
   const addPersona = async (formData) => {
     error.value = '';
     try {
-      const res = await fetch('/api/personas/add', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || data.detail || '添加音色失败');
+      const data = await api.addPersona(formData);
       await loadPersonas();
       return data;
     } catch (cause) {

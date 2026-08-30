@@ -4,6 +4,7 @@
  */
 import { reactive, ref } from 'vue';
 import { defineStore } from 'pinia';
+import { api, toMessage } from '../api';
 
 export const useLibraryStore = defineStore('library', () => {
   const audioFiles = ref([]);
@@ -13,9 +14,7 @@ export const useLibraryStore = defineStore('library', () => {
   const loadAudioList = async () => {
     error.value = '';
     try {
-      const res = await fetch('/api/audio-list');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.detail || '加载音频库失败');
+      const data = await api.audioList();
       audioFiles.value = data.files || [];
       return audioFiles.value;
     } catch (cause) {
@@ -35,9 +34,7 @@ export const useLibraryStore = defineStore('library', () => {
   const deleteAudio = async (filename) => {
     error.value = '';
     try {
-      const res = await fetch(`/api/audio/${encodeURIComponent(filename)}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || data.detail || '删除音频失败');
+      const data = await api.deleteAudio(filename);
       await loadAudioList();
       return data;
     } catch (cause) {

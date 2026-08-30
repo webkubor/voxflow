@@ -62,10 +62,20 @@ TEMPLATES_DIR = PROJECT_DIR / "publish" / "templates"          # Excel 模板
 BRANDING_DIR = PROJECT_DIR / "assets" / "branding"             # logo
 
 
+# 必需目录清单 —— **只在这里定义一次**。
+#
+# 之前 doctor.py 自己硬编码了一份（含 cli / core / configs 这些代码目录），
+# 数据搬家之后它拿数据根去找代码目录，报「缺失 6 个目录」。
+# 同一份清单存在两处，就一定会在某次改动后对不上。
+DATA_SUBDIRS = ["configs", "assets", "assets/temp", "assets/reference_audio",
+                "out", "out/music", "publish", "voice_designs", "models"]
+CODE_SUBDIRS = ["cli", "core", "web", "qwen_tts", "configs", "configs/presets", "scripts"]
+
+
 def ensure_dirs() -> None:
     """建齐数据目录。每次启动跑一次，成本可忽略。"""
-    for d in (CONFIG_DIR, TEMP_DIR, REF_DIR, MUSIC_DIR, PUBLISH_DIR, DESIGNS_DIR, MODELS_DIR):
-        d.mkdir(parents=True, exist_ok=True)
+    for sub in DATA_SUBDIRS:
+        (DATA_DIR / sub).mkdir(parents=True, exist_ok=True)
 
 
 def needs_migration() -> bool:

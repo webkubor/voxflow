@@ -4,6 +4,7 @@
  */
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
+import { api, toMessage } from '../api';
 import { useLibraryStore } from './library';
 import { useVoicesStore } from './voices';
 
@@ -47,9 +48,7 @@ export const useTasksStore = defineStore('tasks', () => {
   const pollTasks = async () => {
     error.value = '';
     try {
-      const res = await fetch('/api/tasks');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.detail || '加载任务队列失败');
+      const data = await api.tasks();
       tasks.value = data.tasks || [];
       await Promise.all(tasks.value.map(handleCompletedTask));
       tasks.value.forEach((task) => previousStatuses.set(task.id, task.status));
@@ -64,9 +63,7 @@ export const useTasksStore = defineStore('tasks', () => {
   const cancelTask = async (taskId) => {
     error.value = '';
     try {
-      const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || data.detail || '取消任务失败');
+      const data = await api.cancelTask(taskId);
       await pollTasks();
       return data;
     } catch (cause) {

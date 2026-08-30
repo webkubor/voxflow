@@ -4,6 +4,7 @@
  */
 import { reactive, ref } from 'vue';
 import { defineStore } from 'pinia';
+import { api, toMessage } from '../api';
 import { useTasksStore } from './tasks';
 
 const createCloneForm = () => ({ persona: '', text: '', tone: '', emotion: '', emotionPriority: false });
@@ -19,9 +20,7 @@ export const useSynthStore = defineStore('synth', () => {
   const loadScripts = async () => {
     error.value = '';
     try {
-      const res = await fetch('/api/scripts');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.detail || '加载脚本失败');
+      const data = await api.scripts();
       savedScripts.value = data.scripts || [];
       return savedScripts.value;
     } catch (cause) {
@@ -37,13 +36,7 @@ export const useSynthStore = defineStore('synth', () => {
   const saveScript = async () => {
     error.value = '';
     try {
-      const res = await fetch('/api/scripts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: cloneForm.text.slice(0, 15), content: cloneForm.text }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || data.detail || '保存脚本失败');
+      const data = await api.saveScript({ text: scriptText });
       savedScripts.value = data.scripts || [];
       return data;
     } catch (cause) {
@@ -55,9 +48,7 @@ export const useSynthStore = defineStore('synth', () => {
   const deleteScript = async (id) => {
     error.value = '';
     try {
-      const res = await fetch(`/api/scripts/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || data.detail || '删除脚本失败');
+      const data = await api.deleteScript(id);
       savedScripts.value = data.scripts || [];
       return data;
     } catch (cause) {
@@ -71,13 +62,7 @@ export const useSynthStore = defineStore('synth', () => {
     error.value = '';
     tasks.showLoading(loadingText);
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.detail || '任务提交失败');
+      const data = await (url.includes('design') ? api.design(payload) : url.includes('dialogue') ? api.dialogue(payload) : api.clone(payload));
       tasks.taskPanelCollapsed = false;
       tasks.showToast('任务已提交，请在右下角任务队列中关注进度', 'success');
       return data;
@@ -109,9 +94,7 @@ export const useSynthStore = defineStore('synth', () => {
   const loadDialogueSample = async () => {
     error.value = '';
     try {
-      const res = await fetch('/api/scripts');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.detail || '载入剧本样例失败');
+      const data = await api.scripts();
       return data;
     } catch (cause) {
       error.value = cause.message;

@@ -4,6 +4,7 @@
  */
 import { computed, reactive, ref } from 'vue';
 import { defineStore } from 'pinia';
+import { api, toMessage } from '../api';
 import { useSynthStore } from './synth';
 
 export const useCapabilitiesStore = defineStore('capabilities', () => {
@@ -18,19 +19,28 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
   });
   const error = ref('');
 
+  /**
+   * 顶栏能力标签。
+   *
+   * 每个标签直接写出「这项能力当前用的是什么」，不是只亮一个绿点 ——
+   * 四个绿灯长得一模一样，人看不出哪个是哪个，也不知道跑的是哪个模型。
+   * `what` 就是那个具体值（模型名 / 租户名），`detail` 留给悬停看全貌。
+   */
   const capBadges = computed(() => [
-    { key: 'tts', label: '语音', ready: caps.value.tts?.ready, detail: caps.value.tts?.detail },
-    { key: 'suno', label: 'Suno', ready: caps.value.suno?.ready, num: caps.value.suno?.credits, detail: caps.value.suno?.detail },
-    { key: 'studio', label: '中台', ready: caps.value.studio?.ready, detail: caps.value.studio?.detail },
-    { key: 'llm', label: '文案', ready: caps.value.llm?.ready, detail: caps.value.llm?.detail },
+    { key: 'tts', label: '语音', what: caps.value.tts?.model || 'Qwen3-TTS',
+      ready: caps.value.tts?.ready, detail: caps.value.tts?.detail },
+    { key: 'suno', label: '音乐', what: caps.value.suno?.model || 'Suno',
+      ready: caps.value.suno?.ready, num: caps.value.suno?.credits, detail: caps.value.suno?.detail },
+    { key: 'studio', label: '中台', what: caps.value.studio?.identity || '未接',
+      ready: caps.value.studio?.ready, detail: caps.value.studio?.detail },
+    { key: 'llm', label: '文案', what: caps.value.llm?.model || '未接',
+      ready: caps.value.llm?.ready, detail: caps.value.llm?.detail },
   ]);
 
   const loadCaps = async () => {
     error.value = '';
     try {
-      const res = await fetch('/api/capabilities');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.detail || '加载能力状态失败');
+      const data = await api.capabilities();
       caps.value = data;
       return data;
     } catch (cause) {
@@ -42,9 +52,7 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
   const checkStatus = async () => {
     error.value = '';
     try {
-      const res = await fetch('/api/status');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.detail || '加载模型状态失败');
+      const data = await api.status();
       Object.assign(modelStatus.base, {
         ready: data.base_model, downloading: data.base_downloading, loaded: data.base_loaded,
         progress: data.base_progress?.percent || 0,
@@ -64,9 +72,7 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
     error.value = '';
     llm.checking = true;
     try {
-      const res = await fetch('/api/llm/status');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.detail || '检查文案助手连接失败');
+      const data = await api.llmStatus();
       Object.assign(llm, { available: data.available, base_url: data.base_url || '', models: data.models || [] });
       return data;
     } catch (cause) {
@@ -82,12 +88,7 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
     llm.genLoading = true;
     error.value = '';
     try {
-      const res = await fetch('/api/llm/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: llm.genPrompt, word_count: parseInt(llm.genWordCount, 10) || 100 }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || data.detail || '生成文案失败');
+      const data = await api.aiGenerate(llm.genPrompt);
       useSynthStore().cloneForm.text = data.text || '';
       return data;
     } catch (cause) {
@@ -102,12 +103,7 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
     llm.polLoading = true;
     error.value = '';
     try {
-      const res = await fetch('/api/llm/polish', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: useSynthStore().cloneForm.text, style: llm.polStyle || '自然有亲和力' }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || data.detail || '润色文案失败');
+      const data = await api.aiPolish(text);
       useSynthStore().cloneForm.text = data.text || '';
       return data;
     } catch (cause) {

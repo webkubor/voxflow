@@ -1204,7 +1204,14 @@ async def capabilities():
         # 不把「未装载」这种实现细节顶到界面上。
         try:
             ok = (MODELS_DIR / "Base-1.7B").exists() and (MODELS_DIR / "VoiceDesign-1.7B").exists()
-            return {"ready": ok, "detail": "本地模型" if ok else "模型未下载，跑 ./install.sh"}
+            # 顶栏要显示「用的什么模型」，不能只说「本地模型」——
+            # 四个绿灯长得一样，人根本分不出哪个是哪个。
+            return {
+                "ready": ok,
+                "model": "Qwen3-TTS 1.7B" if ok else "",
+                "detail": "Qwen3-TTS 1.7B（Base + VoiceDesign，本地推理）" if ok
+                          else "模型未下载，跑 ./install.sh",
+            }
         except Exception as e:
             return {"ready": False, "detail": str(e)[:60]}
 
@@ -1217,7 +1224,8 @@ async def capabilities():
             left = d.get("total_credits_left", 0)
             plan = (d.get("plan") or {}).get("name", "")
             return {"ready": bool(d.get("is_active")), "credits": left,
-                    "plan": plan, "detail": f"{plan} · 剩 {left}"}
+                    "plan": plan, "model": "Suno v5.5",
+                    "detail": f"Suno v5.5 · {plan} · 剩 {left} 积分"}
         except Exception:
             return {"ready": False, "credits": 0, "detail": "未登录或 CLI 不可用"}
 
@@ -1235,7 +1243,8 @@ async def capabilities():
                 me = _json.loads(resp.read().decode())
             t = me.get("tenant") or {}
             who = t.get("nickname") or t.get("name") or "未知"
-            return {"ready": True, "identity": who, "detail": f"租户 {who}"}
+            return {"ready": True, "identity": who, "model": who,
+                    "detail": f"museav 中台 · 租户 {who}（出图 + 文案）"}
         except Exception as e:
             msg = str(e)
             hint = "凭据无效或被拦截" if ("403" in msg or "401" in msg) else "连不上中台"

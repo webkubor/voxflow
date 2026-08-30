@@ -8,7 +8,10 @@ class TTSBaseEngine:
         # 开启 Mac MPS 兼容性支持
         os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
         
-        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # 数据根（~/.voxflow），不是代码目录 —— 模型、样音、产物都在那边。
+        # 迁移时漏改这里，导致模型明明在磁盘上却提示「未下载」。
+        from core.paths import DATA_DIR
+        self.base_dir = str(DATA_DIR)
         self.model_path = os.path.join(self.base_dir, f"models/{model_type}-{model_size}")
         
         if not os.path.exists(self.model_path):

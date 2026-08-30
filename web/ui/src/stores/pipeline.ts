@@ -4,9 +4,24 @@
  */
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
-import type {
-  Album, PipelineResponse, PlatformAccount, PlatformKey, Stage, Track,
-} from '../types/api';
+import { api, toMessage } from '../api';
+import type { PipelineResponse, PlatformAccount, PlatformKey, Stage, Track } from '../types/api';
+
+/**
+ * 所有请求都走 api 层，store 里不出现 fetch。
+ *
+ * 以前每个 store 自己写一遍拼 URL、判 res.ok、解 JSON、抓错误 —— 25 处，
+ * 每处都可能漏一步。漏了判 res.ok 就是拿着 500 的响应当正常数据用。
+ */
+const guard = async <T>(fn: () => Promise<T>, error: { value: string }): Promise<T> => {
+  error.value = '';
+  try {
+    return await fn();
+  } catch (cause) {
+    error.value = await toMessage(cause);
+    throw cause;
+  }
+};
 
 export const usePipelineStore = defineStore('pipeline', () => {
   const stages = ref<Stage[]>([]);
@@ -21,26 +36,11 @@ export const usePipelineStore = defineStore('pipeline', () => {
   // 谁后加载谁把对方覆盖掉，表现为「看板刷新一下内容就变了」。
   const backupTracks = ref<Track[]>([]);
   const publishAccounts = ref<PlatformAccount[]>([]);
-  const artist = ref(null);
+  const artist = ref<Record<string, unknown> | null>(null);
   const error = ref('');
 
-  const request = async <T = any>(url: string, method = 'GET', body?: unknown): Promise<T> => {
-    error.value = '';
-    try {
-      const res = await fetch(url, body === undefined ? { method } : {
-        method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok || data.ok === false) throw new Error(data.error || data.detail || '流水线操作失败');
-      return data;
-    } catch (cause) {
-      error.value = (cause as Error).message;
-      throw cause;
-    }
-  };
-
   const loadPipeline = async () => {
-    const data = await request<PipelineResponse>('/api/pipeline');
+    const data = await guard(() => api.pipeline(), error);
     stages.value = data.stages || [];
     stageLabels.value = data.stage_labels || {};
     platforms.value = data.platforms || [];
@@ -49,24 +49,18 @@ export const usePipelineStore = defineStore('pipeline', () => {
     return data;
   };
 
-  const setStage = (trackId: string, stage: Stage) => request('/api/pipeline/stage', 'POST', { track_id: trackId, stage });
-  const upsertTrack = (track: Partial<Track>) => request('/api/pipeline/track', 'POST', track);
-  const setPlatformStatus = (platform: { track_id: string; platform: PlatformKey; status: string }) => request('/api/pipeline/platform', 'POST', platform);
+  const setStage = (trackId: string, stage: Stage) => guard(() => api.setStage(trackId, stage), error);
+  const upsertTrack = (track: Partial<Track> & { track_id: string }) => guard(() => api.upsertTrack(track), error);
+  const setPlatformStatus = (p: { track_id: string; platform: PlatformKey; status: string }) => guard(() => api.setPlatformStatus(p), error);
   const loadPublishBoard = async () => {
-    const data = await request('/api/publish-board');
-    publishAccounts.value = data.accounts || [];
+    const data = await guard(() => api.publishBoard(), error);
+    publishAccounts.value = (data.accounts || []) as PlatformAccount[];
     backupTracks.value = data.tracks || [];
-    try {
-      const artistData = await request('/api/artist');
-      artist.value = artistData;
-    } catch (e) {
-      console.warn('加载艺人档案失败', e);
-    }
     return data;
   };
 
-  const saveArtist = async (updatedArtist) => {
-    const data = await request('/api/artist', 'POST', updatedArtist);
+  const saveArtist = async (updatedArtist: Record<string, unknown>) => {
+    const data = await guard(() => api.saveArtist(updatedArtist), error);
     artist.value = data.artist;
     return data;
   };

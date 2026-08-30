@@ -26,11 +26,18 @@
           <n-space size="small" align="center">
             <n-tooltip v-for="c in capBadges" :key="c.key" trigger="hover">
               <template #trigger>
-                <div class="clean-status-badge" :class="c.ready ? 'status-ready' : 'status-pending'">
-                  <span class="status-dot"></span>
-                  <span class="status-name">{{ c.label }}</span>
-                  <span v-if="c.num !== undefined" class="status-count">{{ c.num }}</span>
-                </div>
+                <!-- 用 n-tag 而不是手搓 div+圆点：装了组件库还自己写基础组件，
+                     写出来既不统一也不好看，主题切换、尺寸、圆角全要重新对一遍。
+                     标签上直接写「这项能力用的是什么」—— 只亮个绿灯写「语音」，
+                     四个灯长得一样，看不出跑的是哪个模型、连的是哪个账号。 -->
+                <n-tag :type="c.ready ? 'success' : 'warning'" size="small" round :bordered="false">
+                  {{ c.label }}
+                  <template #icon>
+                    <span class="cap-dot" :class="c.ready ? 'on' : 'off'"></span>
+                  </template>
+                  <span class="cap-what">{{ c.what }}</span>
+                  <n-text v-if="c.num !== undefined" depth="3" class="cap-num">{{ c.num }}</n-text>
+                </n-tag>
               </template>
               {{ c.detail || (c.ready ? '服务正常' : '未就绪') }}
             </n-tooltip>
@@ -53,63 +60,60 @@
               <h3>音色库</h3>
               <span class="sider-count">{{ Object.keys(personas).length }}</span>
             </div>
-            <button class="clean-add-btn" @click="showAddPersona = true">
+            <n-button type="primary" size="tiny" ghost @click="showAddPersona = true">
               + 添加音色
-            </button>
+            </n-button>
           </div>
           
           <div class="sider-content">
-            <div 
-              v-for="(p, key) in personas" 
-              :key="key" 
-              class="clean-persona-card"
-              :class="{ 
-                'is-selected': selectedPersona === key,
-                'is-playing': previewKey === key
-              }"
+            <div
+              v-for="(p, key) in personas"
+              :key="key"
+              class="voice-item"
+              :class="{ 'is-selected': selectedPersona === key }"
               @click="selectPersona(key)"
             >
-              <!-- 试听进度底条 -->
-              <div 
-                v-if="previewKey === key" 
-                class="audition-bar" 
-                :style="{ width: previewProgress + '%' }"
-              ></div>
+              <!-- 试听进度：铺在整张卡底下，不占布局空间 -->
+              <div v-if="previewKey === key" class="voice-progress" :style="{ width: previewProgress + '%' }"></div>
 
-              <div class="card-left-avatar">
-                {{ (p.name || key).charAt(0) }}
-              </div>
-
-              <div class="card-center-info">
-                <div class="card-top-row">
-                  <span class="card-name">{{ p.name }}</span>
-                  <span class="card-key">{{ key }}</span>
-                </div>
-                <p class="card-desc">{{ p.desc || p.instruction || '已装载声音特征' }}</p>
-                <div class="card-badge-row">
-                  <span class="card-status-dot" :class="p.has_audio ? 'dot-audio' : 'dot-no-audio'"></span>
-                  <span class="card-status-text">{{ p.has_audio ? '样音已就绪' : '无样音' }}</span>
-                </div>
-              </div>
-
-              <!-- 右侧操作 -->
-              <div class="card-right-actions" @click.stop>
-                <button 
-                  v-if="p.has_audio" 
-                  class="action-icon-btn play-btn" 
-                  @click="togglePreview(key)"
-                  :title="previewKey === key ? '暂停' : '试听'"
-                >
-                  <svg v-if="previewKey !== key" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
-                    <path d="M8 5V19L19 12L8 5Z"/>
-                  </svg>
-                  <svg v-else viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
-                    <path d="M6 19H10V5H6V19ZM14 5V19H18V5H14Z"/>
-                  </svg>
-                </button>
-                <button class="action-icon-btn" @click="openEditPersona(key)" title="编辑">✎</button>
-                <button class="action-icon-btn del-btn" @click="confirmDeletePersona(key, p)" title="删除">✕</button>
-              </div>
+              <!-- n-thing 是 naive-ui 的「头像 + 标题 + 描述 + 操作」标准结构，
+                   正是这里要的形状。之前手搓了 avatar/name/key/desc/badge/actions
+                   六个 div 加一堆 flex，结果名字换行、key 位置错乱、按钮挤成一团。
+                   基础结构交给组件库，自己只管品牌相关的那点样式。 -->
+              <n-thing>
+                <template #avatar>
+                  <n-avatar round :size="34" :style="{ background: 'var(--vf-bg-4)', color: 'var(--vf-primary)' }">
+                    {{ (p.name || key).charAt(0) }}
+                  </n-avatar>
+                </template>
+                <template #header>
+                  <n-ellipsis style="max-width: 128px">{{ p.name || key }}</n-ellipsis>
+                </template>
+                <template #header-extra>
+                  <n-space :size="2" @click.stop>
+                    <n-button v-if="p.has_audio" quaternary circle size="tiny"
+                              :title="previewKey === key ? '暂停' : '试听'"
+                              @click="togglePreview(key)">
+                      {{ previewKey === key ? '⏸' : '▶' }}
+                    </n-button>
+                    <n-button quaternary circle size="tiny" title="编辑" @click="openEditPersona(key)">✎</n-button>
+                    <n-button quaternary circle size="tiny" title="删除" @click="confirmDeletePersona(key, p)">✕</n-button>
+                  </n-space>
+                </template>
+                <template #description>
+                  <n-ellipsis :line-clamp="2" style="font-size: 11px; color: var(--vf-text-3)">
+                    {{ p.desc || p.instruction || '已装载声音特征' }}
+                  </n-ellipsis>
+                </template>
+                <template #footer>
+                  <n-space :size="4" align="center">
+                    <n-tag size="tiny" :type="p.has_audio ? 'success' : 'warning'" :bordered="false" round>
+                      {{ p.has_audio ? '样音已就绪' : '无样音' }}
+                    </n-tag>
+                    <n-text depth="3" style="font-size: 10px">{{ key }}</n-text>
+                  </n-space>
+                </template>
+              </n-thing>
             </div>
 
             <div v-if="Object.keys(personas).length === 0" class="empty-state">
@@ -286,6 +290,11 @@ onMounted(async () => {
   // 每项独立起来，一个上游挂了只影响它自己；而且失败要说出来，不能吞。
   const jobs = [
     ['能力状态', () => capabilitiesStore.loadCaps()],
+    // 模型状态是单独一个端点（/api/status）。上一版漏了这行，于是
+    // modelStatus 永远停在初始值 false —— 页面一直显示「Base 大模型未就绪，
+    // 请运行 ./install.sh」，而模型明明在磁盘上躺着 8.4 GB。
+    // 「该调的没调」比「调错了」更难查：没有报错，只是那块数据永远是默认值。
+    ['模型状态', () => capabilitiesStore.checkStatus()],
     ['音色库', () => voicesStore.loadPersonas()],
     ['任务队列', () => tasksStore.pollTasks()],
   ];
@@ -378,32 +387,9 @@ onBeforeUnmount(() => {
 }
 
 /* 状态 Badge */
-.clean-status-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: var(--vf-radius-full);
-  background: var(--vf-bg-2);
-  border: 1px solid var(--vf-border);
-  font-size: 12px;
-  color: var(--vf-text-2);
-}
 
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
 
-.status-ready .status-dot { background: var(--vf-ok); }
-.status-pending .status-dot { background: var(--vf-warn); }
 
-.status-count {
-  font-weight: 600;
-  color: var(--vf-text-1);
-  margin-left: 2px;
-}
 
 /* 左侧栏 */
 .clean-voice-sider {
@@ -440,23 +426,7 @@ onBeforeUnmount(() => {
   border-radius: var(--vf-radius-xs);
 }
 
-.clean-add-btn {
-  background: var(--vf-bg-3);
-  border: 1px solid var(--vf-border-strong);
-  color: var(--vf-text-1);
-  font-size: 12px;
-  font-weight: 500;
-  padding: 4px 10px;
-  border-radius: var(--vf-radius-sm);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
 
-.clean-add-btn:hover {
-  background: #ffffff;
-  color: #000000;
-  border-color: #ffffff;
-}
 
 .sider-content {
   flex: 1;
@@ -468,145 +438,24 @@ onBeforeUnmount(() => {
 }
 
 /* 音色卡片：干净利落的高对比面板 */
-.clean-persona-card {
-  position: relative;
-  background: var(--vf-bg-2);
-  border: 1px solid var(--vf-border);
-  border-radius: var(--vf-radius-sm);
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  overflow: hidden;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
 
-.clean-persona-card:hover {
-  background: var(--vf-bg-hover);
-  border-color: var(--vf-border-strong);
-}
 
-.clean-persona-card.is-selected {
-  background: var(--vf-bg-active);
-  border-color: rgba(255, 255, 255, 0.4);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
-}
 
-.audition-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 2px;
-  background: #ffffff;
-  transition: width 0.1s linear;
-}
 
-.card-left-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--vf-radius-xs);
-  background: var(--vf-bg-3);
-  border: 1px solid var(--vf-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--vf-text-1);
-  flex-shrink: 0;
-}
 
-.card-center-info {
-  flex: 1;
-  overflow: hidden;
-}
 
-.card-top-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 2px;
-}
 
-.card-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--vf-text-1);
-}
 
-.card-key {
-  font-size: 10px;
-  color: var(--vf-text-3);
-  font-family: monospace;
-}
 
-.card-desc {
-  font-size: 11px;
-  color: var(--vf-text-2);
-  margin: 0 0 4px 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
-.card-badge-row {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
 
-.card-status-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-}
-.dot-audio { background: var(--vf-ok); }
-.dot-no-audio { background: var(--vf-text-3); }
 
-.card-status-text {
-  font-size: 10px;
-  color: var(--vf-text-3);
-}
 
 /* 操作图标 */
-.card-right-actions {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  opacity: 0.7;
-}
 
-.clean-persona-card:hover .card-right-actions {
-  opacity: 1;
-}
 
-.action-icon-btn {
-  width: 22px;
-  height: 22px;
-  background: var(--vf-bg-3);
-  border: 1px solid var(--vf-border);
-  color: var(--vf-text-2);
-  font-size: 11px;
-  border-radius: var(--vf-radius-xs);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
 
-.action-icon-btn:hover {
-  background: #ffffff;
-  color: #000000;
-  border-color: #ffffff;
-}
 
-.action-icon-btn.del-btn:hover {
-  background: var(--vf-err);
-  color: #ffffff;
-  border-color: var(--vf-err);
-}
 
 .empty-state {
   text-align: center;
@@ -623,5 +472,43 @@ onBeforeUnmount(() => {
   opacity: .6;
   font-variant-numeric: tabular-nums;
   cursor: default;
+}
+
+
+/* n-tag 里的状态点和副文本。只有这两个是 naive-ui 没有的，
+   其余（圆角、配色、尺寸）全交给组件库，不自己写。 */
+.cap-dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.cap-dot.off { opacity: .5; }
+.cap-what { margin-left: 5px; opacity: .75; font-size: 11px; }
+.cap-num { margin-left: 4px; font-size: 11px; }
+
+/* 音色卡：只留品牌相关的容器样式，内部结构全交给 n-thing。
+   选中态和试听进度条是 naive-ui 没有的，这两个自己写。 */
+.voice-item {
+  position: relative;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-lg, 14px);
+  background: var(--vf-bg-2);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color .15s, background .15s;
+}
+.voice-item:hover { background: var(--vf-bg-3); }
+.voice-item.is-selected {
+  border-color: var(--vf-primary);
+  background: var(--vf-primary-soft);
+}
+.voice-progress {
+  position: absolute;
+  left: 0; bottom: 0; height: 2px;
+  background: var(--vf-primary);
+  transition: width .1s linear;
 }
 </style>

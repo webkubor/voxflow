@@ -4,6 +4,7 @@
  */
 import { reactive, ref } from 'vue';
 import { defineStore } from 'pinia';
+import { api, toMessage } from '../api';
 import { useLibraryStore } from './library';
 import { useTasksStore } from './tasks';
 
@@ -20,9 +21,7 @@ export const useSunoStore = defineStore('suno', () => {
   const loadSunoStatus = async () => {
     error.value = '';
     try {
-      const res = await fetch('/api/suno/status');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.detail || '加载 Suno 状态失败');
+      const data = await api.sunoStatus();
       Object.assign(suno, {
         authenticated: data.authenticated, credits: data.credits, total_credits_left: data.total_credits_left,
         plan: data.plan, personas: data.personas || {},
@@ -37,9 +36,7 @@ export const useSunoStore = defineStore('suno', () => {
 
   const pollSunoTask = async (taskId) => {
     try {
-      const res = await fetch('/api/tasks');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.detail || '查询 Suno 任务失败');
+      const data = await api.tasks();
       const task = (data.tasks || []).find((item) => item.id === taskId);
       if (!task) return;
       if (task.status === 'done') {
@@ -66,11 +63,7 @@ export const useSunoStore = defineStore('suno', () => {
     suno.error = '';
     suno.submitting = true;
     try {
-      const res = await fetch('/api/suno/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sunoForm),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.detail || '提交 Suno 任务失败');
+      const data = await api.sunoGenerate(payload);
       taskTimer = window.setTimeout(() => pollSunoTask(data.task_id), 3000);
       return data;
     } catch (cause) {
@@ -90,12 +83,7 @@ export const useSunoStore = defineStore('suno', () => {
 
     lyricsGenerating.value = true;
     try {
-      const res = await fetch('/api/llm/lyrics', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, style: sunoForm.tags.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || data.detail || 'AI 歌词生成失败');
+      const data = await api.aiLyrics(payload);
       sunoForm.lyrics = data.text;
       useTasksStore().showToast('歌词已生成，可继续编辑、复制或直接出歌', 'success');
       return data;

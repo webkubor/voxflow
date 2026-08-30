@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "copy-to-clipboard": "^4.0.2",
+    "ky": "^2.1.0",
     "naive-ui": "^2.41.0",
     "pinia": "^4.0.3",
     "vue": "^3.5.13"
