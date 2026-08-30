@@ -435,13 +435,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 挂载静态文件
+class _RevalidatingStaticFiles(StaticFiles):
+    """
+    强制浏览器每次都回来验证的静态文件服务。
+
+    起因：换了 logo，服务端返回的确实是新图（ETag 都变了），页面上还是旧的。
+    原因是 StaticFiles **不发 Cache-Control**，浏览器于是走「启发式缓存」——
+    按 Last-Modified 距今多久自己推算一个过期时间，可能几小时内根本不回来问。
+    对 /static/assets/ 那种带内容哈希的构建产物无所谓（改了名就是新 URL），
+    但品牌资产是**固定文件名、内容会变**，正好是启发式缓存最坑的那一类。
+
+    `no-cache` 不等于不缓存：浏览器仍然存副本，只是用之前必须带 ETag 问一次。
+    没变就是 304（几十字节），变了才重新下。对 logo 这种小文件代价可以忽略，
+    换来的是「改了资产就能看到」这个确定性 —— 不用让人去硬刷新，
+    也不用给 URL 手工挂版本号（那个迟早忘记改）。
+    """
+
+    def file_response(self, *args, **kwargs):
+        resp = super().file_response(*args, **kwargs)
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
+
+# 挂载静态文件。构建产物文件名自带内容哈希，可以放心长缓存，用原生 StaticFiles。
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
+
 # index.html 里的 logo 走 /assets/branding/...，但此前只挂了 /static，
 # 于是首页左上角 logo 一直是碎图（README 里的截图也就跟着碎）。
+# 这里的文件名是固定的（logo-icon.png 内容会换），所以必须走强制重新验证那一版。
 _ASSETS_DIR = Path(__file__).parent.parent / "assets"
 if _ASSETS_DIR.is_dir():
-    app.mount("/assets", StaticFiles(directory=str(_ASSETS_DIR)), name="assets")
+    app.mount("/assets", _RevalidatingStaticFiles(directory=str(_ASSETS_DIR)), name="assets")
 
 
 # ── 页面路由 ──────────────────────────────────────────────
