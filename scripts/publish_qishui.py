@@ -142,6 +142,11 @@ def fill_by_label(label, value, multiline=False):
     js("""document.querySelector("[data-vf-fill='1']")?.removeAttribute('data-vf-fill')""")
     return True
 
+# 专辑介绍：台账里有就用，没有就跳过（不编）。
+# 这是选填项，但**能填的都填** —— 平台拿它做展示和推荐，
+# 留空等于白白少一块曝光，而生成它的成本几乎为零。
+album_desc = track.get("album_desc", "")
+
 print("\n填写信息…")
 print("  歌曲标题:", "✓" if fill_by_label("歌曲标题", title) else "✗")
 time.sleep(1)
@@ -149,6 +154,9 @@ print("  歌词:", "✓" if fill_by_label("歌词", lyrics, multiline=True) else
 time.sleep(1)
 print("  专辑名称:", "✓" if fill_by_label("专辑名称", title) else "✗")
 time.sleep(1)
+if album_desc:
+    print("  专辑介绍:", "✓" if fill_by_label("关于专辑的介绍", album_desc, multiline=True) else "✗")
+    time.sleep(1)
 
 # ── 作品类型 + AI 声明 ────────────────────────────────────
 # AI 声明必须如实填。平台有官方选项，瞒报被查到会影响账号 ——
@@ -179,6 +187,18 @@ r = js("""(() => {
     if (yes) { yes.click(); out.AI声明 = '已选「是」' }
     else out.AI声明 = '找到那一行但没定位到「是」'
   } else out.AI声明 = '没找到 AI 声明行'
+
+  // 「是否已发行」：新歌一律「否」。选「是」意味着这首歌已经在别处上架，
+  // 平台会走不同的版权核验流程 —— 填错会卡审核。
+  const relRow = [...document.querySelectorAll('*')]
+    .find(e => (e.textContent||'').includes('是否已发行') && e.querySelectorAll('input[type=radio],button').length >= 2
+               && (e.textContent||'').length < 60)
+  if (relRow) {
+    const no = [...relRow.querySelectorAll('input[type=radio],button')]
+      .find(el => (el.textContent||el.value||'').trim() === '否')
+    if (no) { no.click(); out.是否已发行 = '已选「否」' }
+    else out.是否已发行 = '找到那一行但没定位到「否」'
+  } else out.是否已发行 = '没找到'
   return out
 })()""")
 print(" ", r)
