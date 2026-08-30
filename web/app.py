@@ -1450,77 +1450,39 @@ async def get_audio_subdir(subdir: str, filename: str):
 @app.get("/api/platform-accounts")
 async def platform_accounts():
     """
-    各平台的账号资产：我是谁、发了多少首、主页在哪。
+    各平台账号资产：我是谁、发了多少首、主页在哪。
 
     数据来自 scripts/sync_*.py 从平台抓回来的真实状态，不是手填的 ——
     手填的台账会随时间变假（今天发一首、明天下架一首，没人记得回来改）。
 
-    每个平台记两个链接：artist_url 是艺人主页（发布表单填它，平台据此核实
-    音乐人身份），user_url 是个人主页（听歌记录/动态）。填错平台会打回。
+    返回里带 local_online_count：平台自报的数与台账实际在线数对不对得上，
+    数字自己会说话，比在界面上写「同步成功」有用。
     """
-    from core.paths import PLATFORM_ACCOUNTS_FILE
-    if not PLATFORM_ACCOUNTS_FILE.exists():
-        return {"accounts": {}, "hint": "还没同步过。跑 scripts/sync_netease.py 抓一次。"}
-    try:
-        data = json.loads(PLATFORM_ACCOUNTS_FILE.read_text(encoding="utf-8"))
-    except Exception as e:
-        raise HTTPException(500, f"账号台账读不了：{e}")
-
-    # 顺带统计台账里每个平台各有多少首在线 —— 跟平台自报的数对得上才可信
     from core import pipeline
-    online = {}
-    for t in pipeline.list_tracks():
-        for pk, info in (t.get("platforms") or {}).items():
-            if info.get("status") in ("online", "published"):
-                online[pk] = online.get(pk, 0) + 1
-    for pk, acc in data.get("accounts", {}).items():
-        acc["local_online_count"] = online.get(pk, 0)
-    return data
+    return pipeline.list_platform_accounts()
 
 
 @app.get("/api/albums")
-async def list_albums():
+async def albums_endpoint(platform: str = None):
     """
-    专辑台账。
+    专辑 + 每张专辑的曲目。
 
-    专辑是**独立实体**，不是歌的附属字段：它有自己的封面、发行时间、简介、
-    曲目数，发别的平台时整张一起走。之前只在歌里存了个专辑名字符串，
-    等于把一个实体压成了标签。
+    专辑是**独立实体**，不是歌的附属字段：有自己的封面、发行时间、简介、
+    曲目数，发别的平台时整张一起走。
+
+    曲目的 join 在 SQL 里做（core/pipeline.list_albums）—— 以前是在这里
+    手写双重循环把两份 JSON 读进内存自己配对，那不叫查询。
     """
-    from core.paths import CONFIG_DIR
-    f = CONFIG_DIR / "albums.json"
-    if not f.exists():
-        return {"albums": {}}
-    data = json.loads(f.read_text(encoding="utf-8"))
-
-    # 把每张专辑下的曲目挂上去 —— 前端不该自己做这个 join
     from core import pipeline
-    tracks = pipeline.list_tracks()
-    for key, a in data.get("albums", {}).items():
-        aid = a.get("album_id")
-        a["tracks"] = sorted(
-            [
-                {"id": t["id"], "title": t["title"],
-                 "no": (t["platforms"].get(a["platform"], {}) or {}).get("track_no"),
-                 "duration": (t["platforms"].get(a["platform"], {}) or {}).get("duration"),
-                 "url": (t["platforms"].get(a["platform"], {}) or {}).get("song_url", "")}
-                for t in tracks
-                if (t["platforms"].get(a["platform"], {}) or {}).get("album_id") == aid
-            ],
-            key=lambda x: x["no"] or 999,
-        )
-        a["cover_api"] = f"/api/album-cover/{key}" if a.get("cover_local") else ""
-    return data
+    return {"albums": {a["key"]: a for a in pipeline.list_albums(platform)}}
 
 
 @app.get("/api/album-cover/{album_key}")
 async def album_cover(album_key: str):
-    """专辑封面（同步时下到本地的那份，不依赖平台图床）。"""
-    from core.paths import CONFIG_DIR, DATA_DIR
-    f = CONFIG_DIR / "albums.json"
-    if not f.exists():
-        raise HTTPException(404, "还没同步过专辑")
-    a = json.loads(f.read_text(encoding="utf-8")).get("albums", {}).get(album_key)
+    """专辑封面（同步时下到本地那份，不依赖平台图床 —— 图床 URL 会失效）。"""
+    from core import pipeline
+    from core.paths import DATA_DIR
+    a = next((x for x in pipeline.list_albums() if x["key"] == album_key), None)
     if not a or not a.get("cover_local"):
         raise HTTPException(404, "这张专辑没有本地封面")
     path = DATA_DIR / a["cover_local"]

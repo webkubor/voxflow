@@ -38,6 +38,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from core import db
 from core.paths import DATA_DIR, LEDGER_FILE, PUBLISH_ACCOUNTS_FILE
 
 BASE_DIR = DATA_DIR          # 台账里的相对路径都是相对数据根
@@ -85,70 +86,6 @@ BACKUP_STATUS_LABELS = {
 }
 
 
-def _load() -> dict[str, Any]:
-    if not LEDGER.exists():
-        return {"tracks": {}}
-    try:
-        return json.loads(LEDGER.read_text(encoding="utf-8"))
-    except Exception:
-        # 台账坏了不能让整个应用起不来 —— 返回空的，用户至少还能用其它功能
-        return {"tracks": {}}
-
-
-def _save(data: dict[str, Any]) -> None:
-    LEDGER.parent.mkdir(parents=True, exist_ok=True)
-    LEDGER.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
-
-
-# 只能存、不能显示的字段。
-#
-# 界面是可以给人看的地方 —— 演示、截图、录屏都可能发生。真实姓名、证件号、
-# 手机号这类东西的用途是**填平台表单**，不是展示；它们留在台账里供脚本读取，
-# 但不该经 API 出去。
-#
-# 在**后端**过滤而不是前端不渲染：前端漏一处就泄露了，而且 API 本身也可能
-# 被别的地方调用。数据不出后端，才叫真的不显示。
-SENSITIVE_KEY_HINTS = ("真实姓名", "身份证", "手机", "电话", "银行", "证件", "id_card", "phone")
-
-
-def _redact(config: dict[str, Any]) -> dict[str, Any]:
-    """抹掉配置里的敏感字段，只留一个标记说明「填过了」。"""
-    if not isinstance(config, dict):
-        return config
-    out = {}
-    for k, v in config.items():
-        if any(h in str(k) for h in SENSITIVE_KEY_HINTS):
-            out[k] = "···（已填，不在界面展示）"
-        else:
-            out[k] = v
-    return out
-
-
-def _public_platforms(platforms: dict[str, Any]) -> dict[str, Any]:
-    """平台状态的对外版本：配置脱敏，其余照旧。"""
-    out = {}
-    for pk, info in (platforms or {}).items():
-        if isinstance(info, dict) and isinstance(info.get("config"), dict):
-            info = {**info, "config": _redact(info["config"])}
-        out[pk] = info
-    return out
-
-
-def _backup_record(track: dict[str, Any]) -> dict[str, str]:
-    backup = track.get("cloud_backup") or {}
-    status = backup.get("status", "unrecorded")
-    return {
-        "status": status,
-        "label": BACKUP_STATUS_LABELS.get(status, status),
-        "location": backup.get("location", ""),
-        "updated_at": backup.get("updated_at", ""),
-    }
-
-
 def _publish_accounts() -> list[dict[str, Any]]:
     """读取非敏感账号元数据；缺失时返回三个待接入账号。"""
     try:
@@ -178,80 +115,149 @@ def _publish_accounts() -> list[dict[str, Any]]:
     return normalized
 
 
+
+def _now() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+# 只能存、不能显示的字段。
+#
+# 界面是可以给人看的地方 —— 演示、截图、录屏都可能发生。真实姓名、证件号、
+# 手机号这类东西的用途是**填平台表单**，不是展示；它们留在库里供脚本读取，
+# 但不该经 API 出去。
+#
+# 在**后端**过滤而不是前端不渲染：前端漏一处就泄露了，而且 API 本身也可能
+# 被别的地方调用。数据不出后端，才叫真的不显示。
+SENSITIVE_KEY_HINTS = ("真实姓名", "身份证", "手机", "电话", "银行", "证件", "id_card", "phone")
+
+
+def _redact(config: dict[str, Any]) -> dict[str, Any]:
+    """抹掉配置里的敏感字段，只留一个标记说明「填过了」。"""
+    if not isinstance(config, dict):
+        return config
+    return {
+        k: ("···（已填，不在界面展示）" if any(h in str(k) for h in SENSITIVE_KEY_HINTS) else v)
+        for k, v in config.items()
+    }
+
+
+def _row_to_track(row, platforms: dict[str, Any]) -> dict[str, Any]:
+    """一行 tracks + 它的平台状态 → 前端吃的那个结构。"""
+    stage = row["stage"]
+    backup = db._j(row["cloud_backup"], {}) or {}
+    b_status = backup.get("status", "unrecorded")
+    tid = row["id"]
+    return {
+        "id": tid,
+        "title": row["title"] or "未命名",
+        "stage": stage,
+        "stage_label": STAGE_LABELS.get(stage, stage),
+        "stage_index": STAGES.index(stage) if stage in STAGES else -1,
+        "voice": row["voice"] or None,
+        "clip_id": row["clip_id"] or None,
+        "clip_ids": db._j(row["clip_ids"], []) or [],
+        "platforms": platforms,
+        "cloud_backup": {
+            "status": b_status,
+            "label": BACKUP_STATUS_LABELS.get(b_status, b_status),
+            "location": backup.get("location", ""),
+            "updated_at": backup.get("updated_at", ""),
+        },
+        "updated_at": row["updated_at"] or "",
+        "note": row["note"] or "",
+        # 创作元数据：歌本身的内容。平台发布要用（歌词是必填项、风格影响推荐），
+        # 出问题复现也得靠它。不能只留在 Suno 云端和文件名里 —— 那边不归我们。
+        "lyrics": row["lyrics"] or "",
+        "tags": row["tags"] or "",
+        "prompt": row["prompt"] or "",
+        "album_desc": row["album_desc"] or "",
+        "audio_file": row["audio_file"] or "",
+        "cover_file": row["cover_file"] or "",
+        # 现成可用的 URL —— 前端不该自己拼路径，拼错了是静默 404
+        "cover_url": f"/api/cover/{tid}" if row["cover_file"] else "",
+        "audio_url": (
+            "/api/audio/" + "/".join(row["audio_file"].split("/")[-2:])
+            if (row["audio_file"] or "").startswith("out/") else ""
+        ),
+    }
+
+
+def _platform_row(r) -> dict[str, Any]:
+    out = {
+        "status": r["status"],
+        "song_id": r["song_id"] or None,
+        "song_url": r["song_url"] or "",
+        "album_id": r["album_id"] or None,
+        "album": r["album_name"] or "",
+        "album_url": (f"https://music.163.com/#/album?id={r['album_id']}"
+                      if r["platform"] == "netease" and r["album_id"] else ""),
+        "track_no": r["track_no"],
+        "duration": r["duration"],
+        "publish_date": r["publish_date"] or "",
+        "cover_url": r["cover_url"] or "",
+        "cover_local": r["cover_local"] or "",
+        "note": r["note"] or "",
+        "submitted_at": r["submitted_at"] or "",
+        "updated_at": r["updated_at"] or "",
+    }
+    cfg = db._j(r["config"], {}) or {}
+    if cfg:
+        out["config"] = _redact(cfg)      # 敏感字段不出后端
+    return out
+
+
 def list_tracks() -> list[dict[str, Any]]:
     """所有作品，按最近更新排序。前端看板直接吃这个。"""
-    data = _load()
-    tracks = []
-    for tid, t in data.get("tracks", {}).items():
-        stage = t.get("stage", "draft")
-        tracks.append({
-            "id": tid,
-            "title": t.get("title") or "未命名",
-            "stage": stage,
-            "stage_label": STAGE_LABELS.get(stage, stage),
-            "stage_index": STAGES.index(stage) if stage in STAGES else -1,
-            "voice": t.get("voice"),          # 用了哪个音色
-            "clip_id": t.get("clip_id"),      # Suno 的 clip
-            "clip_ids": t.get("clip_ids", []),   # 一次出两首，两个都留着
-            "platforms": _public_platforms(t.get("platforms", {})),
-            "cloud_backup": _backup_record(t),
-            "updated_at": t.get("updated_at", ""),
-            "note": t.get("note", ""),
-            # ── 创作元数据 ──
-            # 歌本身的内容，跟流程状态无关，但必须留底：平台发布时歌词是必填项、
-            # 风格标签影响推荐，出了问题要复现也得靠这些。
-            # 不能只留在 Suno 云端和文件名里 —— 那边不归我们，账号一停或者
-            # 对方改版就没了；文件名更是只能塞下一个标题。
-            "lyrics": t.get("lyrics", ""),
-            "tags": t.get("tags", ""),       # 送给 Suno 的风格串
-            "prompt": t.get("prompt", ""),   # 让 LLM 写歌词时给的描述
-            "audio_file": t.get("audio_file", ""),
-            "cover_file": t.get("cover_file", ""),
-            "album_desc": t.get("album_desc", ""),
-            # 现成可用的 URL —— 前端不该自己拼路径，
-            # 拼错了是静默 404，界面上只表现为「图不出来」
-            "cover_url": f"/api/cover/{tid}" if t.get("cover_file") else "",
-            "audio_url": (
-                "/api/audio/" + "/".join(t["audio_file"].split("/")[-2:])
-                if t.get("audio_file", "").startswith("out/") else ""
-            ),
-        })
-    tracks.sort(key=lambda x: x["updated_at"], reverse=True)
-    return tracks
+    db.init()
+    with db.connect() as c:
+        rows = c.execute("SELECT * FROM tracks ORDER BY updated_at DESC").fetchall()
+        plat_rows = c.execute("SELECT * FROM track_platforms").fetchall()
+
+    by_track: dict[str, dict[str, Any]] = {}
+    for r in plat_rows:
+        by_track.setdefault(r["track_id"], {})[r["platform"]] = _platform_row(r)
+
+    return [_row_to_track(r, by_track.get(r["id"], {})) for r in rows]
 
 
-def publication_board() -> dict[str, Any]:
-    """按发布账号聚合曲目，同时返回所有歌曲的云备份真值。"""
-    tracks = list_tracks()
-    accounts = _publish_accounts()
-    for account in accounts:
-        releases = []
-        for track in tracks:
-            release = track["platforms"].get(account["platform"])
-            if release is None:
-                continue
-            status = release.get("status", "unknown")
-            releases.append({
-                "id": track["id"],
-                "title": track["title"],
-                "status": status,
-                "updated_at": release.get("updated_at", ""),
-                "cloud_backup": track["cloud_backup"],
-            })
-        account["releases"] = releases
-    return {"accounts": accounts, "tracks": tracks}
+def get_track(track_id: str) -> dict[str, Any] | None:
+    """单首作品。看板点进详情用，不用把全表拉回来再过滤。"""
+    db.init()
+    with db.connect() as c:
+        row = c.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone()
+        if not row:
+            return None
+        plats = {r["platform"]: _platform_row(r) for r in
+                 c.execute("SELECT * FROM track_platforms WHERE track_id = ?", (track_id,)).fetchall()}
+    return _row_to_track(row, plats)
 
 
 def upsert(track_id: str, **fields: Any) -> dict[str, Any]:
     """新建或更新一首作品。只写传进来的字段，不覆盖其余。"""
-    data = _load()
-    t = data.setdefault("tracks", {}).setdefault(track_id, {"stage": "draft"})
-    for k, v in fields.items():
-        if v is not None:
-            t[k] = v
-    t["updated_at"] = _now()
-    _save(data)
-    return t
+    db.init()
+    now = _now()
+    # clip_ids / cloud_backup 是 JSON 列，进库前要序列化
+    for k in ("clip_ids", "cloud_backup"):
+        if k in fields and not isinstance(fields[k], str):
+            fields[k] = json.dumps(fields[k], ensure_ascii=False)
+
+    cols = ("title", "stage", "lyrics", "tags", "prompt", "album_desc", "voice",
+            "clip_id", "clip_ids", "audio_file", "cover_file", "note", "cloud_backup")
+    given = {k: v for k, v in fields.items() if k in cols and v is not None}
+
+    with db.connect() as c:
+        exists = c.execute("SELECT 1 FROM tracks WHERE id = ?", (track_id,)).fetchone()
+        if not exists:
+            c.execute("INSERT INTO tracks (id, title, stage, created_at, updated_at) VALUES (?,?,?,?,?)",
+                      (track_id, given.pop("title", "未命名"), given.pop("stage", "draft"), now, now))
+        if given:
+            sets = ", ".join(f"{k} = ?" for k in given)
+            c.execute(f"UPDATE tracks SET {sets}, updated_at = ? WHERE id = ?",
+                      (*given.values(), now, track_id))
+        else:
+            c.execute("UPDATE tracks SET updated_at = ? WHERE id = ?", (now, track_id))
+
+    return get_track(track_id) or {}
 
 
 def set_stage(track_id: str, stage: str) -> dict[str, Any]:
@@ -272,24 +278,164 @@ def set_platform_status(track_id: str, platform: str, status: str, **extra: Any)
 
     每个平台单独记：同一首歌可能在汽水已上架、网易云还在审核 —— 只有一个
     全局状态的话，这种情况根本表达不出来。
+
+    **整个操作在一个事务里**：以前是「改 JSON 再整份写回」，中途崩了会留下
+    半吊子状态（比如「发版中但不知道发去哪」），那种状态没人看得懂。
     """
     if platform not in PLATFORMS:
         raise ValueError(f"未知平台: {platform}")
-    data = _load()
-    t = data.setdefault("tracks", {}).setdefault(track_id, {"stage": "draft"})
-    p = t.setdefault("platforms", {}).setdefault(platform, {})
-    p["status"] = status
-    p["updated_at"] = _now()
-    p.update({k: v for k, v in extra.items() if v is not None})
-    t["updated_at"] = _now()
-    _save(data)
-    return t
+    db.init()
+    now = _now()
+    cfg = extra.pop("config", None)
+    album = extra.pop("album", None)
+
+    with db.connect() as c:
+        c.execute("INSERT OR IGNORE INTO tracks (id, title, stage, created_at, updated_at) "
+                  "VALUES (?,?,?,?,?)", (track_id, track_id, "draft", now, now))
+        c.execute("""
+            INSERT INTO track_platforms (track_id, platform, status, updated_at)
+            VALUES (?,?,?,?)
+            ON CONFLICT(track_id, platform) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at
+        """, (track_id, platform, status, now))
+
+        sets, vals = [], []
+        mapping = {"song_id": "song_id", "song_url": "song_url", "album_id": "album_id",
+                   "track_no": "track_no", "duration": "duration", "publish_date": "publish_date",
+                   "cover_url": "cover_url", "cover_local": "cover_local", "note": "note",
+                   "submitted_at": "submitted_at"}
+        for k, col in mapping.items():
+            if k in extra and extra[k] is not None:
+                sets.append(f"{col} = ?"); vals.append(extra[k])
+        if album is not None:
+            sets.append("album_name = ?"); vals.append(album)
+        if cfg is not None:
+            sets.append("config = ?")
+            vals.append(cfg if isinstance(cfg, str) else json.dumps(cfg, ensure_ascii=False))
+        if sets:
+            c.execute(f"UPDATE track_platforms SET {', '.join(sets)} WHERE track_id = ? AND platform = ?",
+                      (*vals, track_id, platform))
+        c.execute("UPDATE tracks SET updated_at = ? WHERE id = ?", (now, track_id))
+
+    return get_track(track_id) or {}
 
 
 def summary() -> dict[str, int]:
-    """各状态各有几首 —— 看板顶部的计数。"""
+    """各状态各有几首 —— 看板顶部的计数。一句 GROUP BY，不用把全表拉回来数。"""
+    db.init()
     counts = {s: 0 for s in STAGES}
     counts["archived"] = 0
-    for t in list_tracks():
-        counts[t["stage"]] = counts.get(t["stage"], 0) + 1
+    with db.connect() as c:
+        for r in c.execute("SELECT stage, COUNT(*) n FROM tracks GROUP BY stage"):
+            counts[r["stage"]] = r["n"]
     return counts
+
+
+def list_albums(platform: str | None = None) -> list[dict[str, Any]]:
+    """
+    专辑 + 每张专辑的曲目。
+
+    这个 join 以前是在 web/app.py 里手写的双重循环 —— 换成 SQL 之后
+    才叫「查询」，而不是「把两份 JSON 读进内存自己配对」。
+    """
+    db.init()
+    with db.connect() as c:
+        q = "SELECT * FROM albums"
+        args: tuple = ()
+        if platform:
+            q += " WHERE platform = ?"
+            args = (platform,)
+        q += " ORDER BY publish_date DESC"
+        albums = [dict(r) for r in c.execute(q, args).fetchall()]
+
+        for a in albums:
+            a["tracks"] = [
+                {"id": r["track_id"], "title": r["title"], "no": r["track_no"],
+                 "duration": r["duration"], "url": r["song_url"]}
+                for r in c.execute("""
+                    SELECT tp.track_id, t.title, tp.track_no, tp.duration, tp.song_url
+                    FROM track_platforms tp JOIN tracks t ON t.id = tp.track_id
+                    WHERE tp.platform = ? AND tp.album_id = ?
+                    ORDER BY COALESCE(tp.track_no, 999)
+                """, (a["platform"], a["album_id"])).fetchall()
+            ]
+            a["cover_api"] = f"/api/album-cover/{a['key']}" if a["cover_local"] else ""
+    return albums
+
+
+def upsert_album(key: str, **fields: Any) -> None:
+    """同步脚本用：写一张专辑。"""
+    db.init()
+    fields.setdefault("synced_at", _now())
+    cols = ("platform", "album_id", "title", "track_count", "publish_date", "company",
+            "description", "tags", "cover_url", "cover_local", "url", "synced_at")
+    given = {k: v for k, v in fields.items() if k in cols}
+    with db.connect() as c:
+        c.execute(f"""
+            INSERT INTO albums (key, {', '.join(given)}) VALUES (?{', ?' * len(given)})
+            ON CONFLICT(key) DO UPDATE SET {', '.join(f'{k}=excluded.{k}' for k in given)}
+        """, (key, *given.values()))
+
+
+def list_platform_accounts() -> dict[str, Any]:
+    """
+    各平台账号资产，并交叉核对「平台自报的歌曲数」和「台账里实际在线数」。
+
+    对不上说明同步漏了或者平台那边有变动 —— 数字自己会说话，
+    比在界面上写「同步成功」有用得多。
+    """
+    db.init()
+    with db.connect() as c:
+        rows = c.execute("SELECT * FROM platform_accounts").fetchall()
+        online = {r["platform"]: r["n"] for r in c.execute(
+            "SELECT platform, COUNT(*) n FROM track_platforms "
+            "WHERE status IN ('online','published') GROUP BY platform")}
+        albums_by = {}
+        # albums 的主键是 key（<platform>-<album_id>），不是 id —— 写错列名
+        # 会让整个端点 500，而前端只看到「加载失败」
+        for r in c.execute("SELECT platform, album_id, title, track_count FROM albums "
+                           "ORDER BY publish_date DESC"):
+            albums_by.setdefault(r["platform"], []).append(
+                {"id": r["album_id"], "name": r["title"], "size": r["track_count"]})
+
+    out = {}
+    for r in rows:
+        d = dict(r)
+        d["alias"] = db._j(r["alias"], []) or []
+        d["stats"] = db._j(r["stats"], {}) or {}
+        d["albums"] = albums_by.get(r["platform"], [])
+        d["local_online_count"] = online.get(r["platform"], 0)
+        out[r["platform"]] = d
+    return {"accounts": out}
+
+
+def upsert_platform_account(platform: str, **fields: Any) -> None:
+    """同步脚本用：写一个平台账号。"""
+    db.init()
+    fields.setdefault("synced_at", _now())
+    for k in ("alias", "stats"):
+        if k in fields and not isinstance(fields[k], str):
+            fields[k] = json.dumps(fields[k], ensure_ascii=False)
+    cols = ("label", "artist_id", "artist_name", "alias", "avatar_url", "brief",
+            "artist_url", "user_id", "user_url", "song_count", "album_count", "stats", "synced_at")
+    given = {k: v for k, v in fields.items() if k in cols}
+    with db.connect() as c:
+        c.execute(f"""
+            INSERT INTO platform_accounts (platform, {', '.join(given)})
+            VALUES (?{', ?' * len(given)})
+            ON CONFLICT(platform) DO UPDATE SET {', '.join(f'{k}=excluded.{k}' for k in given)}
+        """, (platform, *given.values()))
+
+
+def publication_board() -> dict[str, Any]:
+    """按发布账号聚合曲目，同时返回所有歌曲的云备份真值。"""
+    tracks = list_tracks()
+    accounts = _publish_accounts()
+    for account in accounts:
+        account["releases"] = [
+            {"id": t["id"], "title": t["title"],
+             "status": t["platforms"][account["platform"]].get("status", "unknown"),
+             "updated_at": t["platforms"][account["platform"]].get("updated_at", ""),
+             "cloud_backup": t["cloud_backup"]}
+            for t in tracks if account["platform"] in t["platforms"]
+        ]
+    return {"accounts": accounts, "tracks": tracks}

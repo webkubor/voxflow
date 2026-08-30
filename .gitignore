@@ -129,3 +129,6 @@ configs/pipeline.json
 /configs/scripts.json
 /configs/publish_accounts.json
 /configs/generated/
+
+# SQLite 台账（数据，不是代码）
+/configs/voxflow.db

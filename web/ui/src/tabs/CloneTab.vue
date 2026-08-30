@@ -148,7 +148,10 @@ const voicesStore = useVoicesStore();
 
 const { modelStatus } = storeToRefs(capabilitiesStore);
 const { personas, selectedPersona } = storeToRefs(voicesStore);
-const { savedScripts } = storeToRefs(libraryStore);
+// savedScripts / saveScript / deleteScript 都在 synth store。
+// library store 管的是音频文件，两回事 —— 指错 store 不会报错，
+// 只是点保存没反应，最难查的那类。
+const { savedScripts } = storeToRefs(synthStore);
 
 const cloneForm = reactive({
   text: '',
@@ -180,7 +183,7 @@ const handleSynthesize = () => {
     return;
   }
 
-  synthStore.synthesize({
+  synthStore.doClone({
     mode: 'clone',
     persona: selectedPersona.value,
     text: cloneForm.text,
@@ -195,7 +198,7 @@ const saveScript = () => {
     tasksStore.showToast('文案内容为空，无法保存', 'warning');
     return;
   }
-  libraryStore.saveScript(cloneForm.text);
+  synthStore.saveScript(cloneForm.text);
   tasksStore.showToast('已存入草稿箱', 'success');
 };
 
@@ -205,11 +208,11 @@ const loadScript = (script) => {
 };
 
 const deleteScript = (id) => {
-  libraryStore.deleteScript(id);
+  synthStore.deleteScript(id);
 };
 
 onMounted(() => {
-  libraryStore.loadScripts();
+  synthStore.loadScripts();
 });
 </script>
 
