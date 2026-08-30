@@ -98,6 +98,36 @@ acc.setdefault("accounts", {})["netease"] = {
     "synced_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
     "_来源": "公开 API /api/artist/{id}，不需要登录；音乐人后台（收益、审核状态）才要登录",
 }
+# ── 音乐人后台指标（要登录）─────────────────────────────
+# 公开 API 只有作品目录，播放量、粉丝、收益这些**只有后台有**。
+# 后台是个 SPA，数据渲染在页面上没有稳定的公开接口 —— 只能从文本里抠。
+# 这段会随平台改版失效，失效就是抓不到（返回 None），不会写坏已有数据。
+print("\n抓音乐人后台指标…")
+new_tab("https://music.163.com/musician/artist/home")
+time.sleep(9)
+stats = js("""(() => {
+  const txt = document.body.innerText
+  const g = (re) => { const m = txt.match(re); return m ? m[1] : null }
+  return {
+    play_count: g(/播放量[^\\d]*([\\d.]+[wW万]?)/),
+    fans: g(/粉丝\\s*\\n\\s*([\\d.]+[wW万]?)/),
+    works: g(/作品\\(首\\)\\s*\\n\\s*(\\d+)/),
+    withdrawable_cny: g(/可提现税前收益\\(元\\)[^\\d]*([\\d.]+)/),
+    musician_index: g(/音乐人指数\\s*\\n\\s*(\\d+)/),
+    play_7d: g(/近7日播放量\\s*([\\d.]+)\\s*次/),
+    play_yesterday_delta: g(/昨日新增\\s*[↑↓]?\\s*(\\d+)/),
+    roles: g(/网易音乐人\\s*\\n\\s*([^\\n]{0,20})/),
+  }
+})()""")
+
+if stats and stats.get("works"):
+    acc["accounts"]["netease"]["stats"] = {**stats, "synced_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    print(f"  播放 {stats['play_count']}（昨日+{stats['play_yesterday_delta']}）· "
+          f"粉丝 {stats['fans']} · 作品 {stats['works']} 首 · "
+          f"可提现 {stats['withdrawable_cny']} 元 · 指数 {stats['musician_index']}")
+else:
+    print("  ✗ 抓不到后台指标（没登录？或者平台改版了）—— 不影响作品目录同步")
+
 ACCOUNTS.write_text(json.dumps(acc, ensure_ascii=False, indent=2), encoding="utf-8")
 print(f"✓ 平台账号台账已更新：{ACCOUNTS}")
 
