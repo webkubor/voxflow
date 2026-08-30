@@ -132,3 +132,8 @@ configs/pipeline.json
 
 # SQLite 台账（数据，不是代码）
 /configs/voxflow.db
+
+# --- 运行时遥测日志（agent-eyes 每次运行都写，不该进 git）---
+web/ui/log/**/*.log
+web/ui/log/**/snapshots/
+web/ui/log/instances.json
