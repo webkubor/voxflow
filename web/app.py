@@ -185,10 +185,6 @@ def _run_clone_task(task_id: str, params: dict, update_fn):
         if p.exists():
             ref_path = p
     if not ref_path:
-        temp_path = TEMP_DIR / f"当前参考_{display_name}.wav"
-        if temp_path.exists():
-            ref_path = temp_path
-    if not ref_path:
         ref_rel = pdata.get("ref", "")
         if ref_rel:
             p = BASE_DIR / ref_rel
@@ -435,43 +431,43 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class _RevalidatingStaticFiles(StaticFiles):
+class _NoCacheStaticFiles(StaticFiles):
     """
-    强制浏览器每次都回来验证的静态文件服务。
+    本地工具的静态文件服务：一律不缓存。
 
-    起因：换了 logo，服务端返回的确实是新图（ETag 都变了），页面上还是旧的。
-    原因是 StaticFiles **不发 Cache-Control**，浏览器于是走「启发式缓存」——
-    按 Last-Modified 距今多久自己推算一个过期时间，可能几小时内根本不回来问。
-    对 /static/assets/ 那种带内容哈希的构建产物无所谓（改了名就是新 URL），
-    但品牌资产是**固定文件名、内容会变**，正好是启发式缓存最坑的那一类。
+    这是个跑在 127.0.0.1 的单用户桌面工具，不是公网站点。HTTP 缓存那一整套
+    （长缓存 + 内容哈希 + 分层策略）解决的是「跨网络重复下载」和「CDN 回源」，
+    本地环回连接上这两件事都不存在 —— 收益是零，代价却是实打实的：
+    改了 logo 页面还是旧的，改了前端要硬刷新，每次都得先怀疑一遍是不是缓存。
 
-    `no-cache` 不等于不缓存：浏览器仍然存副本，只是用之前必须带 ETag 问一次。
-    没变就是 304（几十字节），变了才重新下。对 logo 这种小文件代价可以忽略，
-    换来的是「改了资产就能看到」这个确定性 —— 不用让人去硬刷新，
-    也不用给 URL 手工挂版本号（那个迟早忘记改）。
+    所以不分层、不区分构建产物和品牌资产，全部 no-store。
     """
 
     def file_response(self, *args, **kwargs):
         resp = super().file_response(*args, **kwargs)
-        resp.headers["Cache-Control"] = "no-cache"
+        resp.headers["Cache-Control"] = "no-store"
         return resp
 
 
-# 挂载静态文件。构建产物文件名自带内容哈希，可以放心长缓存，用原生 StaticFiles。
-app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
+_STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/static", _NoCacheStaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 # index.html 里的 logo 走 /assets/branding/...，但此前只挂了 /static，
 # 于是首页左上角 logo 一直是碎图（README 里的截图也就跟着碎）。
-# 这里的文件名是固定的（logo-icon.png 内容会换），所以必须走强制重新验证那一版。
 _ASSETS_DIR = Path(__file__).parent.parent / "assets"
 if _ASSETS_DIR.is_dir():
-    app.mount("/assets", _RevalidatingStaticFiles(directory=str(_ASSETS_DIR)), name="assets")
+    app.mount("/assets", _NoCacheStaticFiles(directory=str(_ASSETS_DIR)), name="assets")
 
 
 # ── 页面路由 ──────────────────────────────────────────────
 @app.get("/")
 async def index():
-    return FileResponse(str(Path(__file__).parent / "static" / "index.html"))
+    # 入口页也不缓存 —— 它缓存了，整个前端就都停在旧版本上，
+    # 后面所有资源无论怎么改都看不到。
+    return FileResponse(
+        str(_STATIC_DIR / "index.html"),
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 # ── API 路由 ──────────────────────────────────────────────
@@ -569,14 +565,6 @@ async def get_persona_audio(key: str):
     pdata = data[key]
     if not isinstance(pdata, dict):
         pdata = {}
-    display_name = pdata.get("name", key)
-
-    # 优先 temp 样音
-    temp_path = TEMP_DIR / f"当前参考_{display_name}.wav"
-    if temp_path.exists():
-        return FileResponse(str(temp_path), media_type="audio/wav")
-
-    # 其次 ref
     ref_rel = pdata.get("ref", "")
     if ref_rel:
         ref_path = BASE_DIR / ref_rel
@@ -599,15 +587,17 @@ async def list_personas():
             data = {}
         for key, val in data.items():
             if isinstance(val, dict):
-                name = val.get("name", key)
-                temp_path = TEMP_DIR / f"当前参考_{name}.wav"
                 ref_rel = val.get("ref", "")
                 ref_path = BASE_DIR / ref_rel if ref_rel else None
+                has_audio = ref_path.exists() if ref_path else False
                 registered[key] = {
                     **val,
                     "source": "registered",
-                    "has_temp": temp_path.exists(),
-                    "has_ref": ref_path.exists() if ref_path else False,
+                    # has_temp / has_ref 曾经是两条路径（按名字拼的样音、ref 指的
+                    # 原始素材），实际指向同一个文件。合成一个 has_audio。
+                    "has_audio": has_audio,
+                    "has_temp": has_audio,
+                    "has_ref": has_audio,
                 }
             else:
                 registered[key] = {
@@ -665,6 +655,42 @@ async def add_persona(
     )
 
     return {"ok": True, "key": safe_key, "name": display_name, "ref": ref_rel}
+
+
+@app.patch("/api/personas/{key}")
+async def update_persona(key: str, name: str = Form(None), desc: str = Form(None)):
+    """
+    改音色的名字和描述。就是改两个字段，不碰任何文件。
+
+    这里曾经是一百行：改名要连带重命名 assets/temp 下的样音、
+    voice_designs 下的配方，还要挡重名、失败回滚。原因是当时读音频靠
+    `当前参考_{名字}.wav` 拼路径 —— 名字成了路径的一部分，改名自然要动文件。
+
+    根子上的修法不是把重命名写得更严密，是**不让名字参与路径**：
+    参考音频的路径本来就完整存在 ref 字段里（注册音色时写进去的），
+    改成只读 ref 之后，名字回归成纯粹的名字，改名就是改个字段。
+    """
+    if not PERSONAS_FILE.exists():
+        raise HTTPException(404, "personas.json 不存在")
+
+    with open(PERSONAS_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if key not in data:
+        raise HTTPException(404, f"音色 {key} 不存在")
+
+    entry = data[key] if isinstance(data[key], dict) else {"name": data[key]}
+
+    # 只写传了的字段。空字符串是有意义的输入（清空描述），判 None 不判真值。
+    if name is not None and name.strip():
+        entry["name"] = name.strip()
+    if desc is not None:
+        entry["desc"] = desc.strip()
+
+    data[key] = entry
+    with open(PERSONAS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    return {"ok": True, "key": key, "name": entry.get("name", key), "desc": entry.get("desc", "")}
 
 
 @app.delete("/api/personas/{key}")

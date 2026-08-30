@@ -82,11 +82,6 @@ def tts_clone(
         )
 
     if not ref_path or not ref_path.exists():
-        temp_path = BASE_DIR / "assets" / "temp" / f"当前参考_{display_name}.wav"
-        if temp_path.exists():
-            ref_path = temp_path
-
-    if not ref_path or not ref_path.exists():
         ref_rel = pdata.get("ref", "")
         if ref_rel:
             ref_path = (

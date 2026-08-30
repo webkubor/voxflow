@@ -47,8 +47,11 @@ class CloneMode:
         display_name = get_persona_cn(persona)
         p_cn = sanitize_path_component(display_name, fallback="未命名角色")
 
-        # --- 强力约束：只准在 temp 里找黄金样音 ---
-        ref_audio = os.path.join(self.engine.base_dir, "assets/temp", f"当前参考_{p_cn}.wav")
+        # 参考音频的路径只从 personas.json 的 ref 字段来，不按名字拼 ——
+        # 拼路径会把名字焊死成文件名，改个名就找不到音频了。
+        from core.utils import persona_ref_audio, load_personas
+        ref_audio = persona_ref_audio(
+            self.engine.base_dir, (load_personas() or {}).get(persona) or {})
 
         if not os.path.exists(ref_audio):
             # 优先使用请求中显式提供的原始参考音频，适配 0-1 克隆阶段

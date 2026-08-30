@@ -44,14 +44,23 @@ def _resolve_audio(path: str) -> Path:
     return p
 
 
-def _get_temp_path(persona_cn: str) -> Path:
+def _new_temp_path(persona_cn: str) -> Path:
+    """**新建**样音时的落盘位置。只在写入侧用 —— 读取一律走 ref 字段，
+    否则名字就成了路径的一部分，改个名音频就找不到了。"""
     safe = sanitize_path_component(persona_cn, fallback="未命名角色")
     return BASE_DIR / "assets" / "temp" / f"当前参考_{safe}.wav"
 
 
-def _get_design_path(persona_cn: str) -> Path:
-    safe = sanitize_path_component(persona_cn, fallback="未命名角色")
-    return BASE_DIR / "voice_designs" / f"{safe}.json"
+def _ref_path(data: dict) -> Path | None:
+    """音色的参考音频 —— 路径存在 ref 字段里，不从名字推导。"""
+    rel = str((data or {}).get("ref", "")).strip()
+    return (BASE_DIR / rel) if rel else None
+
+
+def _design_path(data: dict) -> Path | None:
+    """设计配方 —— 同上，读 design 字段。"""
+    rel = str((data or {}).get("design", "")).strip()
+    return (BASE_DIR / rel) if rel else None
 
 
 def _load_personas() -> dict:
@@ -87,11 +96,11 @@ def voice_list():
         name = data.get("name", key) if isinstance(data, dict) else data
         data = data if isinstance(data, dict) else {}
 
-        temp_path = _get_temp_path(name)
-        has_temp = "✓" if temp_path.exists() else "✗"
+        ref_path = _ref_path(data)
+        has_temp = "✓" if (ref_path and ref_path.exists()) else "✗"
 
-        design_path = _get_design_path(name)
-        has_design = "✓" if design_path.exists() else "✗"
+        design_path = _design_path(data)
+        has_design = "✓" if (design_path and design_path.exists()) else "✗"
 
         instruction = data.get("instruction", "")
         instr_short = instruction[:20] + "..." if len(instruction) > 20 else instruction
@@ -228,11 +237,11 @@ def voice_show(
     data = data if isinstance(data, dict) else {}
 
     ref_rel = data.get("ref", "")
-    ref_path = BASE_DIR / ref_rel if ref_rel else None
+    ref_path = _ref_path(data)
     design_rel = data.get("design", "")
-    design_path = BASE_DIR / design_rel if design_rel else None
+    design_path = _design_path(data)
 
-    temp_path = _get_temp_path(name)
+    temp_path = ref_path
     design_data = None
     if design_path and design_path.exists():
         with open(design_path, "r", encoding="utf-8") as f:

@@ -253,12 +253,8 @@ def check_personas():
     for key, val in data.items():
         if isinstance(val, dict):
             ref = val.get("ref", "")
-            if ref:
-                ref_path = BASE_DIR / ref
-                temp_name = val.get("name", key)
-                temp_path = BASE_DIR / "assets" / "temp" / f"当前参考_{temp_name}.wav"
-                if not ref_path.exists() and not temp_path.exists():
-                    missing_ref.append(key)
+            if ref and not (BASE_DIR / ref).exists():
+                missing_ref.append(key)
 
     if missing_ref:
         return _warn(

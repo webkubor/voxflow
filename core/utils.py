@@ -142,27 +142,41 @@ def validate_persona_ref_rule(persona: str, persona_data: Dict[str, Any]):
             f"应为 {expected_stem}<ext>"
         )
 
-def resolve_persona_ref_audio(base_dir: str, persona: str, persona_data: Dict[str, Any]) -> str:
-    """按强规则解析参考音频路径，并校验文件存在。"""
-    # validate_persona_ref_rule(persona, persona_data) # 彻底废弃对原始参考目录的强绑定
+def persona_ref_audio(base_dir: str, persona_data: Dict[str, Any]) -> str:
+    """
+    音色参考音频的路径。**唯一来源是 ref 字段** —— 不从名字推导。
 
-    persona_cn = sanitize_path_component(get_persona_cn(persona), fallback="未知")
-    temp_ref = os.path.join(base_dir, "assets/temp", f"当前参考_{persona_cn}.wav")
+    以前这里是「先按 `当前参考_{名字}.wav` 拼一个路径，拼不到再读 ref」。
+    两条路指向的其实是同一个文件（注册音色时 ref 写的就是那个 temp 路径），
+    拼接完全冗余；但它带来一个很实际的后果：**名字变成了路径的一部分**，
+    于是「给音色改个中文名」这种最普通的操作会让音频找不到，
+    还得连带重命名文件、处理重名、失败回滚 —— 一件本该改一个字段的事。
 
-    if os.path.exists(temp_ref):
-        return temp_ref
+    路径存在数据里，就只从数据里读。名字回归成纯粹的名字。
 
-    ref_rel = str(persona_data.get("ref", "")).strip()
+    返回 "" 表示没有可用音频，由调用方决定怎么提示 —— 不在这里抛异常，
+    因为「列个清单看看谁缺素材」和「现在就要合成」需要的反应不一样。
+    """
+    ref_rel = str((persona_data or {}).get("ref", "")).strip()
     if not ref_rel:
         return ""
-    ref_path = os.path.join(base_dir, ref_rel)
-    if not os.path.exists(ref_path):
-        raise ValueError(
-            f"角色 {persona} 的参考音频资产不足：\n"
-            f"1. 核心样音缺失：{temp_ref}\n"
-            f"2. 原始素材缺失：{ref_rel}"
-        )
-    return ref_path
+    path = ref_rel if os.path.isabs(ref_rel) else os.path.join(base_dir, ref_rel)
+    return path if os.path.exists(path) else ""
+
+
+def resolve_persona_ref_audio(base_dir: str, persona: str, persona_data: Dict[str, Any]) -> str:
+    """解析参考音频路径并校验存在；缺素材时抛出可读的错误。"""
+    path = persona_ref_audio(base_dir, persona_data)
+    if path:
+        return path
+
+    ref_rel = str((persona_data or {}).get("ref", "")).strip()
+    if not ref_rel:
+        return ""
+    raise ValueError(
+        f"角色 {persona} 的参考音频不存在：{ref_rel}\n"
+        f"（音色是否被删过文件？可以重新上传参考音频注册一次）"
+    )
 
 def _in_configs_dir(path: str) -> bool:
     abs_configs = os.path.abspath(CONFIG_DIR)
