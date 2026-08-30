@@ -31,8 +31,8 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
       ready: caps.value.tts?.ready, detail: caps.value.tts?.detail },
     { key: 'suno', label: '音乐', what: caps.value.suno?.model || 'Suno',
       ready: caps.value.suno?.ready, num: caps.value.suno?.credits, detail: caps.value.suno?.detail },
-    { key: 'studio', label: '中台', what: caps.value.studio?.identity || '未接',
-      ready: caps.value.studio?.ready, detail: caps.value.studio?.detail },
+    { key: 'museav', label: 'museav', what: caps.value.museav?.identity || '未接',
+      ready: caps.value.museav?.ready, detail: caps.value.museav?.detail },
     { key: 'llm', label: '文案', what: caps.value.llm?.model || '未接',
       ready: caps.value.llm?.ready, detail: caps.value.llm?.detail },
   ]);

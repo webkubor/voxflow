@@ -170,6 +170,25 @@ for vue in (PROJECT / "web/ui/src").rglob("*.vue"):
                 bad_refs.append(f"{vue.name}: {name} 不在 {store} store 里（从 {var} 解构）")
 check("组件解构的 store 状态都存在", not bad_refs, "; ".join(bad_refs[:3]))
 
+# 组件和 store 里不该再出现裸 fetch —— 全部走 src/api 那一层。
+# 散写 fetch 的代价今天已经付过：错误处理各写各的、端点路径散落、没有类型。
+raw_fetch = []
+for f in list((PROJECT / "web/ui/src").rglob("*.vue")) + list((PROJECT / "web/ui/src/stores").glob("*.*")):
+    if "src/api" in str(f):
+        continue
+    text = strip_comments(f.read_text(encoding="utf-8"))
+    n = len(re.findall(r"\bfetch\s*\(", text))
+    if n:
+        raw_fetch.append(f"{f.name}×{n}")
+check("没有绕过 api 层的裸 fetch", not raw_fetch, ", ".join(raw_fetch[:4]))
+
+# naive-ui 组件交给 unplugin-vue-components 自动解析，不再手工注册。
+# 这里只确认那套自动引入还接着 —— 它一旦掉了，所有组件会同时消失，
+# 比漏注册一个更严重。
+vite_cfg = (PROJECT / "web/ui/vite.config.js").read_text(encoding="utf-8")
+check("naive-ui 自动按需引入已启用",
+      "NaiveUiResolver" in vite_cfg and "unplugin-vue-components" in vite_cfg)
+
 print(f"\n{'─' * 40}")
 if failures:
     print(f"✗ {len(failures)}/{checks} 项没过：")

@@ -1229,7 +1229,7 @@ async def capabilities():
         except Exception:
             return {"ready": False, "credits": 0, "detail": "未登录或 CLI 不可用"}
 
-    def _probe_studio():
+    def _probe_museav():
         base_url = os.environ.get("VOXFLOW_LLM_BASE_URL", "")
         api_key = os.environ.get("VOXFLOW_LLM_API_KEY", "")
         if not (base_url and api_key and "manager.museav" in base_url):
@@ -1246,9 +1246,13 @@ async def capabilities():
             return {"ready": True, "identity": who, "model": who,
                     "detail": f"museav 中台 · 租户 {who}（出图 + 文案）"}
         except Exception as e:
-            msg = str(e)
-            hint = "凭据无效或被拦截" if ("403" in msg or "401" in msg) else "连不上中台"
-            return {"ready": False, "identity": "", "detail": hint}
+            # 把真实错误带出来，不要用「连不上」这种模糊话盖住 ——
+            # 那样人只能猜是网络、凭据还是超时，每种猜法都要花时间验证一遍。
+            # key 不会出现在异常里（它在 header 中），可以安全展示。
+            kind = type(e).__name__
+            msg = str(e)[:80]
+            return {"ready": False, "identity": "",
+                    "detail": f"museav 中台连接失败：{kind} {msg}"}
 
     def _probe_llm():
         try:
@@ -1259,10 +1263,12 @@ async def capabilities():
         except Exception as e:
             return {"ready": False, "model": "", "detail": str(e)[:60]}
 
-    names = ["tts", "suno", "studio", "llm"]
-    probes = [_probe_tts, _probe_suno, _probe_studio, _probe_llm]
+    names = ["tts", "suno", "museav", "llm"]
+    probes = [_probe_tts, _probe_suno, _probe_museav, _probe_llm]
     results = await asyncio.gather(*[asyncio.to_thread(f) for f in probes],
                                    return_exceptions=True)
+    # key 用 museav 而不是泛称 studio —— 这是「museav 中台」这个具体的服务，
+    # 换个中台就是换个 key，不该用一个模糊的通用名把它盖住。
     caps = {}
     for name, res in zip(names, results):
         caps[name] = res if isinstance(res, dict) else {"ready": False, "detail": "探测失败"}

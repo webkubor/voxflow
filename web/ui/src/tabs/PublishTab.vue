@@ -18,8 +18,10 @@
  * 真实姓名、证件号这些在后端就被脱敏了（core/pipeline.py 的 _redact）。
  * 界面是可以给人看、可以截图演示的地方，展示的应该是作品和数据。
  */
-import { computed, onMounted, ref } from 'vue';
+import { computed, h, onMounted, ref } from 'vue';
+import { NText } from 'naive-ui';
 import { storeToRefs } from 'pinia';
+import { api, toMessage } from '../api';
 import { usePipelineStore } from '../stores/pipeline';
 import { useTasksStore } from '../stores/tasks';
 
@@ -36,15 +38,13 @@ const openAlbum = ref('');
 const load = async () => {
   loading.value = true;
   try {
-    const [acc, alb] = await Promise.all([
-      fetch('/api/platform-accounts').then((r) => r.json()),
-      fetch('/api/albums').then((r) => r.json()),
-    ]);
+    // 走 api 层，不在组件里写 fetch —— 端点、错误处理、类型都在那一层
+    const [acc, alb] = await Promise.all([api.platformAccounts(), api.albums()]);
     accounts.value = acc.accounts || {};
     albums.value = alb.albums || {};
     await pipelineStore.loadPipeline();
   } catch (cause) {
-    tasksStore.showToast(cause.message || '加载平台数据失败', 'error');
+    tasksStore.showToast(await toMessage(cause), 'error');
   } finally {
     loading.value = false;
   }
@@ -77,6 +77,27 @@ const songsOfPlatform = computed(() =>
     .sort((a, b) => (b.p.publish_date || '').localeCompare(a.p.publish_date || '')),
 );
 
+/**
+ * 已上架列表的列。
+ *
+ * 定义成数据而不是写在模板里：列宽、对齐、渲染方式集中一处，
+ * 加一列不用去模板里数 div。
+ */
+const songColumns = computed(() => [
+  { title: '歌名', key: 'title', ellipsis: { tooltip: true } },
+  { title: '专辑', key: 'album', width: 170, ellipsis: { tooltip: true },
+    render: (r) => r.p.album || '—' },
+  { title: '发行', key: 'date', width: 104,
+    render: (r) => h(NText, { depth: 3 }, () => r.p.publish_date || '—') },
+  { title: '时长', key: 'dur', width: 70, align: 'right',
+    render: (r) => h(NText, { depth: 3 }, () => fmtDuration(r.p.duration)) },
+  { title: '', key: 'link', width: 44, align: 'right',
+    render: (r) => r.p.song_url
+      ? h('a', { href: r.p.song_url, target: '_blank', rel: 'noopener',
+                 style: 'color:var(--vf-primary);text-decoration:none' }, '听')
+      : null },
+]);
+
 const fmtDuration = (sec) => {
   if (!sec) return '';
   const m = Math.floor(sec / 60);
@@ -94,20 +115,17 @@ const fmtDuration = (sec) => {
       <n-button secondary size="small" :loading="loading" @click="load">刷新</n-button>
     </div>
 
-    <!-- 平台切换：一次只看一个平台的完整画面 -->
-    <div class="platform-tabs">
-      <button
-        v-for="p in platformList"
-        :key="p.key"
-        class="platform-tab"
-        :class="{ active: current === p.key, empty: !p.account }"
-        @click="current = p.key"
-      >
-        <span class="pt-label">{{ p.label }}</span>
-        <span v-if="p.account" class="pt-meta">{{ p.songCount }} 首</span>
-        <span v-else class="pt-meta">未接入</span>
-      </button>
-    </div>
+    <!-- 用 n-tabs 的 segment 型而不是手搓 button：
+         手写的三个按钮里只有选中那个有边框，另外两个看着像纯文本，
+         人不知道能点。segment 型自带「这是一组可切换项」的视觉语义。 -->
+    <n-tabs v-model:value="current" type="segment" size="small" class="platform-switch">
+      <n-tab v-for="p in platformList" :key="p.key" :name="p.key">
+        {{ p.label }}
+        <n-text depth="3" style="margin-left:6px;font-size:11px">
+          {{ p.account ? `${p.songCount} 首` : '未接入' }}
+        </n-text>
+      </n-tab>
+    </n-tabs>
 
     <!-- 没接入的平台：说清楚差什么，不装作有数据 -->
     <n-empty
@@ -125,8 +143,9 @@ const fmtDuration = (sec) => {
     <template v-else>
       <!-- 账号卡：我是谁 + 这个平台上的数据 -->
       <n-card size="small" class="account-card">
-        <div class="acc-head">
-          <img v-if="acc.avatar_url" :src="acc.avatar_url" class="acc-avatar" alt="" />
+        <!-- n-space 管间距，不自己写 flex —— 之前头像和文字叠在一起 -->
+        <n-space align="center" :size="14" :wrap="false" class="acc-head">
+          <n-avatar v-if="acc.avatar_url" :src="acc.avatar_url" :size="52" round />
           <div class="acc-id">
             <div class="acc-name">
               {{ acc.artist_name }}
@@ -138,7 +157,7 @@ const fmtDuration = (sec) => {
               <a v-if="acc.user_url" :href="acc.user_url" target="_blank" rel="noopener">个人主页</a>
             </div>
           </div>
-        </div>
+        </n-space>
 
         <div v-if="acc.stats?.works" class="acc-stats">
           <div class="stat">
@@ -192,15 +211,16 @@ const fmtDuration = (sec) => {
       <!-- 已上架作品 -->
       <section class="section">
         <h4 class="section-title">已上架 <em>{{ songsOfPlatform.length }}</em></h4>
-        <div class="song-list">
-          <div v-for="s in songsOfPlatform" :key="s.id" class="song">
-            <span class="song-name">{{ s.title }}</span>
-            <span class="song-album">{{ s.p.album }}</span>
-            <span class="song-date">{{ s.p.publish_date }}</span>
-            <span class="song-dur">{{ fmtDuration(s.p.duration) }}</span>
-            <a v-if="s.p.song_url" :href="s.p.song_url" target="_blank" rel="noopener" class="song-link">听</a>
-          </div>
-        </div>
+        <!-- n-data-table 而不是手写 flex 行：手写版本里歌名是 flex:1，
+             把其余信息全推到最右边，中间空出一大片。表格按内容分配列宽。 -->
+        <n-data-table
+          :columns="songColumns"
+          :data="songsOfPlatform"
+          :row-key="(r) => r.id"
+          size="small"
+          :bordered="false"
+          max-height="440"
+        />
       </section>
     </template>
   </div>
@@ -322,17 +342,4 @@ const fmtDuration = (sec) => {
 .adt-dur { color: var(--vf-text-3); font-variant-numeric: tabular-nums; }
 .adt-link { color: var(--vf-primary); text-decoration: none; }
 
-.song-list { display: flex; flex-direction: column; }
-.song {
-  display: flex; align-items: center; gap: var(--vf-space-3);
-  padding: var(--vf-space-2) var(--vf-space-3);
-  border-bottom: 1px solid var(--vf-border);
-  font-size: 12px;
-}
-.song:hover { background: var(--vf-bg-2); }
-.song-name { flex: 1; color: var(--vf-text-1); }
-.song-album { width: 150px; color: var(--vf-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.song-date { width: 84px; color: var(--vf-text-3); font-variant-numeric: tabular-nums; }
-.song-dur { width: 44px; color: var(--vf-text-3); text-align: right; font-variant-numeric: tabular-nums; }
-.song-link { width: 20px; color: var(--vf-primary); text-decoration: none; text-align: right; }
 </style>
