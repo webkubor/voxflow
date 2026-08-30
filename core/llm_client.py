@@ -1,7 +1,11 @@
-"""LLM 客户端 — 通过 FreeLLMAPI (OpenAI 兼容) 实现 AI 文案生成与润色
+"""LLM 客户端 — 任何 OpenAI 兼容后端都能接，实现 AI 文案生成与润色
+
+只依赖 OpenAI SDK 的协议本身，不绑定某一家服务。三个环境变量换后端：
+
+    本地 FreeLLMAPI（默认）  需要 Docker 起一个容器在 localhost:3001
+    自己的网关 / 中台        比如 museav：见项目根目录 run.sh
 
 依赖:
-    - FreeLLMAPI 服务运行在 localhost:3001 (Docker 一键启动)
     - pip install openai
 
 配置:
@@ -53,21 +57,31 @@ def _get_client():
 
 
 def check_status() -> dict:
-    """检测 FreeLLMAPI 是否可用
+    """检测 LLM 后端是否可用（用一次真实的最小请求，不是 GET /models）
 
     返回:
         {"available": bool, "base_url": str, "model": str, "error": str}
     """
     try:
         client = _get_client()
-        # 尝试列模型，能通就说明服务在线
-        resp = client.models.list()
-        models = [m.id for m in resp.data[:10]]
+        # 用一次**极小的真实请求**探活，而不是 client.models.list()。
+        #
+        # models.list() 打的是 GET /models —— 那是 OpenAI 官方 API 的端点，
+        # 不是 OpenAI 兼容协议的必需项。很多自建/代理网关（比如接了 museav 中台
+        # 之后）只实现 /chat/completions，探活就会误报「未连接」，而实际生成
+        # 完全正常。用生成本身探活，探的才是真正要用的那条路。
+        #
+        # max_tokens=1 让开销可以忽略：一次探活约 10 token。
+        client.chat.completions.create(
+            model=_default_model,
+            messages=[{"role": "user", "content": "hi"}],
+            max_tokens=1,
+        )
         return {
             "available": True,
             "base_url": _default_base,
             "model": _default_model,
-            "models": models,
+            "models": [_default_model],
             "error": "",
         }
     except Exception as e:
