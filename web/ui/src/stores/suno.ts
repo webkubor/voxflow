@@ -6,6 +6,7 @@ import { reactive, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { api, toMessage } from '../api';
 import { SUNO_TASK_POLL_MS } from '../config/constants';
+import { useCoverHistoryStore } from './coverHistory';
 import { useLibraryStore } from './library';
 import { useTasksStore } from './tasks';
 import type { TaskItem } from './tasks';
@@ -64,12 +65,31 @@ export const useSunoStore = defineStore('suno', () => {
         suno.submitting = false;
         useTasksStore().showToast('🎵 Suno 音乐生成完成！', 'success');
         await useLibraryStore().loadAudioList();
+        // 翻唱历史 reconcile —— 不管是文本生成还是上传音频任务都走这里
+        const coverStore = useCoverHistoryStore();
+        const coverItem = coverStore.items.find((c) => c.id === taskId);
+        if (coverItem) {
+          coverStore.update(taskId, {
+            status: 'done',
+            urls: task.result?.urls || [],
+            files: task.result?.files || [],
+            completedAt: Date.now(),
+          });
+        }
         if (task.result?.urls?.length) useLibraryStore().playAudio(task.result.urls[0], task.result.files?.[0]);
         return;
       }
       if (task.status === 'error') {
         suno.submitting = false;
         suno.error = task.error || '生成失败';
+        const coverStore = useCoverHistoryStore();
+        const coverItem = coverStore.items.find((c) => c.id === taskId);
+        if (coverItem) {
+          coverStore.update(taskId, {
+            status: 'error',
+            error: task.error || '未知错误',
+          });
+        }
         return;
       }
     } catch (cause) {
@@ -94,6 +114,29 @@ export const useSunoStore = defineStore('suno', () => {
         lyrics: overrides?.lyrics ?? sunoForm.lyrics,
         persona: overrides?.persona ?? sunoForm.persona,
       });
+      taskTimer = window.setTimeout(() => pollSunoTask(data.task_id), 3000);
+      return data;
+    } catch (cause) {
+      suno.submitting = false;
+      const msg = await toMessage(cause);
+      suno.error = msg;
+      error.value = msg;
+      throw cause;
+    }
+  };
+
+  /**
+   * 提交翻唱 + 上传原曲音频（走 Suno covers API）。
+   *
+   * 前端把表单 + 音频打包成 FormData 直接发，后端需要实现 /api/suno/cover
+   * 转发到 Suno 的 covers 端点。当前后端没实现的话会 404，错误进 errorLog。
+   */
+  const submitCover = async (formData: FormData): Promise<{ task_id: string }> => {
+    error.value = '';
+    suno.error = '';
+    suno.submitting = true;
+    try {
+      const data = await api.sunoCover(formData);
       taskTimer = window.setTimeout(() => pollSunoTask(data.task_id), 3000);
       return data;
     } catch (cause) {
@@ -137,6 +180,6 @@ export const useSunoStore = defineStore('suno', () => {
 
   return {
     suno, sunoForm, lyricsPrompt, lyricsGenerating, error,
-    loadSunoStatus, submitSuno, generateLyrics, stopPolling,
+    loadSunoStatus, submitSuno, submitCover, generateLyrics, stopPolling,
   };
 });

@@ -294,6 +294,46 @@
                 没有现成的？先到「音色设计」合成一个，<code>./voxsuno sample</code> 生成样音 → suno.com 上传 → <code>./voxsuno link</code>
               </p>
             </div>
+
+            <!-- 原曲音频：上传后做真「同曲不同演绎」 -->
+            <div class="form-cell">
+              <div class="cover-audio-head">
+                <label class="form-label">
+                  🎵 原曲音频
+                  <span class="form-label-optional">（可选 · 上传后做真"同曲不同演绎"）</span>
+                </label>
+              </div>
+              <div
+                class="file-drop"
+                :class="{ 'is-dragover': dragOver, 'has-file': coverAudioFile }"
+                @click="triggerFileSelect"
+                @dragover.prevent="dragOver = true"
+                @dragleave.prevent="dragOver = false"
+                @drop.prevent="handleFileDrop"
+              >
+                <input
+                  ref="fileInput"
+                  type="file"
+                  accept="audio/*"
+                  style="display: none"
+                  @change="handleFileSelect"
+                />
+                <div v-if="!coverAudioFile" class="drop-placeholder">
+                  <Icon name="upload" size="md" />
+                  <p>点击或拖拽音频文件到此处</p>
+                  <span class="drop-hint">MP3 / WAV / FLAC · 最大 20MB</span>
+                  <span class="drop-warn">⚠️ 后端需要实现 /api/suno/cover 端点才生效</span>
+                </div>
+                <div v-else class="file-selected" @click.stop>
+                  <Icon name="library" size="md" />
+                  <div class="file-info">
+                    <span class="file-name">{{ coverAudioFile.name }}</span>
+                    <span class="file-meta">{{ formatBytes(coverAudioFile.size) }}</span>
+                  </div>
+                  <button class="ghost-btn small" @click="clearAudioFile">移除</button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="form-col">
@@ -335,6 +375,75 @@
         </div>
       </div>
 
+      <!-- 翻唱历史 -->
+      <section v-if="coverHistory.items.length > 0" class="cover-history">
+        <header class="history-head">
+          <div class="history-title">
+            <Icon name="library" size="sm" />
+            <span>翻唱历史</span>
+            <span class="history-count">{{ coverHistory.items.length }}</span>
+          </div>
+          <button class="ghost-btn small" @click="coverHistory.clear()">清空历史</button>
+        </header>
+        <div class="history-list">
+          <article
+            v-for="c in coverHistory.items"
+            :key="c.id"
+            class="history-item"
+            :class="`status-${c.status}`"
+          >
+            <div class="history-info">
+              <div class="history-title-row">
+                <span class="history-name">{{ c.title }}</span>
+                <span v-if="c.hasSourceAudio" class="audio-badge" title="上传了原曲音频">
+                  🎵 真翻唱
+                </span>
+                <span v-else class="audio-badge lite" title="仅文本提示，未上传音频">
+                  📝 文本借鉴
+                </span>
+              </div>
+              <div class="history-meta">
+                <span>原曲：{{ c.originalSong }}</span>
+                <span v-if="c.originalArtist">· {{ c.originalArtist }}</span>
+                <span v-if="c.persona">· 🎙️ {{ c.persona }}</span>
+              </div>
+              <div class="history-status-row">
+                <span class="history-status" :class="`status-${c.status}`">{{ STATUS_LABEL[c.status] }}</span>
+                <span v-if="c.error" class="history-error">{{ c.error }}</span>
+                <span v-else class="history-time">{{ formatTime(c.createdAt) }}</span>
+              </div>
+            </div>
+            <div class="history-actions">
+              <button
+                v-if="c.status === 'done' && c.urls[0]"
+                class="ghost-btn small"
+                title="试听"
+                @click="playCover(c)"
+              >
+                <Icon name="play" size="sm" />
+                <span>试听</span>
+              </button>
+              <a
+                v-if="c.status === 'done' && c.urls[0]"
+                class="ghost-btn small"
+                :href="c.urls[0]"
+                :download="c.files?.[0] || c.title"
+              >
+                <Icon name="download" size="sm" />
+                <span>下载</span>
+              </a>
+              <button
+                class="ghost-btn small danger-hover"
+                title="从历史移除"
+                @click="coverHistory.remove(c.id)"
+              >
+                <Icon name="close" size="sm" />
+              </button>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <div class="form-footer">
         <button
           class="primary-btn"
@@ -375,6 +484,8 @@ import { computed, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import copy from 'copy-to-clipboard';
 import { api, toMessage } from '../api';
+import { useCoverHistoryStore } from '../stores/coverHistory';
+import { useLibraryStore } from '../stores/library';
 import { useSunoStore } from '../stores/suno';
 import { useTasksStore } from '../stores/tasks';
 import WarnBanner from '../components/WarnBanner.vue';
@@ -382,9 +493,11 @@ import Icon from '../components/Icon.vue';
 
 const sunoStore = useSunoStore();
 const tasksStore = useTasksStore();
+const libraryStore = useLibraryStore();
+const coverHistory = useCoverHistoryStore();
 const { suno, sunoForm } = sunoStore;
 const { lyricsPrompt, lyricsGenerating } = storeToRefs(sunoStore);
-const { loadSunoStatus, submitSuno, generateLyrics } = sunoStore;
+const { loadSunoStatus, submitSuno, submitCover, generateLyrics } = sunoStore;
 
 // ─── 模式 ───
 const MODES = [
@@ -407,6 +520,10 @@ const BGM_PRESETS = [
 // ─── 翻唱 ───
 const originalSong = ref('');
 const coverSong = ref(null);     // 当前从热点榜选的歌曲对象
+const coverAudioFile = ref(null); // 上传的原曲音频（File 对象）
+const fileInput = ref(null);
+const dragOver = ref(false);
+const MAX_AUDIO_SIZE = 20 * 1024 * 1024; // 20MB —— Suno covers API 上限
 
 const pickCoverSong = (song) => {
   coverSong.value = song;
@@ -422,6 +539,46 @@ const pickCoverSong = (song) => {
     : song.name;
   lyricsPrompt.value = `翻唱《${song.name}》, 主题：${themes}`;
   tasksStore.showToast(`已选《${song.name}》,风格已自动套用热点 tags`, 'success');
+};
+
+const triggerFileSelect = () => fileInput.value?.click();
+
+const handleFileSelect = (e) => {
+  const f = e.target.files?.[0];
+  if (f) acceptAudioFile(f);
+};
+
+const handleFileDrop = (e) => {
+  e.preventDefault();
+  dragOver.value = false;
+  const f = e.dataTransfer.files?.[0];
+  if (f) acceptAudioFile(f);
+};
+
+const acceptAudioFile = (f) => {
+  if (!f.type.startsWith('audio/')) {
+    tasksStore.showToast('请选择音频文件（MP3 / WAV / FLAC 等）', 'error');
+    return;
+  }
+  if (f.size > MAX_AUDIO_SIZE) {
+    tasksStore.showToast(`音频文件过大（${formatBytes(f.size)}）, 最大 20MB`, 'error');
+    return;
+  }
+  coverAudioFile.value = f;
+  tasksStore.showToast(`已选 ${f.name} (${formatBytes(f.size)})`, 'success');
+};
+
+const clearAudioFile = () => {
+  coverAudioFile.value = null;
+  if (fileInput.value) fileInput.value.value = '';
+};
+
+const formatBytes = (bytes) => {
+  if (!bytes) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 };
 
 const generateCoverLyrics = async () => {
@@ -464,7 +621,6 @@ const submitDisabled = computed(() => {
 const handleSubmit = async () => {
   try {
     if (mode.value === 'bgm') {
-      // BGM：不带 persona / 歌词，强制 instrumental tag
       const trimmedTags = sunoForm.tags.trim();
       const hasInstr = /instrumental/i.test(trimmedTags);
       const tags = trimmedTags
@@ -477,23 +633,71 @@ const handleSubmit = async () => {
         persona: '',
       });
     } else if (mode.value === 'cover') {
-      // 翻唱：原曲名作为上下文塞到 tags，persona 用用户选的
+      const title = sunoForm.title.trim() || `${originalSong.value} (Cover)`;
       const tagsWithCover = sunoForm.tags.trim()
         ? `${sunoForm.tags.trim()}, cover of ${originalSong.value}`
         : `cover of ${originalSong.value}`;
-      await submitSuno({
-        title: sunoForm.title.trim() || `${originalSong.value} (Cover)`,
+      const lyrics = sunoForm.lyrics || `[Verse]\n${originalSong.value}\n\n[Chorus]\n你的翻唱演绎`;
+
+      let taskId;
+      if (coverAudioFile.value) {
+        // 上传原曲音频 → Suno covers API（前端的真「同曲不同演绎」入口）
+        const formData = new FormData();
+        formData.append('audio', coverAudioFile.value);
+        formData.append('title', title);
+        formData.append('tags', tagsWithCover);
+        formData.append('lyrics', lyrics);
+        formData.append('persona', sunoForm.persona);
+        const data = await submitCover(formData);
+        taskId = data.task_id;
+      } else {
+        // 文本生成 → 没有原曲音频，只是「风格借鉴」
+        const data = await submitSuno({
+          title,
+          tags: tagsWithCover,
+          lyrics,
+          persona: sunoForm.persona,
+        });
+        taskId = data.task_id;
+      }
+
+      // 记进翻唱历史 —— pollSunoTask 完成后会自动 reconcile
+      coverHistory.add({
+        id: taskId,
+        title,
+        originalSong: originalSong.value,
+        originalArtist: coverSong.value?.artist,
         tags: tagsWithCover,
-        lyrics: sunoForm.lyrics || `[Verse]\n${originalSong.value}（待填歌词）\n\n[Chorus]\n你的翻唱演绎`,
         persona: sunoForm.persona,
+        hasSourceAudio: !!coverAudioFile.value,
+        urls: [],
+        files: [],
+        status: 'running',
+        createdAt: Date.now(),
       });
     } else {
-      // 歌曲：完全透传表单
       await submitSuno();
     }
   } catch (cause) {
     await tasksStore.reportError(cause, { action: `suno.${mode.value}.submit` });
   }
+};
+
+const formatTime = (ts) => {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+};
+
+const STATUS_LABEL = {
+  running: '生成中…',
+  done: '已完成',
+  error: '失败',
+  cancelled: '已取消',
+};
+
+const playCover = (item) => {
+  if (!item.urls?.[0]) return;
+  libraryStore.playAudio(item.urls[0], item.files?.[0]);
 };
 
 // ─── 热点风向 ───
@@ -971,6 +1175,195 @@ const personaOptions = computed(() => {
   background: var(--vf-warn-soft);
   padding: 1px 7px;
   border-radius: var(--vf-radius-full);
+}
+
+/* ── 原曲音频上传 ── */
+.cover-audio-head { margin-bottom: 6px; }
+.form-label-optional {
+  font-size: 11px;
+  color: var(--vf-text-3);
+  font-weight: normal;
+  margin-left: 6px;
+}
+.file-drop {
+  border: 2px dashed var(--vf-border-strong);
+  border-radius: var(--vf-radius-md);
+  background: var(--vf-bg-3);
+  padding: var(--vf-space-5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s var(--vf-ease);
+}
+.file-drop:hover,
+.file-drop.is-dragover {
+  border-color: var(--vf-primary);
+  background: var(--vf-primary-soft);
+}
+.file-drop.has-file {
+  border-style: solid;
+  border-color: var(--vf-ok);
+  background: var(--vf-ok-soft);
+  padding: var(--vf-space-3) var(--vf-space-4);
+  cursor: default;
+}
+.drop-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--vf-text-2);
+  text-align: center;
+}
+.drop-placeholder .vf-icon { color: var(--vf-primary); }
+.drop-placeholder p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--vf-text-1);
+  font-weight: 500;
+}
+.drop-hint { font-size: 11px; color: var(--vf-text-3); }
+.drop-warn { font-size: 10px; color: var(--vf-warn); margin-top: 2px; }
+
+.file-selected {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-3);
+  width: 100%;
+}
+.file-selected .vf-icon { color: var(--vf-ok); flex: none; }
+.file-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.file-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vf-text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-meta { font-size: 11px; color: var(--vf-text-3); }
+
+/* ── 翻唱历史 ── */
+.cover-history {
+  margin-top: var(--vf-space-4);
+  padding-top: var(--vf-space-4);
+  border-top: 1px solid var(--vf-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--vf-space-3);
+}
+.history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.history-title {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vf-text-1);
+}
+.history-count {
+  font-size: 11px;
+  background: var(--vf-bg-3);
+  color: var(--vf-text-2);
+  padding: 1px 7px;
+  border-radius: var(--vf-radius-full);
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vf-space-2);
+  max-height: 320px;
+  overflow-y: auto;
+}
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-3);
+  padding: var(--vf-space-3);
+  background: var(--vf-bg-3);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-sm);
+  border-left: 3px solid var(--vf-text-3);
+}
+.history-item.status-running { border-left-color: var(--vf-warn); }
+.history-item.status-done { border-left-color: var(--vf-ok); }
+.history-item.status-error { border-left-color: var(--vf-err); }
+.history-item.status-cancelled { border-left-color: var(--vf-text-3); opacity: 0.6; }
+
+.history-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.history-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+  flex-wrap: wrap;
+}
+.history-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vf-text-1);
+}
+.audio-badge {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: var(--vf-radius-full);
+  background: var(--vf-ok-soft);
+  color: var(--vf-ok);
+  font-weight: 600;
+}
+.audio-badge.lite {
+  background: var(--vf-bg-2);
+  color: var(--vf-text-3);
+  border: 1px solid var(--vf-border);
+}
+
+.history-meta {
+  display: flex;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--vf-text-3);
+  flex-wrap: wrap;
+}
+
+.history-status-row {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+  font-size: 11px;
+}
+.history-status {
+  font-weight: 600;
+}
+.history-status.status-running { color: var(--vf-warn); }
+.history-status.status-done { color: var(--vf-ok); }
+.history-status.status-error { color: var(--vf-err); }
+.history-error { color: var(--vf-err); }
+.history-time { color: var(--vf-text-3); font-variant-numeric: tabular-nums; }
+
+.history-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+  flex: none;
+}
+.history-actions .ghost-btn.small {
+  text-decoration: none;
+}
+.danger-hover:hover {
+  background: var(--vf-err-soft);
+  color: var(--vf-err);
+  border-color: var(--vf-err);
 }
 
 /* ─── 共享 ─── */

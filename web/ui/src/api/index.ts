@@ -162,6 +162,18 @@ export const api = {
   sunoStatus: () => get<Record<string, unknown>>('suno/status'),
   sunoGenerate: (p: { title: string; tags?: string; lyrics?: string; persona?: string }) =>
     post<{ task_id: string }>('suno/generate', p),
+  /**
+   * 上传原曲音频做真「同曲不同演绎」 —— Suno covers API。
+   *
+   * 前端已经准备好 FormData / UI，但后端要实现：
+   *   POST /api/suno/cover
+   *   Content-Type: multipart/form-data
+   *   fields: audio (file), title, tags, lyrics, persona
+   *
+   * 后端收到后转发给 Suno 的 /cover 端点（v3.5+），返回 task_id。
+   * 没实现之前调用会 404，错误日志里能看到具体原因。
+   */
+  sunoCover: (form: FormData) => postForm<{ task_id: string }>('suno/cover', form),
 
   // ── 热点风格追踪（测试1：哪个火做哪个，不抄袭）──
   trending: () => get<{

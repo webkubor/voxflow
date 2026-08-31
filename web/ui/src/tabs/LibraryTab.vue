@@ -26,7 +26,8 @@
           <option value="clone">克隆</option>
           <option value="design">设计</option>
           <option value="dialogue">剧本</option>
-          <option value="suno">Suno</option>
+          <option value="suno">音乐</option>
+          <option value="cover">翻唱</option>
         </select>
         <button class="ghost-btn" @click="loadAudioList">
           <Icon name="refresh" size="sm" />
@@ -113,12 +114,14 @@ const TYPE_LABEL = {
   design: '设计',
   dialogue: '剧本',
   suno: '音乐',
+  cover: '翻唱',
   other: '其他',
 };
 
 /** 从文件名猜类型 —— 后端 audio-list 不带 type，按命名约定推断 */
 const guessType = (filename) => {
   const lower = filename.toLowerCase();
+  if (lower.includes('cover') || lower.includes('(cover)')) return 'cover';
   if (lower.includes('suno') || lower.includes('song_')) return 'suno';
   if (lower.includes('dialogue') || lower.includes('scene')) return 'dialogue';
   if (lower.includes('design')) return 'design';
@@ -357,6 +360,10 @@ onMounted(async () => {
 .meta-type.design { background: rgba(95, 125, 149, 0.15); color: var(--vf-info); }
 .meta-type.dialogue { background: var(--vf-warn-soft); color: var(--vf-warn); }
 .meta-type.suno { background: var(--vf-primary-soft); color: var(--vf-primary); }
+.meta-type.cover {
+  background: linear-gradient(135deg, var(--vf-primary-soft), var(--vf-warn-soft));
+  color: var(--vf-primary);
+}
 .meta-type.other { background: var(--vf-bg-3); color: var(--vf-text-2); }
 
 .row-actions {
