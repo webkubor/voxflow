@@ -15,7 +15,9 @@
 #
 # 写进 .env 就是明文落盘。这里用 `cs kyvault run` 把密钥**注入子进程环境**：
 # 不落盘、不进 shell history、不出现在 ps 的 argv 里。
-# 密钥本体在 secret://museav/voxcraft-tenant-key，要吊销去中台后台停这个租户即可。
+# 密钥本体在 secret://museav/voxcraft-tenant-key（项目改名 voxflow 后密钥名未变，
+# 与 voxflow 无关的旧名只是历史遗留，改密钥名要动中台、有风险，保持不动），
+# 要吊销去中台后台停这个租户即可。
 #
 # ## 用法
 #
