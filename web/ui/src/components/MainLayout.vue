@@ -42,6 +42,28 @@
                   <span class="cap-pop-k">使用</span>
                   <span class="cap-pop-v">{{ c.what }}</span>
                 </div>
+                <!-- Suno 专项：套餐 / credits / 重置日 -->
+                <template v-if="c.key === 'suno'">
+                  <div v-if="c.plan" class="cap-pop-row">
+                    <span class="cap-pop-k">套餐</span>
+                    <span class="cap-pop-v">{{ c.plan }}</span>
+                  </div>
+                  <div v-if="c.creditsRemaining !== undefined" class="cap-pop-row">
+                    <span class="cap-pop-k">剩余</span>
+                    <span class="cap-pop-v">
+                      {{ c.creditsRemaining }} credits
+                      <span v-if="c.creditsTotal" class="cap-pop-sub">/ {{ c.creditsTotal }}</span>
+                    </span>
+                  </div>
+                  <div v-if="c.creditsTotal !== undefined && c.creditsRemaining !== undefined" class="cap-pop-row">
+                    <span class="cap-pop-k">已用</span>
+                    <span class="cap-pop-v">{{ c.creditsTotal - c.creditsRemaining }} credits</span>
+                  </div>
+                  <div v-if="c.renewDate" class="cap-pop-row">
+                    <span class="cap-pop-k">续费</span>
+                    <span class="cap-pop-v">{{ formatRenewDate(c.renewDate) }}</span>
+                  </div>
+                </template>
                 <div v-if="c.detail" class="cap-pop-row">
                   <span class="cap-pop-k">说明</span>
                   <span class="cap-pop-v">{{ c.detail }}</span>
@@ -397,6 +419,16 @@ useShortcuts({
   },
   onShowHelp: () => { helpOpen.value = true; },
 });
+
+/** 把 Suno 后端返回的 ISO 日期格式化成「9/30/2026」 */
+const formatRenewDate = (iso) => {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  const year = d.getFullYear();
+  return `${m}/${day}/${year}`;
+};
 </script>
 
 <style scoped>
@@ -508,14 +540,20 @@ useShortcuts({
   white-space: nowrap;
 }
 
-.cap-popover { font-size: 12px; min-width: 200px; }
+.cap-popover { font-size: 12px; min-width: 220px; }
 .cap-pop-row {
   display: flex; gap: var(--vf-space-3); padding: 3px 0;
+  align-items: baseline;
 }
-.cap-pop-k { color: var(--vf-text-3); flex: none; width: 36px; }
+.cap-pop-k { color: var(--vf-text-3); flex: none; width: 40px; }
 .cap-pop-v { color: var(--vf-text-1); }
 .cap-pop-v.ok { color: var(--vf-ok); }
 .cap-pop-v.off { color: var(--vf-warn); }
+.cap-pop-sub {
+  color: var(--vf-text-3);
+  font-size: 11px;
+  margin-left: 2px;
+}
 
 /* 任务铃铛 */
 .bell {

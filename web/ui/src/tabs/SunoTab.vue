@@ -2,10 +2,16 @@
   <div class="tab-content-container">
     <!-- 头部 -->
     <header class="suno-head">
-      <h3 class="tab-title">
-        <Icon name="suno" size="md" />
-        <span>AI 音乐 · Suno</span>
-      </h3>
+      <div class="suno-head-left">
+        <h3 class="tab-title">
+          <Icon name="suno" size="md" />
+          <span>AI 音乐 · Suno</span>
+        </h3>
+        <span v-if="sunoRenewHint" class="renew-hint">
+          <Icon name="clock" size="sm" />
+          <span>{{ sunoRenewHint }}</span>
+        </span>
+      </div>
       <div class="auth-status">
         <span v-if="suno.authenticated" class="credit-pill">
           ✅ {{ suno.plan || 'Suno' }} · {{ suno.total_credits_left }} credits
@@ -484,6 +490,7 @@ import { computed, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import copy from 'copy-to-clipboard';
 import { api, toMessage } from '../api';
+import { useCapabilitiesStore } from '../stores/capabilities';
 import { useCoverHistoryStore } from '../stores/coverHistory';
 import { useLibraryStore } from '../stores/library';
 import { useSunoStore } from '../stores/suno';
@@ -495,6 +502,7 @@ const sunoStore = useSunoStore();
 const tasksStore = useTasksStore();
 const libraryStore = useLibraryStore();
 const coverHistory = useCoverHistoryStore();
+const capabilitiesStore = useCapabilitiesStore();
 const { suno, sunoForm } = sunoStore;
 const { lyricsPrompt, lyricsGenerating } = storeToRefs(sunoStore);
 const { loadSunoStatus, submitSuno, submitCover, generateLyrics } = sunoStore;
@@ -506,6 +514,28 @@ const MODES = [
   { value: 'cover', label: '翻唱',  desc: '你的声音',  icon: 'layers' },
 ];
 const mode = ref('song');
+
+/**
+ * 「下次重置」提示文案。
+ * 从 capabilities store 读 renew_date，比对今天算天数，
+ * 让用户知道「月底还有 X 天」—— 避免月底才发现浪费了 1000 credits。
+ */
+const sunoRenewHint = computed(() => {
+  const renew = capabilitiesStore.caps.suno?.renew_date;
+  if (!renew) return '';
+  const d = new Date(renew);
+  if (isNaN(d.getTime())) return '';
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
+  const days = Math.round((d.getTime() - today.getTime()) / 86400000);
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  if (days <= 0) return `今日已重置（${m}/${day}）`;
+  if (days === 1) return `明日重置（${m}/${day}）`;
+  if (days <= 7) return `${days} 天后重置（${m}/${day}）`;
+  return `下月 ${m}/${day} 重置`;
+});
 
 // ─── BGM 场景预设 ───
 // 抖音热门分类单独列在前 4 个：BPM 在 110-130 甜蜜区，drop 明确，
@@ -797,7 +827,27 @@ const personaOptions = computed(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--vf-space-3);
 }
+.suno-head-left {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-3);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.renew-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--vf-text-3);
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  padding: 3px 10px;
+  border-radius: var(--vf-radius-full);
+}
+.renew-hint .vf-icon { color: var(--vf-text-3); }
 .auth-status { display: flex; align-items: center; gap: var(--vf-space-2); }
 .credit-pill {
   font-size: 12px;

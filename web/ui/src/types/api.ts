@@ -178,6 +178,10 @@ export interface Capability {
   plan?: string;
   identity?: string;
   model?: string;
+  /** 月度总额 —— 后端没返回时不显示 X/Y 格式 */
+  credits_total?: number;
+  /** 下次续费日（ISO 字符串）—— 后端没返回时不显示「下次重置」 */
+  renew_date?: string;
 }
 
 export type CapabilitiesResponse = Record<'tts' | 'suno' | 'studio' | 'llm', Capability>;

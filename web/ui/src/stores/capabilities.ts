@@ -49,6 +49,12 @@ interface CapBadge {
   ready?: boolean;
   detail?: string;
   num?: number;
+  // Suno 专项字段：套餐 + 月度总额 + 下次重置日
+  // 后端没返回时为 undefined —— UI 优雅降级，不显示对应行
+  plan?: string;
+  creditsRemaining?: number;
+  creditsTotal?: number;
+  renewDate?: string;
 }
 
 /** /api/capabilities 实际还会返回 museav，契约里只有 tts/suno/studio/llm，这里补上。 */
@@ -72,17 +78,48 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
    * 每个标签直接写出「这项能力当前用的是什么」，不是只亮一个绿点 ——
    * 四个绿灯长得一模一样，人看不出哪个是哪个，也不知道跑的是哪个模型。
    * `what` 就是那个具体值（模型名 / 租户名），`detail` 留给悬停看全貌。
+   *
+   * Suno 那一条更细：有套餐、月度总额、下次重置日 —— 一眼看出
+   * 「这个月还能生成多少首」、「什么时候用完」，
+   * 不至于月底发现浪费了 1000 credits。
    */
-  const capBadges = computed<CapBadge[]>(() => [
-    { key: 'tts', label: '语音', what: caps.value.tts?.model || 'Qwen3-TTS',
-      ready: caps.value.tts?.ready, detail: caps.value.tts?.detail },
-    { key: 'suno', label: '音乐', what: caps.value.suno?.model || 'Suno',
-      ready: caps.value.suno?.ready, num: caps.value.suno?.credits, detail: caps.value.suno?.detail },
-    { key: 'museav', label: 'museav', what: caps.value.museav?.identity || '未接',
-      ready: caps.value.museav?.ready, detail: caps.value.museav?.detail },
-    { key: 'llm', label: '文案', what: caps.value.llm?.model || '未接',
-      ready: caps.value.llm?.ready, detail: caps.value.llm?.detail },
-  ]);
+  const capBadges = computed<CapBadge[]>(() => {
+    const sunoCaps = caps.value.suno;
+    return [
+      { key: 'tts', label: '语音', what: caps.value.tts?.model || 'Qwen3-TTS',
+        ready: caps.value.tts?.ready, detail: caps.value.tts?.detail },
+      {
+        key: 'suno', label: '音乐',
+        // 显示文本：有总额时「套餐 · 已用/总额」，否则「套餐 · 剩余」
+        what: formatSunoBadge(sunoCaps),
+        ready: sunoCaps?.ready,
+        num: sunoCaps?.credits,
+        plan: sunoCaps?.plan,
+        creditsRemaining: sunoCaps?.credits,
+        creditsTotal: sunoCaps?.credits_total,
+        renewDate: sunoCaps?.renew_date,
+        detail: sunoCaps?.detail,
+      },
+      { key: 'museav', label: 'museav', what: caps.value.museav?.identity || '未接',
+        ready: caps.value.museav?.ready, detail: caps.value.museav?.detail },
+      { key: 'llm', label: '文案', what: caps.value.llm?.model || '未接',
+        ready: caps.value.llm?.ready, detail: caps.value.llm?.detail },
+    ];
+  });
+
+  /** 顶栏 Suno chip 的文案。优先「套餐 · 已用/总额」，降级到「套餐 · 剩余」。 */
+  const formatSunoBadge = (s: typeof caps.value.suno): string => {
+    if (!s) return 'Suno';
+    const plan = s.plan || 'Suno';
+    const remaining = s.credits;
+    const total = s.credits_total;
+    if (remaining !== undefined && total !== undefined && total > 0) {
+      const used = total - remaining;
+      return `${plan} · ${used}/${total}`;
+    }
+    if (remaining !== undefined) return `${plan} · ${remaining}`;
+    return plan;
+  };
 
   const loadCaps = async (): Promise<CapabilitiesResponse> => {
     error.value = '';
