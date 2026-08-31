@@ -1404,6 +1404,92 @@ async def suno_generate(req: SunoGenerateRequest):
     return {"task_id": task_id, "status": "queued"}
 
 
+class SunoBatchItem(BaseModel):
+    title: str = "Untitled"
+    tags: str = ""
+    lyrics: str = ""
+    persona: Optional[str] = None
+    model: str = "v5.5"
+
+
+class SunoBatchRequest(BaseModel):
+    items: list[SunoBatchItem]
+    wait: bool = False           # 是否等全部完成再返回
+    poll_interval_sec: float = 5
+    timeout_sec: int = 600       # 单首最久等 10 分钟
+
+
+@app.post("/api/suno/batch")
+async def suno_batch(req: SunoBatchRequest):
+    """
+    批量提交 Suno 生成任务。
+
+    前端批量面板、自动化脚本（scripts/batch_bgm.py）都调这个。
+    每个 item 走现有 _submit_task，跟单首的 /api/suno/generate 同一条任务队列，
+    不需要 suno CLI 直接调用。
+
+    wait=True 时同步等到全部完成才返回（最久的那个完成才返回），
+    适合脚本"一行命令跑完"的场景；wait=False 时立刻返回 task_ids，
+    调用方自己轮询 /api/tasks。
+    """
+    import asyncio
+
+    if not req.items:
+        raise HTTPException(400, "items 不能为空")
+
+    if len(req.items) > 20:
+        # 一次最多 20 —— 避免单次请求堆太多任务把队列塞爆
+        raise HTTPException(400, f"一次最多 20 首，实际 {len(req.items)}")
+
+    # 顺序提交，避免瞬时 burst 触发 Suno 速率限制
+    task_ids = []
+    for i, item in enumerate(req.items):
+        # 自动追加 instrumental（如果是空的 lyrics 字段，UI 标记为 BGM）
+        item_dict = item.model_dump()
+        if not item_dict.get("lyrics"):
+            tags = item_dict.get("tags", "")
+            if "instrumental" not in tags.lower():
+                item_dict["tags"] = (tags.rstrip(", ") + ", instrumental").strip(", ")
+        task_id = _submit_task("suno", f"🎵 {item.title or 'Suno 音乐'}", item_dict)
+        task_ids.append({"title": item.title, "task_id": task_id})
+        # 提交之间间隔 2 秒（前端面板是 3 秒，脚本是 2 秒避免太慢）
+        if i < len(req.items) - 1:
+            await asyncio.sleep(2)
+
+    if not req.wait:
+        return {"task_ids": task_ids, "queued": len(task_ids)}
+
+    # 同步等：轮询所有 task_id 直到全部 done / error / 超时
+    import time
+    start = time.time()
+    while time.time() - start < req.timeout_sec:
+        await asyncio.sleep(req.poll_interval_sec)
+        all_done = True
+        statuses = []
+        for entry in task_ids:
+            t = _tasks.get(entry["task_id"])
+            if not t:
+                statuses.append({"title": entry["title"], "status": "unknown"})
+                continue
+            statuses.append({"title": entry["title"], "status": t.get("status", "running")})
+            if t.get("status") in ("queued", "running"):
+                all_done = False
+        if all_done:
+            break
+
+    # 最终状态
+    results = []
+    for entry in task_ids:
+        t = _tasks.get(entry["task_id"], {})
+        results.append({
+            "title": entry["title"],
+            "task_id": entry["task_id"],
+            "status": t.get("status", "unknown"),
+            "files": (t.get("result") or {}).get("files", []) if isinstance(t.get("result"), dict) else [],
+        })
+    return {"results": results, "elapsed_sec": round(time.time() - start, 1)}
+
+
 def _run_suno_task(task_id: str, params: dict, update_fn):
     """执行 Suno 音乐生成：调 suno CLI → 产物拷回 out/music"""
     import subprocess, shutil, glob
