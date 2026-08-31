@@ -24,6 +24,7 @@ import { storeToRefs } from 'pinia';
 import { api, toMessage } from '../api';
 import { usePipelineStore } from '../stores/pipeline';
 import { useTasksStore } from '../stores/tasks';
+import Icon from '../components/Icon.vue';
 
 const pipelineStore = usePipelineStore();
 const tasksStore = useTasksStore();
@@ -109,10 +110,16 @@ const fmtDuration = (sec) => {
   <div class="tab-content-container">
     <div class="head">
       <div>
-        <h3 class="tab-title">平台</h3>
+        <h3 class="tab-title">
+          <Icon name="publish" size="sm" />
+          <span>平台</span>
+        </h3>
         <p class="tab-subtitle">每个平台的账号、专辑与已上架作品</p>
       </div>
-      <n-button secondary size="small" :loading="loading" @click="load">刷新</n-button>
+      <button class="ghost-btn" :disabled="loading" @click="load">
+        <Icon name="refresh" size="sm" />
+        <span>{{ loading ? '刷新中…' : '刷新' }}</span>
+      </button>
     </div>
 
     <!-- 用 n-tabs 的 segment 型而不是手搓 button：
@@ -230,8 +237,17 @@ const fmtDuration = (sec) => {
 .head {
   display: flex; align-items: flex-start; justify-content: space-between;
   margin-bottom: var(--vf-space-4);
+  padding: 0 var(--vf-space-2);
 }
-.tab-title { margin: 0; font-size: 16px; color: var(--vf-text-1); }
+.tab-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--vf-text-1);
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+}
 .tab-subtitle { margin: 4px 0 0; font-size: 12px; color: var(--vf-text-3); }
 
 .platform-tabs {
@@ -258,6 +274,26 @@ const fmtDuration = (sec) => {
 .platform-tab.empty { opacity: .55; }
 .pt-label { font-size: 13px; font-weight: 600; }
 .pt-meta { font-size: 11px; color: var(--vf-text-3); }
+
+.ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--vf-bg-3);
+  border: 1px solid var(--vf-border);
+  color: var(--vf-text-2);
+  padding: 5px 12px;
+  border-radius: var(--vf-radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ghost-btn:hover:not(:disabled) {
+  background: var(--vf-bg-hover);
+  color: var(--vf-text-1);
+  border-color: var(--vf-border-strong);
+}
+.ghost-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .empty-platform { padding: var(--vf-space-7) 0; }
 .empty-hint { font-size: 12px; color: var(--vf-text-3); }

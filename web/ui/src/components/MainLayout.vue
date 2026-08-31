@@ -1,170 +1,137 @@
 <template>
   <n-spin :show="globalLoading" :description="globalLoadingText" size="large" style="min-height: 100vh;">
-    <n-layout style="height: 100vh; display: flex; flex-direction: column; position: relative; overflow: hidden; background-color: var(--vf-bg-0);">
-      
-      <!-- 顶部 Header：极简黑白高对比 -->
+    <n-layout class="app-shell">
+      <!-- 顶部 Header：极简 Logo + 能力状态 -->
       <n-layout-header bordered class="app-header">
         <div class="header-left">
-          <div class="brand-logo-container">
-            <img :src="'/assets/branding/logo-icon.png'" class="logo-img" alt="Logo" />
-            <span class="app-title">VoxFlow</span>
-            <span class="app-version">v0.3.0</span>
-          </div>
-
-          <div class="header-platforms">
-            <span class="platforms-label">全网发行支持:</span>
-            <div class="platform-badges">
-              <span class="plat-tag">汽水音乐</span>
-              <span class="plat-tag">QQ音乐</span>
-              <span class="plat-tag">网易云音乐</span>
+          <button
+            class="sider-toggle"
+            :title="siderCollapsed ? '展开音色库' : '折叠音色库'"
+            @click="siderCollapsed = !siderCollapsed"
+          >
+            <Icon name="menu" size="sm" />
+          </button>
+          <div class="brand">
+            <img :src="'/assets/branding/logo-icon.png'" class="brand-logo" alt="VoxFlow" />
+            <div class="brand-text">
+              <span class="brand-name">VoxFlow</span>
+              <span class="brand-sub">声流</span>
             </div>
           </div>
         </div>
 
-        <!-- 顶部右侧：资源与能力状态 -->
         <div class="header-right">
-          <n-space size="small" align="center">
-            <n-tooltip v-for="c in capBadges" :key="c.key" trigger="hover">
+          <!-- 能力状态：用 popover 而非 tag 内混排文字 -->
+          <div class="caps">
+            <n-tooltip v-for="c in capBadges" :key="c.key" trigger="hover" placement="bottom-end">
               <template #trigger>
-                <!-- 用 n-tag 而不是手搓 div+圆点：装了组件库还自己写基础组件，
-                     写出来既不统一也不好看，主题切换、尺寸、圆角全要重新对一遍。
-                     标签上直接写「这项能力用的是什么」—— 只亮个绿灯写「语音」，
-                     四个灯长得一样，看不出跑的是哪个模型、连的是哪个账号。 -->
-                <n-tag :type="c.ready ? 'success' : 'warning'" size="small" round :bordered="false">
-                  {{ c.label }}
-                  <template #icon>
-                    <span class="cap-dot" :class="c.ready ? 'on' : 'off'"></span>
-                  </template>
+                <div class="cap-chip" :class="c.ready ? 'ok' : 'off'">
+                  <span class="cap-dot"></span>
+                  <span class="cap-label">{{ c.label }}</span>
                   <span class="cap-what">{{ c.what }}</span>
-                  <n-text v-if="c.num !== undefined" depth="3" class="cap-num">{{ c.num }}</n-text>
-                </n-tag>
+                </div>
               </template>
-              {{ c.detail || (c.ready ? '服务正常' : '未就绪') }}
+              <div class="cap-popover">
+                <div class="cap-pop-row">
+                  <span class="cap-pop-k">状态</span>
+                  <span class="cap-pop-v" :class="c.ready ? 'ok' : 'off'">
+                    {{ c.ready ? '● 已就绪' : '○ 未就绪' }}
+                  </span>
+                </div>
+                <div class="cap-pop-row">
+                  <span class="cap-pop-k">使用</span>
+                  <span class="cap-pop-v">{{ c.what }}</span>
+                </div>
+                <div v-if="c.detail" class="cap-pop-row">
+                  <span class="cap-pop-k">说明</span>
+                  <span class="cap-pop-v">{{ c.detail }}</span>
+                </div>
+              </div>
             </n-tooltip>
-          </n-space>
+          </div>
+
+          <!-- 任务队列角标 -->
+          <button
+            class="bell"
+            :class="{ 'has-active': activeTaskCount > 0 }"
+            :title="`任务队列（${activeTaskCount} 进行中）`"
+            @click="toggleTaskPanel"
+          >
+            <Icon name="bell" size="md" />
+            <span v-if="activeTaskCount > 0" class="bell-num">{{ activeTaskCount }}</span>
+          </button>
         </div>
-        <span class="build-stamp" :title="`前端构建于 ${buildTime}`">{{ buildTime }}</span>
       </n-layout-header>
 
-      <!-- 中部主内容布局 -->
-      <n-layout has-sider style="flex: 1; overflow: hidden;">
-        <!-- 左侧音色库工坊：纯净高对比 -->
-        <n-layout-sider
-          width="290"
-          bordered
-          content-style="display: flex; flex-direction: column; height: 100%;"
-          class="clean-voice-sider"
-        >
-          <div class="sider-header">
-            <div class="sider-title-wrap">
-              <h3>音色库</h3>
-              <span class="sider-count">{{ Object.keys(personas).length }}</span>
-            </div>
-            <n-button type="primary" size="tiny" ghost @click="showAddPersona = true">
-              + 添加音色
-            </n-button>
-          </div>
-          
-          <div class="sider-content">
-            <div
-              v-for="(p, key) in personas"
-              :key="key"
-              class="voice-item"
-              :class="{ 'is-selected': selectedPersona === key }"
-              @click="selectPersona(key)"
-            >
-              <!-- 试听进度：铺在整张卡底下，不占布局空间 -->
-              <div v-if="previewKey === key" class="voice-progress" :style="{ width: previewProgress + '%' }"></div>
-
-              <!-- n-thing 是 naive-ui 的「头像 + 标题 + 描述 + 操作」标准结构，
-                   正是这里要的形状。之前手搓了 avatar/name/key/desc/badge/actions
-                   六个 div 加一堆 flex，结果名字换行、key 位置错乱、按钮挤成一团。
-                   基础结构交给组件库，自己只管品牌相关的那点样式。 -->
-              <n-thing>
-                <template #avatar>
-                  <n-avatar round :size="34" :style="{ background: 'var(--vf-bg-4)', color: 'var(--vf-primary)' }">
-                    {{ (p.name || key).charAt(0) }}
-                  </n-avatar>
-                </template>
-                <template #header>
-                  <n-ellipsis style="max-width: 128px">{{ p.name || key }}</n-ellipsis>
-                </template>
-                <template #header-extra>
-                  <n-space :size="2" @click.stop>
-                    <n-button v-if="p.has_audio" quaternary circle size="tiny"
-                              :title="previewKey === key ? '暂停' : '试听'"
-                              @click="togglePreview(key)">
-                      {{ previewKey === key ? '⏸' : '▶' }}
-                    </n-button>
-                    <n-button quaternary circle size="tiny" title="编辑" @click="openEditPersona(key)">✎</n-button>
-                    <n-button quaternary circle size="tiny" title="删除" @click="confirmDeletePersona(key, p)">✕</n-button>
-                  </n-space>
-                </template>
-                <template #description>
-                  <n-ellipsis :line-clamp="2" style="font-size: 11px; color: var(--vf-text-3)">
-                    {{ p.desc || p.instruction || '已装载声音特征' }}
-                  </n-ellipsis>
-                </template>
-                <template #footer>
-                  <n-space :size="4" align="center">
-                    <n-tag size="tiny" :type="p.has_audio ? 'success' : 'warning'" :bordered="false" round>
-                      {{ p.has_audio ? '样音已就绪' : '无样音' }}
-                    </n-tag>
-                    <n-text depth="3" style="font-size: 10px">{{ key }}</n-text>
-                  </n-space>
-                </template>
-              </n-thing>
-            </div>
-
-            <div v-if="Object.keys(personas).length === 0" class="empty-state">
-              <p>暂无音色资产</p>
-              <span>点击右上角添加新音色</span>
-            </div>
-          </div>
-        </n-layout-sider>
+      <!-- 中部主内容 -->
+      <n-layout has-sider class="app-body">
+        <!-- 左侧音色库 -->
+        <PersonaSidebar
+          :collapsed="siderCollapsed"
+          @toggle-collapse="siderCollapsed = !siderCollapsed"
+          @add-persona="showAddPersona = true"
+          @edit-persona="openEditPersona"
+          @delete-persona="confirmDeletePersona"
+        />
 
         <!-- 右侧主创作工作区 -->
-        <n-layout-content content-style="padding: 20px 24px; display: flex; flex-direction: column; height: 100%;" class="clean-main-content">
-          <n-tabs 
-            v-model:value="currentTab" 
-            type="line" 
-            animated 
-            style="height: 100%; display: flex; flex-direction: column;"
+        <n-layout-content class="main-content">
+          <!-- Tab 导航：图标 + 文字 -->
+          <nav class="tab-nav" role="tablist">
+            <button
+              v-for="t in tabs"
+              :key="t.name"
+              class="tab-nav-item"
+              :class="{ active: currentTab === t.name }"
+              role="tab"
+              :aria-selected="currentTab === t.name"
+              @click="goTab(t.name)"
+            >
+              <Icon :name="t.icon" size="md" />
+              <span class="tab-nav-label">{{ t.label }}</span>
+            </button>
+          </nav>
+
+          <!-- 共享的「当前音色」状态条 -->
+          <div v-if="needsPersona" class="current-persona-row">
+            <CurrentPersonaChip />
+            <div v-if="currentTab === 'clone' || currentTab === 'design'" class="model-pill">
+              <span class="model-pill-label">模型</span>
+              <span class="model-pill-value">{{ modelLabel }}</span>
+              <n-progress
+                v-if="modelDownloading"
+                type="line"
+                :percentage="modelProgress"
+                :show-indicator="false"
+                :height="3"
+                class="model-pill-bar"
+              />
+            </div>
+          </div>
+
+          <!-- Tab 主体：保留 n-tabs 提供的路由同步能力 -->
+          <n-tabs
+            v-model:value="currentTab"
+            type="line"
+            animated
+            class="hidden-tabs"
           >
-            <n-tab-pane name="clone" tab="声音克隆">
-              <CloneTab />
-            </n-tab-pane>
-            <n-tab-pane name="design" tab="音色设计">
-              <DesignTab />
-            </n-tab-pane>
-            <n-tab-pane name="dialogue" tab="剧本创作">
-              <DialogueTab />
-            </n-tab-pane>
-            <n-tab-pane name="suno" tab="AI 音乐">
-              <SunoTab />
-            </n-tab-pane>
-            <n-tab-pane name="works" tab="我的作品">
-              <!-- 作品流水线看板 —— PublishTab 注释里说它「挪去『我的作品』
-                   那一屏」，但那屏一直没建，看板组件写了却从没挂载过。
-                   37 首作品走到哪一步、下一步该干嘛，在产品里完全看不见。
-                   放回这里：AI 音乐出歌 → 我的作品管进度 → 全网发行看平台。 -->
-              <PipelineBoard />
-            </n-tab-pane>
-            <n-tab-pane name="publish" tab="全网发行">
-              <PublishTab />
-            </n-tab-pane>
-            <n-tab-pane name="library" tab="资产库">
-              <LibraryTab />
-            </n-tab-pane>
+            <n-tab-pane name="clone" tab="克隆"><CloneTab /></n-tab-pane>
+            <n-tab-pane name="design" tab="设计"><DesignTab /></n-tab-pane>
+            <n-tab-pane name="dialogue" tab="剧本"><DialogueTab /></n-tab-pane>
+            <n-tab-pane name="suno" tab="音乐"><SunoTab /></n-tab-pane>
+            <n-tab-pane name="works" tab="看板"><PipelineBoard /></n-tab-pane>
+            <n-tab-pane name="publish" tab="发行"><PublishTab /></n-tab-pane>
+            <n-tab-pane name="library" tab="资产"><LibraryTab /></n-tab-pane>
           </n-tabs>
         </n-layout-content>
       </n-layout>
 
-      <!-- 底部高质感单色播放器 -->
+      <!-- 底部播放器 -->
       <GlobalPlayer />
 
-      <!-- 右下角任务抽屉 -->
-      <TaskPanel />
+      <!-- 任务抽屉 -->
+      <TaskPanel v-if="taskPanelOpen" @close="taskPanelOpen = false" />
 
       <!-- 添加/编辑音色弹窗 -->
       <AddPersonaModal v-model:show="showAddPersona" />
@@ -175,10 +142,10 @@
       />
 
       <!-- 隐藏的样音试听播放器 -->
-      <audio 
-        ref="previewPlayer" 
-        style="display: none;" 
-        @timeupdate="onPreviewProgress" 
+      <audio
+        ref="previewPlayer"
+        style="display: none;"
+        @timeupdate="onPreviewProgress"
         @ended="onPreviewEnded"
       ></audio>
     </n-layout>
@@ -186,21 +153,44 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+/**
+ * 应用主布局。
+ *
+ * ## 结构
+ *
+ *   Header  |  Logo | 能力 chips | 任务铃铛
+ *   Sider   |  音色库（可折叠成 64px 窄条）
+ *   Content |  Tab 导航（图标 + 文字）
+ *           |  当前音色条
+ *           |  Tab 主体
+ *   Player  |  固定底部，72px 高
+ *
+ * ## Tab 导航为啥手搓
+ *
+ * 之前用 n-tabs 自带胶囊 tab，但它只能放文字。7 个 tab 没图标挤一起
+ * 难分辨。换成自定义按钮 + 路由切换，n-tabs 留在下面当「路由 ↔ tab」的
+ * 同步源（它绑了 v-model 到 currentTab）。视觉上不显示，但行为仍在。
+ */
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { BOARD_POLL_MS } from '../config/constants';
 import { TAB_NAMES } from '../router';
 import { storeToRefs } from 'pinia';
-import CloneTab from '../tabs/CloneTab.vue';
-import DesignTab from '../tabs/DesignTab.vue';
-import DialogueTab from '../tabs/DialogueTab.vue';
-import SunoTab from '../tabs/SunoTab.vue';
-import PublishTab from '../tabs/PublishTab.vue';
-import LibraryTab from '../tabs/LibraryTab.vue';
+// 异步组件：路由切到哪一屏才加载哪一屏，首屏不打包这 6 个 chunk
+const CloneTab = defineAsyncComponent(() => import('../tabs/CloneTab.vue'));
+const DesignTab = defineAsyncComponent(() => import('../tabs/DesignTab.vue'));
+const DialogueTab = defineAsyncComponent(() => import('../tabs/DialogueTab.vue'));
+const SunoTab = defineAsyncComponent(() => import('../tabs/SunoTab.vue'));
+const PipelineBoard = defineAsyncComponent(() => import('./PipelineBoard.vue'));
+const PublishTab = defineAsyncComponent(() => import('../tabs/PublishTab.vue'));
+const LibraryTab = defineAsyncComponent(() => import('../tabs/LibraryTab.vue'));
 import GlobalPlayer from './GlobalPlayer.vue';
 import TaskPanel from './TaskPanel.vue';
 import AddPersonaModal from './AddPersonaModal.vue';
 import EditPersonaModal from './EditPersonaModal.vue';
+import PersonaSidebar from './PersonaSidebar.vue';
+import CurrentPersonaChip from './CurrentPersonaChip.vue';
+import Icon from './Icon.vue';
 
 import { useCapabilitiesStore } from '../stores/capabilities';
 import { useLibraryStore } from '../stores/library';
@@ -220,76 +210,92 @@ const voicesStore = useVoicesStore();
 
 const { capBadges } = storeToRefs(capabilitiesStore);
 const { personas, selectedPersona } = storeToRefs(voicesStore);
-// globalLoading 在 **tasks** store，不在 synth。取错 store 时 storeToRefs
-// 给回 undefined，而 n-spin 的 :show 拿到 undefined 就一直转 —— 页面永远在加载中，
-// 零报错。今天第三次栽在「方法/状态取错 store」上了。
-const { globalLoading, globalLoadingText } = storeToRefs(tasksStore);
+const { globalLoading, globalLoadingText, tasks, taskPanelCollapsed } = storeToRefs(tasksStore);
+const { modelStatus } = storeToRefs(capabilitiesStore);
+const { player } = storeToRefs(libraryStore);
 
-// 构建时间戳：刷新后这个数没变，就说明产物没重新构建 ——
-// 省掉「改了没效果，先怀疑是不是忘了 build」那一轮
-const buildTime = __BUILD_TIME__;
-
-// 当前 tab = 路由名。刷新/分享链接后仍停在那一屏 —— 以前是普通变量，
-// 刷新必回默认页，也没法把某一屏的链接发给别人。
+// 「模型未就绪」时哪些 tab 需要显示下载提示
+const NEEDS_PERSONA_TABS = new Set(['clone', 'design', 'dialogue']);
 const route = useRoute();
 const router = useRouter();
+
 const currentTab = computed({
   get: () => (TAB_NAMES.has(route.name) ? route.name : 'clone'),
   set: (tab) => {
     if (route.name !== tab) router.push({ name: tab });
   },
 });
+
+const tabs = [
+  { name: 'clone', label: '声音克隆', icon: 'clone' },
+  { name: 'design', label: '音色设计', icon: 'design' },
+  { name: 'dialogue', label: '剧本创作', icon: 'dialogue' },
+  { name: 'suno', label: 'AI 音乐', icon: 'suno' },
+  { name: 'works', label: '作品看板', icon: 'board' },
+  { name: 'publish', label: '全网发行', icon: 'publish' },
+  { name: 'library', label: '资产库', icon: 'library' },
+];
+
+const goTab = (name) => {
+  if (route.name !== name) router.push({ name });
+};
+
+// 哪些 tab 需要显示「当前音色」条
+const needsPersona = computed(() => NEEDS_PERSONA_TABS.has(currentTab.value));
+
+// 模型下载进度 / 状态文本
+const modelDownloading = computed(() => {
+  if (currentTab.value === 'design') return !!modelStatus.value.design.downloading;
+  return !!modelStatus.value.base.downloading;
+});
+const modelProgress = computed(() => {
+  if (currentTab.value === 'design') return Math.round(modelStatus.value.design.progress || 0);
+  return Math.round(modelStatus.value.base.progress || 0);
+});
+const modelLabel = computed(() => {
+  if (currentTab.value === 'design') {
+    return modelStatus.value.design.ready ? 'VoiceDesign · 就绪' : 'VoiceDesign · 未就绪';
+  }
+  return modelStatus.value.base.ready ? 'Qwen3-TTS · 就绪' : 'Qwen3-TTS · 未就绪';
+});
+
+// 侧栏折叠
+const siderCollapsed = ref(false);
+
+// 任务面板：从「右下半抽屉」挪到由 header 铃铛开关控制
+const taskPanelOpen = ref(false);
+const toggleTaskPanel = () => {
+  taskPanelOpen.value = !taskPanelOpen.value;
+  if (taskPanelOpen.value) taskPanelCollapsed.value = false;
+};
+
+// 进行中任务数
+const activeTaskCount = computed(
+  () => tasks.value.filter((t) => t.status === 'queued' || t.status === 'running').length,
+);
+
+// 弹窗控制
 const showAddPersona = ref(false);
 const showEditPersona = ref(false);
 const editingKey = ref('');
 
-const previewKey = ref('');
-const previewProgress = ref(0);
+// 试听
 const previewPlayer = ref(null);
+const previewKey = computed(() => voicesStore.previewKey);
+const previewProgress = computed(() => voicesStore.previewProgress);
+const onPreviewProgress = (e) => voicesStore.onPreviewProgress(e);
+const onPreviewEnded = () => voicesStore.onPreviewEnded();
 
-const selectPersona = (key) => {
-  voicesStore.selectPersona(key);
-};
-
-const togglePreview = (key) => {
-  if (previewKey.value === key) {
-    if (previewPlayer.value) {
-      previewPlayer.value.pause();
-      previewKey.value = '';
-      previewProgress.value = 0;
-    }
-  } else {
-    previewKey.value = key;
-    previewProgress.value = 0;
-    if (previewPlayer.value) {
-      previewPlayer.value.src = `/api/preview-audio/${key}?t=${Date.now()}`;
-      previewPlayer.value.play().catch(() => {
-        tasksStore.showToast('无法播放样音', 'error');
-        previewKey.value = '';
-      });
-    }
-  }
-};
-
-const onPreviewProgress = (e) => {
-  const audio = e.target;
-  if (audio.duration) {
-    previewProgress.value = (audio.currentTime / audio.duration) * 100;
-  }
-};
-
-const onPreviewEnded = () => {
-  previewKey.value = '';
-  previewProgress.value = 0;
-};
+const togglePreview = (key) => voicesStore.togglePreview(key);
 
 const openEditPersona = (key) => {
   editingKey.value = key;
   showEditPersona.value = true;
 };
 
-const confirmDeletePersona = (key, p) => {
-  if (confirm(`确定要删除音色「${p.name || key}」的注册信息吗？`)) {
+const confirmDeletePersona = (key) => {
+  const p = personas.value[key];
+  if (confirm(`确定要删除音色「${p?.name || key}」的注册信息吗？`)) {
     voicesStore.deletePersona(key);
   }
 };
@@ -297,17 +303,9 @@ const confirmDeletePersona = (key, p) => {
 let pollTimer = null;
 onMounted(async () => {
   // 用 allSettled 不用 all：Promise.all 里**任何一个 reject，后面的全不执行**。
-  // 上一版第一个调的是 capabilitiesStore.fetchCapabilities()，
-  // 而 store 里根本没这个方法 —— 第一步就 TypeError，音色库因此永远是空的，
-  // 界面上只显示「暂无音色资产」，一个错都不报。最难查的那种。
-  //
   // 每项独立起来，一个上游挂了只影响它自己；而且失败要说出来，不能吞。
   const jobs = [
     ['能力状态', () => capabilitiesStore.loadCaps()],
-    // 模型状态是单独一个端点（/api/status）。上一版漏了这行，于是
-    // modelStatus 永远停在初始值 false —— 页面一直显示「Base 大模型未就绪，
-    // 请运行 ./install.sh」，而模型明明在磁盘上躺着 8.4 GB。
-    // 「该调的没调」比「调错了」更难查：没有报错，只是那块数据永远是默认值。
     ['模型状态', () => capabilitiesStore.checkStatus()],
     ['音色库', () => voicesStore.loadPersonas()],
     ['任务队列', () => tasksStore.pollTasks()],
@@ -322,7 +320,6 @@ onMounted(async () => {
   });
 
   pollTimer = setInterval(() => {
-    // 标签页在后台时不轮询 —— 开三个标签页等于三倍压力
     if (!document.hidden) tasksStore.pollTasks();
   }, BOARD_POLL_MS);
 });
@@ -330,199 +327,255 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (pollTimer) clearInterval(pollTimer);
 });
+
+// 给 SunoTab 这种需要刷新状态的子组件用的 expose 触发器
+defineExpose({});
 </script>
 
 <style scoped>
-/* 顶部栏 */
+.app-shell {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--vf-bg-0);
+}
+
+/* ── Header ── */
 .app-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 20px;
+  padding: 0 var(--vf-space-5);
+  gap: var(--vf-space-4);
+  flex: none;
 }
-
-.header-left {
+.header-left, .header-right {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: var(--vf-space-3);
 }
 
-.brand-logo-container {
+.sider-toggle {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--vf-text-3);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--vf-radius-sm);
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.sider-toggle:hover {
+  color: var(--vf-text-1);
+  background: var(--vf-bg-hover);
 }
 
-.logo-img {
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+}
+.brand-logo {
   width: 28px;
   height: 28px;
   border-radius: var(--vf-radius-xs);
-  border: 1px solid var(--vf-border-strong);
 }
-
-.app-title {
+.brand-text {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.brand-name {
   font-size: 16px;
   font-weight: 700;
   color: var(--vf-text-1);
   letter-spacing: -0.02em;
 }
-
-.app-version {
+.brand-sub {
   font-size: 11px;
   color: var(--vf-text-3);
-  font-family: monospace;
 }
 
-.header-platforms {
+/* 能力状态 */
+.caps {
+  display: flex;
+  gap: var(--vf-space-2);
+}
+.cap-chip {
   display: flex;
   align-items: center;
-  gap: 10px;
-  border-left: 1px solid var(--vf-border);
-  padding-left: 16px;
-}
-
-.platforms-label {
-  font-size: 12px;
-  color: var(--vf-text-3);
-}
-
-.platform-badges {
-  display: flex;
   gap: 6px;
-}
-
-.plat-tag {
-  font-size: 11px;
-  color: var(--vf-text-2);
+  padding: 4px 10px;
   background: var(--vf-bg-2);
   border: 1px solid var(--vf-border);
-  padding: 2px 8px;
-  border-radius: var(--vf-radius-xs);
+  border-radius: var(--vf-radius-full);
+  font-size: 12px;
+  cursor: help;
+  transition: border-color 0.15s;
 }
-
-/* 状态 Badge */
-
-
-
-
-/* 左侧栏 */
-.clean-voice-sider {
-  user-select: none;
-}
-
-.sider-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--vf-border);
-}
-
-.sider-title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sider-title-wrap h3 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--vf-text-1);
-}
-
-.sider-count {
-  font-size: 11px;
-  font-weight: 600;
-  background: var(--vf-bg-active);
-  color: var(--vf-text-2);
-  padding: 1px 6px;
-  border-radius: var(--vf-radius-xs);
-}
-
-
-
-.sider-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* 音色卡片：干净利落的高对比面板 */
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* 操作图标 */
-
-
-
-
-
-.empty-state {
-  text-align: center;
-  padding: 40px 10px;
-  color: var(--vf-text-3);
-}
-.empty-state p { margin: 0 0 4px 0; font-size: 13px; color: var(--vf-text-2); }
-.empty-state span { font-size: 11px; }
-
-.build-stamp {
-  margin-left: 12px;
-  font-size: 10px;
-  color: var(--vf-text-3);
-  opacity: .6;
-  font-variant-numeric: tabular-nums;
-  cursor: default;
-}
-
-
-/* n-tag 里的状态点和副文本。只有这两个是 naive-ui 没有的，
-   其余（圆角、配色、尺寸）全交给组件库，不自己写。 */
+.cap-chip:hover { border-color: var(--vf-border-strong); }
+.cap-chip.ok .cap-dot { background: var(--vf-ok); }
+.cap-chip.off .cap-dot { background: var(--vf-text-3); }
 .cap-dot {
-  display: inline-block;
-  width: 6px; height: 6px;
-  border-radius: 50%;
+  width: 6px; height: 6px; border-radius: 50%;
+  box-shadow: 0 0 0 2px currentColor;
   background: currentColor;
 }
-.cap-dot.off { opacity: .5; }
-.cap-what { margin-left: 5px; opacity: .75; font-size: 11px; }
-.cap-num { margin-left: 4px; font-size: 11px; }
-
-/* 音色卡：只留品牌相关的容器样式，内部结构全交给 n-thing。
-   选中态和试听进度条是 naive-ui 没有的，这两个自己写。 */
-.voice-item {
-  position: relative;
-  padding: 10px 12px;
-  margin-bottom: 6px;
-  border: 1px solid var(--vf-border);
-  border-radius: var(--vf-radius-lg, 14px);
-  background: var(--vf-bg-2);
-  cursor: pointer;
-  overflow: hidden;
-  transition: border-color .15s, background .15s;
+.cap-chip.ok { color: var(--vf-ok); }
+.cap-chip.off { color: var(--vf-text-3); }
+.cap-label {
+  color: var(--vf-text-1);
+  font-weight: 500;
 }
-.voice-item:hover { background: var(--vf-bg-3); }
-.voice-item.is-selected {
+.cap-what {
+  color: var(--vf-text-2);
+  font-size: 11px;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cap-popover { font-size: 12px; min-width: 200px; }
+.cap-pop-row {
+  display: flex; gap: var(--vf-space-3); padding: 3px 0;
+}
+.cap-pop-k { color: var(--vf-text-3); flex: none; width: 36px; }
+.cap-pop-v { color: var(--vf-text-1); }
+.cap-pop-v.ok { color: var(--vf-ok); }
+.cap-pop-v.off { color: var(--vf-warn); }
+
+/* 任务铃铛 */
+.bell {
+  position: relative;
+  background: transparent;
+  border: 1px solid var(--vf-border);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--vf-radius-sm);
+  color: var(--vf-text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.bell:hover { color: var(--vf-text-1); background: var(--vf-bg-hover); }
+.bell.has-active {
   border-color: var(--vf-primary);
+  color: var(--vf-primary);
   background: var(--vf-primary-soft);
 }
-.voice-progress {
+.bell-num {
   position: absolute;
-  left: 0; bottom: 0; height: 2px;
-  background: var(--vf-primary);
-  transition: width .1s linear;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: var(--vf-err);
+  color: white;
+  border-radius: var(--vf-radius-full);
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 2px var(--vf-bg-0);
+}
+
+/* ── 主体 ── */
+.app-body {
+  flex: 1;
+  overflow: hidden;
+}
+
+.main-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: var(--vf-space-5) var(--vf-space-6) 0;
+  /* 给底部播放器留位置 —— 这是上一版漏掉的，全局播放器会盖住最后一排 */
+  padding-bottom: calc(var(--vf-player-h) + var(--vf-space-4));
+}
+
+/* Tab 导航 */
+.tab-nav {
+  display: flex;
+  gap: var(--vf-space-1);
+  padding: var(--vf-space-2);
+  background: var(--vf-bg-1);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-lg);
+  margin-bottom: var(--vf-space-4);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab-nav::-webkit-scrollbar { display: none; }
+
+.tab-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--vf-radius-md);
+  color: var(--vf-text-2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s var(--vf-ease);
+  white-space: nowrap;
+  flex: none;
+}
+.tab-nav-item:hover {
+  color: var(--vf-text-1);
+  background: var(--vf-bg-hover);
+}
+.tab-nav-item.active {
+  color: var(--vf-text-1);
+  background: var(--vf-bg-active);
+  border-color: var(--vf-border-strong);
+  font-weight: 600;
+}
+.tab-nav-label { font-size: 13px; }
+
+/* 当前音色条 */
+.current-persona-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--vf-space-3);
+  margin-bottom: var(--vf-space-4);
+}
+.current-persona-row > :first-child { flex: 1; }
+
+.model-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+  padding: 0 var(--vf-space-3);
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-md);
+  font-size: 12px;
+  position: relative;
+  overflow: hidden;
+}
+.model-pill-label { color: var(--vf-text-3); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+.model-pill-value { color: var(--vf-text-1); font-weight: 600; }
+.model-pill-bar {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+}
+
+/* 隐藏 n-tabs —— 只用它做路由同步，导航我们自己渲染 */
+.hidden-tabs {
+  display: none;
 }
 </style>

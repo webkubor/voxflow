@@ -1,34 +1,39 @@
 <template>
   <div class="tab-content-container">
-    <!-- Suno 头部信息 -->
-    <div class="suno-header-row">
-      <h3 class="tab-title">AI 音乐 · Suno</h3>
-      <div class="suno-auth-status">
-        <n-tag v-if="suno.authenticated" type="success" size="small" round>
+    <!-- 头部 -->
+    <header class="suno-head">
+      <h3 class="tab-title">
+        <Icon name="suno" size="md" />
+        <span>AI 音乐 · Suno</span>
+      </h3>
+      <div class="auth-status">
+        <span v-if="suno.authenticated" class="credit-pill">
           ✅ {{ suno.plan || 'Suno' }} · {{ suno.total_credits_left }} credits
-        </n-tag>
-        <n-tag v-else type="warning" size="small" round>
-          ⚠️ 未登录
-        </n-tag>
-        <n-button circle size="tiny" secondary @click="loadSunoStatus">
-          🔄
-        </n-button>
+        </span>
+        <span v-else class="credit-pill warn">⚠️ 未登录</span>
+        <button class="icon-btn" title="刷新状态" @click="loadSunoStatus">
+          <Icon name="refresh" size="sm" />
+        </button>
       </div>
-    </div>
+    </header>
 
-    <!-- 未登录提示条 -->
-    <div v-if="!suno.authenticated" class="warn-banner">
-      ⚠️ <strong>需要先登录 Suno</strong> — 在终端执行 <code>./voxsuno login</code>（自动从 Chrome 提取会话），然后点刷新。
-    </div>
+    <WarnBanner
+      v-if="!suno.authenticated"
+      type="warn"
+      title="需要先登录 Suno"
+      hint="在终端执行 ./voxsuno login（自动从 Chrome 提取会话），然后点刷新。"
+    />
 
-    <!-- 热点风向：哪个音乐火，做哪个风格（不抄袭） -->
-    <div class="trend-card">
+    <!-- 热点风向 -->
+    <section class="trend-card">
       <div class="trend-head">
-        <span class="trend-title">📈 热点风向</span>
+        <Icon name="trend-up" size="sm" />
+        <span class="trend-title">热点风向</span>
         <span class="trend-note">网易云热歌榜实时提炼 · 只学风格不抄作品</span>
-        <n-button size="tiny" secondary :loading="trendLoading" @click="loadTrending">
-          {{ trend ? '刷新' : '看当前火什么' }}
-        </n-button>
+        <button class="ghost-btn" :disabled="trendLoading" @click="loadTrending">
+          <Icon name="refresh" size="sm" />
+          <span>{{ trend ? '刷新' : '看当前火什么' }}</span>
+        </button>
       </div>
 
       <div v-if="trendError" class="trend-error">{{ trendError }}</div>
@@ -36,37 +41,40 @@
       <div v-else-if="trend" class="trend-body">
         <p class="trend-line">{{ trend.trend || '' }}</p>
 
-        <!-- 值得做程度 -->
-        <div v-if="trend.hotness" class="trend-hotness">
+        <div v-if="trend.hotness" class="hotness">
           <span class="hotness-n">值得做：{{ trend.hotness }}/10</span>
-          <span class="hotness-bar"><span class="hotness-fill" :style="{ width: trend.hotness * 10 + '%' }"></span></span>
+          <div class="hotness-bar">
+            <div class="hotness-fill" :style="{ width: trend.hotness * 10 + '%' }"></div>
+          </div>
           <span class="hotness-reason">{{ trend.hotness_reason }}</span>
         </div>
 
         <div class="trend-tags">
-          <n-tag
+          <button
             v-for="tag in tagList"
             :key="tag"
-            size="small"
-            round
-            :bordered="false"
-            class="trend-tag"
+            class="tag-chip"
+            :title="`填入：${tag}`"
             @click="applyTags(tag)"
-            :title="'填入：' + tag"
           >
             {{ tag }}
-          </n-tag>
-          <n-button size="tiny" secondary @click="applyTags(trend.tags)">全部填入</n-button>
-        </div>
-        <div v-if="trend.moods?.length" class="trend-meta">
-          情绪：{{ trend.moods.join(' / ') }}
-        </div>
-        <div v-if="trend.themes?.length" class="trend-meta">
-          主题：{{ trend.themes.join(' / ') }}
+          </button>
+          <button class="tag-chip outline" @click="applyTags(trend.tags)">
+            <Icon name="arrow-right" size="sm" />
+            <span>全部填入</span>
+          </button>
         </div>
 
-        <!-- 热度榜 Top5（双榜交叉验证） -->
-        <div v-if="hotSongs.length" class="trend-chart">
+        <div v-if="trend.moods?.length" class="trend-meta">
+          <span class="meta-k">情绪</span>
+          <span>{{ trend.moods.join(' / ') }}</span>
+        </div>
+        <div v-if="trend.themes?.length" class="trend-meta">
+          <span class="meta-k">主题</span>
+          <span>{{ trend.themes.join(' / ') }}</span>
+        </div>
+
+        <div v-if="hotSongs.length" class="hot-chart">
           <div class="chart-title">🔥 当前热度榜 Top{{ hotSongs.length }}</div>
           <div v-for="s in hotSongs" :key="s.name" class="chart-row">
             <span class="chart-rank">{{ s.rank }}</span>
@@ -78,122 +86,119 @@
         </div>
 
         <div class="trend-actions">
-          <n-button size="tiny" type="primary" secondary @click="useThemeForLyrics">
-            ✍️ 用热点主题写歌词
-          </n-button>
+          <button class="primary-btn" @click="useThemeForLyrics">
+            <Icon name="sparkles" size="sm" />
+            <span>用热点主题写歌词</span>
+          </button>
           <span class="trend-updated">更新于 {{ trendUpdated }} · 只学风格不抄作品</span>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- 双栏表单布局 -->
-    <div class="form-container">
-      <n-grid :cols="2" :x-gap="20">
-        <!-- 左侧参数 -->
-        <n-grid-item>
-          <n-form label-placement="top">
-            <n-form-item label="🎵 歌曲标题">
-              <n-input v-model:value="sunoForm.title" placeholder="例如：月下竹林" />
-            </n-form-item>
+    <!-- 表单 -->
+    <section class="form-card">
+      <div class="form-grid">
+        <div class="form-col">
+          <div class="form-cell">
+            <label class="form-label">🎵 歌曲标题</label>
+            <n-input v-model:value="sunoForm.title" placeholder="如：月下竹林" />
+          </div>
 
-            <n-form-item label="🎤 风格标签（逗号分隔）">
-              <n-input v-model:value="sunoForm.tags" placeholder="古风, 古筝, 武侠, cinematic, 110 BPM" />
-            </n-form-item>
+          <div class="form-cell">
+            <label class="form-label">🎤 风格标签（逗号分隔）</label>
+            <n-input
+              v-model:value="sunoForm.tags"
+              placeholder="古风, 古筝, 武侠, cinematic, 110 BPM"
+            />
+          </div>
 
-            <n-form-item label="👤 声音 Persona">
-              <n-select 
-                v-model:value="sunoForm.persona" 
-                :options="personaOptions" 
-                placeholder="请选择 Suno 声音 Persona" 
-              />
-              <div class="persona-help-tip">
-                需要先有 persona：<code>./voxsuno sample &lt;voxkey&gt;</code> 生成样音 → suno.com 上传建 voice → <code>./voxsuno link &lt;id&gt; &lt;名字&gt;</code>
+          <div class="form-cell">
+            <label class="form-label">👤 声音 Persona</label>
+            <n-select
+              v-model:value="sunoForm.persona"
+              :options="personaOptions"
+              placeholder="请选择 Suno 声音 Persona"
+            />
+            <p class="form-hint">
+              需要先有 persona：<code>./voxsuno sample &lt;voxkey&gt;</code> 生成样音 → suno.com 上传建 voice → <code>./voxsuno link &lt;id&gt; &lt;名字&gt;</code>
+            </p>
+          </div>
+        </div>
+
+        <div class="form-col">
+          <div class="form-cell">
+            <div class="lyrics-head">
+              <label class="form-label">📝 歌词（支持 [Verse] [Chorus] 结构）</label>
+              <div class="lyrics-actions">
+                <button
+                  class="ghost-btn small"
+                  :disabled="lyricsGenerating"
+                  @click="generateLyrics"
+                >
+                  <Icon name="sparkles" size="sm" />
+                  <span>{{ lyricsGenerating ? '生成中…' : 'AI 生成' }}</span>
+                </button>
+                <button
+                  class="ghost-btn small"
+                  :disabled="!sunoForm.lyrics.trim()"
+                  @click="copyLyrics"
+                >
+                  <Icon name="layers" size="sm" />
+                  <span>复制歌词</span>
+                </button>
               </div>
-            </n-form-item>
-          </n-form>
-        </n-grid-item>
-
-        <!-- 右侧歌词 -->
-        <n-grid-item>
-          <n-form label-placement="top">
-            <n-form-item>
-              <template #label>
-                <div class="lyrics-label-row">
-                  <span>📝 歌词（支持 [Verse] [Chorus] 结构）</span>
-                  <n-space size="small">
-                    <n-button size="tiny" secondary :loading="lyricsGenerating" @click="generateLyrics">
-                      AI 生成
-                    </n-button>
-                    <n-button size="tiny" secondary :disabled="!sunoForm.lyrics.trim()" @click="copyLyrics">
-                      复制歌词
-                    </n-button>
-                  </n-space>
-                </div>
-              </template>
-              <n-input
-                v-model:value="lyricsPrompt"
-                placeholder="歌词主题（留空则根据标题和风格生成）"
-                class="lyrics-prompt-input"
-              />
-              <n-input 
-                v-model:value="sunoForm.lyrics" 
-                type="textarea" 
-                :rows="8" 
-                class="lyrics-input"
-                placeholder="[Verse 1]&#10;月下竹林深&#10;我踏碎霜痕&#10;&#10;[Chorus]&#10;月下竹林 我独行&#10;江湖夜雨十年灯"
-              />
-            </n-form-item>
-          </n-form>
-        </n-grid-item>
-      </n-grid>
-
-      <!-- 底部控制区 -->
-      <div class="suno-footer-actions">
-        <n-space align="center">
-          <n-button 
-            type="primary" 
-            size="large"
-            :loading="suno.submitting" 
-            :disabled="suno.submitting || !suno.authenticated" 
-            @click="submitSuno"
-          >
-            🎵 生成音乐
-          </n-button>
-          <span class="cost-tip">生成约耗 35-70 credits · 产物进「音频库」</span>
-        </n-space>
-        
-        <p v-if="suno.error" class="suno-error-text">{{ suno.error }}</p>
+            </div>
+            <n-input
+              v-model:value="lyricsPrompt"
+              placeholder="歌词主题（留空则根据标题和风格生成）"
+              class="mb-2"
+            />
+            <n-input
+              v-model:value="sunoForm.lyrics"
+              type="textarea"
+              :rows="9"
+              placeholder="[Verse 1]&#10;月下竹林深&#10;我踏碎霜痕&#10;&#10;[Chorus]&#10;月下竹林 我独行&#10;江湖夜雨十年灯"
+            />
+          </div>
+        </div>
       </div>
-    </div>
+
+      <div class="form-footer">
+        <button
+          class="primary-btn"
+          :loading="suno.submitting"
+          :disabled="suno.submitting || !suno.authenticated"
+          @click="submitSuno"
+        >
+          <Icon name="suno" size="sm" />
+          <span>生成音乐</span>
+        </button>
+        <span class="cost-tip">生成约耗 35-70 credits · 产物进「资产库」</span>
+      </div>
+      <p v-if="suno.error" class="suno-error">{{ suno.error }}</p>
+    </section>
   </div>
 </template>
 
 <script setup>
-/**
- * Suno AI 音乐创作选项卡
- * 职责：连接 Suno 后端授权状态，收集风格歌词参数，提交生成音乐并启动异步轮询
- * API 来源：GET /api/suno/status, POST /api/suno/generate
- */
 import { computed, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import copy from 'copy-to-clipboard';
 import { api, toMessage } from '../api';
 import { useSunoStore } from '../stores/suno';
+import WarnBanner from '../components/WarnBanner.vue';
+import Icon from '../components/Icon.vue';
 
-// suno / sunoForm 是 reactive（直接解构拿的是同一个响应式对象，没问题）；
-// lyricsPrompt / lyricsGenerating 是 ref —— 直接解构拿到的是**解包后的
-// 值快照**，模板 v-model 和 .value 赋值都静默失效（AI 生成歌词从 UI 一直
-// 是坏的：输入进不了 store、loading 永远不亮）。ref 必须走 storeToRefs。
 const sunoStore = useSunoStore();
 const { suno, sunoForm } = sunoStore;
 const { lyricsPrompt, lyricsGenerating } = storeToRefs(sunoStore);
 const { loadSunoStatus, submitSuno, generateLyrics } = sunoStore;
 
-// ── 热点风向（测试1：哪个音乐火做哪个风格，不抄袭）──
 const trend = ref(null);
 const trendError = ref('');
 const trendLoading = ref(false);
 const trendUpdated = ref('');
+const hotSongs = ref([]);
 
 const loadTrending = async () => {
   trendLoading.value = true;
@@ -213,9 +218,7 @@ const loadTrending = async () => {
     trendLoading.value = false;
   }
 };
-const hotSongs = ref([]);
 
-/** 标签串拆成单个标签（逗号/顿号分隔，去掉空白） */
 const tagList = computed(() =>
   (trend.value?.tags || '').split(/[,，]/).map((s) => s.trim()).filter(Boolean),
 );
@@ -225,7 +228,6 @@ const applyTags = (tags) => {
   sunoForm.tags = current ? `${current}, ${tags}` : tags;
 };
 
-/** 用热点主题写歌词：把趋势主题填进歌词 prompt 并触发生成（不抄原词） */
 const useThemeForLyrics = () => {
   const themes = trend.value?.themes || [];
   const theme = themes.length
@@ -246,7 +248,6 @@ const copyLyrics = () => {
   );
 };
 
-// 将 suno.personas 对象格式化为 Naive UI Select 组件所需的 options
 const personaOptions = computed(() => {
   const options = [{ label: '（默认 Suno 声音）', value: '' }];
   if (suno.personas) {
@@ -260,128 +261,286 @@ const personaOptions = computed(() => {
 
 <style scoped>
 .tab-content-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
 }
 
-.suno-header-row {
+.tab-title {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+}
+
+/* 头部 */
+.suno-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+}
+.auth-status { display: flex; align-items: center; gap: var(--vf-space-2); }
+.credit-pill {
+  font-size: 12px;
+  background: var(--vf-ok-soft);
+  color: var(--vf-ok);
+  padding: 4px var(--vf-space-3);
+  border-radius: var(--vf-radius-full);
+}
+.credit-pill.warn { background: var(--vf-warn-soft); color: var(--vf-warn); }
+.icon-btn {
+  width: 28px; height: 28px;
+  background: var(--vf-bg-3);
+  border: 1px solid var(--vf-border);
+  color: var(--vf-text-2);
+  border-radius: var(--vf-radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.icon-btn:hover {
+  background: var(--vf-bg-hover);
+  color: var(--vf-text-1);
+  border-color: var(--vf-border-strong);
 }
 
-/* 热点风向卡 */
+/* 热点风向 */
 .trend-card {
+  background: var(--vf-bg-2);
   border: 1px solid var(--vf-border);
   border-radius: var(--vf-radius-md);
-  background: var(--vf-bg-2);
-  padding: 12px 16px;
-  margin-bottom: 16px;
+  padding: var(--vf-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--vf-space-3);
 }
 .trend-head {
-  display: flex; align-items: center; gap: 10px;
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+  color: var(--vf-text-2);
 }
 .trend-title { font-weight: 600; color: var(--vf-text-1); font-size: 13px; }
 .trend-note { font-size: 11px; color: var(--vf-text-3); margin-right: auto; }
-.trend-error { margin-top: 8px; font-size: 12px; color: var(--vf-err, #b5564f); }
-.trend-body { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
-.trend-line { margin: 0; font-size: 13px; color: var(--vf-text-1); line-height: 1.6; }
-.trend-hotness { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.trend-error { font-size: 12px; color: var(--vf-err); }
+.trend-body { display: flex; flex-direction: column; gap: var(--vf-space-2); }
+.trend-line {
+  margin: 0;
+  font-size: 13px;
+  color: var(--vf-text-1);
+  line-height: 1.6;
+}
+
+.hotness { display: flex; align-items: center; gap: var(--vf-space-3); flex-wrap: wrap; }
 .hotness-n { font-size: 12px; font-weight: 600; color: var(--vf-primary); }
 .hotness-bar {
-  width: 120px; height: 6px; border-radius: 3px;
+  width: 120px; height: 6px; border-radius: var(--vf-radius-full);
   background: var(--vf-bg-3); overflow: hidden;
 }
-.hotness-fill { display: block; height: 100%; background: var(--vf-primary); border-radius: 3px; }
+.hotness-fill {
+  display: block; height: 100%;
+  background: linear-gradient(90deg, var(--vf-primary), var(--vf-primary-hover));
+  border-radius: var(--vf-radius-full);
+  transition: width 0.3s var(--vf-ease);
+}
 .hotness-reason { font-size: 11px; color: var(--vf-text-2); flex: 1; min-width: 200px; }
-.trend-chart { border-top: 1px dashed var(--vf-border); padding-top: 8px; }
-.chart-title { font-size: 11px; color: var(--vf-text-3); margin-bottom: 4px; }
-.chart-row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 2px 0; }
-.chart-rank { width: 18px; color: var(--vf-text-3); font-variant-numeric: tabular-nums; }
-.chart-name { color: var(--vf-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chart-artist { color: var(--vf-text-3); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
-.chart-both {
-  font-size: 10px; color: #ff8a50; border: 1px solid #ff8a50;
-  border-radius: 999px; padding: 0 5px; flex: none;
-}
-.chart-score { margin-left: auto; color: var(--vf-text-2); font-variant-numeric: tabular-nums; }
-.trend-actions { display: flex; align-items: center; gap: 10px; }
-.trend-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.trend-tag { cursor: pointer; }
-.trend-tag:hover { opacity: .8; }
-.trend-meta { font-size: 12px; color: var(--vf-text-2); }
-.trend-updated { margin: 0; font-size: 10px; color: var(--vf-text-3); }
 
-.tab-title {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
+.trend-tags { display: flex; flex-wrap: wrap; align-items: center; gap: var(--vf-space-2); }
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--vf-primary-soft);
+  border: 1px solid transparent;
+  color: var(--vf-primary);
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: var(--vf-radius-full);
+  cursor: pointer;
+  transition: all 0.15s var(--vf-ease);
+}
+.tag-chip:hover {
+  background: var(--vf-primary);
+  color: white;
+}
+.tag-chip.outline {
+  background: transparent;
+  border-color: var(--vf-border-strong);
+  color: var(--vf-text-2);
+}
+.tag-chip.outline:hover {
+  background: var(--vf-bg-hover);
   color: var(--vf-text-1);
+  border-color: var(--vf-primary);
 }
 
-.suno-auth-status {
+.trend-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--vf-space-2);
+  font-size: 12px;
+  color: var(--vf-text-2);
 }
-
-.warn-banner {
-  background-color: rgba(240, 160, 32, 0.1);
-  border: 1px solid var(--vf-gold);
-  border-radius: 6px;
-  color: var(--vf-gold);
-  padding: 10px 15px;
-  font-size: 13px;
-  margin-bottom: 16px;
-}
-
-.form-container {
-  background-color: var(--vf-bg-1);
-  border: 1px solid var(--vf-bg-4);
-  border-radius: 8px;
-  padding: 20px;
-}
-
-.persona-help-tip {
+.meta-k {
   font-size: 11px;
   color: var(--vf-text-3);
-  margin-top: 6px;
-  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.lyrics-label-row {
+.hot-chart {
+  border-top: 1px dashed var(--vf-border);
+  padding-top: var(--vf-space-3);
+}
+.chart-title { font-size: 11px; color: var(--vf-text-3); margin-bottom: var(--vf-space-2); }
+.chart-row {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+  font-size: 12px;
+  padding: 3px 0;
+}
+.chart-rank {
+  width: 18px;
+  color: var(--vf-text-3);
+  font-variant-numeric: tabular-nums;
+}
+.chart-name {
+  color: var(--vf-text-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 200px;
+}
+.chart-artist {
+  color: var(--vf-text-3);
+  font-size: 11px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 160px;
+}
+.chart-both {
+  font-size: 10px;
+  color: #ff8a50;
+  border: 1px solid #ff8a50;
+  border-radius: var(--vf-radius-full);
+  padding: 0 6px;
+  flex: none;
+}
+.chart-score {
+  margin-left: auto;
+  color: var(--vf-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-3);
+  flex-wrap: wrap;
+}
+.trend-updated { font-size: 11px; color: var(--vf-text-3); }
+
+/* 表单 */
+.form-card {
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-md);
+  padding: var(--vf-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--vf-space-4);
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--vf-space-5);
+}
+.form-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vf-space-4);
+}
+.form-cell { display: flex; flex-direction: column; gap: 6px; }
+.form-label { font-size: 12px; color: var(--vf-text-2); }
+.form-hint {
+  font-size: 11px;
+  color: var(--vf-text-3);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+.form-hint code {
+  padding: 1px 5px;
+  border-radius: var(--vf-radius-xs);
+  background: var(--vf-bg-3);
+  color: var(--vf-text-2);
+  font-size: 10px;
+}
+
+.lyrics-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--vf-space-2);
-  width: 100%;
-}
-
-.lyrics-prompt-input {
   margin-bottom: var(--vf-space-2);
 }
+.lyrics-actions { display: flex; gap: var(--vf-space-2); }
 
-.lyrics-input :deep(textarea) {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
+.mb-2 { margin-bottom: var(--vf-space-2); }
 
-.cost-tip {
+/* action buttons */
+.ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--vf-bg-3);
+  border: 1px solid var(--vf-border);
+  color: var(--vf-text-2);
+  padding: 5px 12px;
+  border-radius: var(--vf-radius-sm);
   font-size: 12px;
-  color: var(--vf-text-3);
+  cursor: pointer;
+  transition: all 0.15s;
 }
-
-.suno-footer-actions {
-  margin-top: 16px;
-  border-top: 1px solid var(--vf-bg-4);
-  padding-top: 16px;
+.ghost-btn:hover:not(:disabled) {
+  background: var(--vf-bg-hover);
+  color: var(--vf-text-1);
+  border-color: var(--vf-border-strong);
 }
+.ghost-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.ghost-btn.small { padding: 4px 10px; font-size: 11px; }
 
-.suno-error-text {
-  color: var(--vf-err);
+.primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: white;
+  border: 1px solid white;
+  color: black;
   font-size: 13px;
-  margin-top: 8px;
-  margin-bottom: 0;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: var(--vf-radius-sm);
+  cursor: pointer;
+  transition: all 0.15s var(--vf-ease);
+}
+.primary-btn:hover:not(:disabled) {
+  background: #e4e4e7;
+  border-color: #e4e4e7;
+  transform: translateY(-1px);
+}
+.primary-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.form-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-3);
+  padding-top: var(--vf-space-4);
+  border-top: 1px solid var(--vf-border);
+  flex-wrap: wrap;
+}
+.cost-tip { font-size: 12px; color: var(--vf-text-3); }
+.suno-error { margin: 0; font-size: 13px; color: var(--vf-err); }
+
+@media (max-width: 760px) {
+  .form-grid { grid-template-columns: 1fr; }
 }
 </style>
