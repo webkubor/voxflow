@@ -21,6 +21,45 @@
       ⚠️ <strong>需要先登录 Suno</strong> — 在终端执行 <code>./voxsuno login</code>（自动从 Chrome 提取会话），然后点刷新。
     </div>
 
+    <!-- 热点风向：哪个音乐火，做哪个风格（不抄袭） -->
+    <div class="trend-card">
+      <div class="trend-head">
+        <span class="trend-title">📈 热点风向</span>
+        <span class="trend-note">网易云热歌榜实时提炼 · 只学风格不抄作品</span>
+        <n-button size="tiny" secondary :loading="trendLoading" @click="loadTrending">
+          {{ trend ? '刷新' : '看当前火什么' }}
+        </n-button>
+      </div>
+
+      <div v-if="trendError" class="trend-error">{{ trendError }}</div>
+
+      <div v-else-if="trend" class="trend-body">
+        <p class="trend-line">{{ trend.trend || '' }}</p>
+        <div class="trend-tags">
+          <n-tag
+            v-for="tag in tagList"
+            :key="tag"
+            size="small"
+            round
+            :bordered="false"
+            class="trend-tag"
+            @click="applyTags(tag)"
+            :title="'填入：' + tag"
+          >
+            {{ tag }}
+          </n-tag>
+          <n-button size="tiny" secondary @click="applyTags(trend.tags)">全部填入</n-button>
+        </div>
+        <div v-if="trend.moods?.length" class="trend-meta">
+          情绪：{{ trend.moods.join(' / ') }}
+        </div>
+        <div v-if="trend.themes?.length" class="trend-meta">
+          主题：{{ trend.themes.join(' / ') }}
+        </div>
+        <p class="trend-updated">更新于 {{ trendUpdated }} · 风格标签可点击填入左侧</p>
+      </div>
+    </div>
+
     <!-- 双栏表单布局 -->
     <div class="form-container">
       <n-grid :cols="2" :x-gap="20">
@@ -109,14 +148,49 @@
  * 职责：连接 Suno 后端授权状态，收集风格歌词参数，提交生成音乐并启动异步轮询
  * API 来源：GET /api/suno/status, POST /api/suno/generate
  */
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import copy from 'copy-to-clipboard';
+import { api, toMessage } from '../api';
 import { useSunoStore } from '../stores/suno';
 
 const {
   suno, sunoForm, lyricsPrompt, lyricsGenerating,
   loadSunoStatus, submitSuno, generateLyrics,
 } = useSunoStore();
+
+// ── 热点风向（测试1：哪个音乐火做哪个风格，不抄袭）──
+const trend = ref(null);
+const trendError = ref('');
+const trendLoading = ref(false);
+
+const loadTrending = async () => {
+  trendLoading.value = true;
+  trendError.value = '';
+  try {
+    const data = await api.trending();
+    if (!data.ok) {
+      trendError.value = data.error || '热点获取失败';
+    } else {
+      trend.value = data.trend || null;
+      trendUpdated.value = data.updated || '';
+    }
+  } catch (cause) {
+    trendError.value = await toMessage(cause);
+  } finally {
+    trendLoading.value = false;
+  }
+};
+const trendUpdated = ref('');
+
+/** 标签串拆成单个标签（逗号/顿号分隔，去掉空白） */
+const tagList = computed(() =>
+  (trend.value?.tags || '').split(/[,，]/).map((s) => s.trim()).filter(Boolean),
+);
+
+const applyTags = (tags) => {
+  const current = sunoForm.tags.trim();
+  sunoForm.tags = current ? `${current}, ${tags}` : tags;
+};
 
 const copyLyrics = () => {
   const copied = copy(sunoForm.lyrics);
@@ -150,6 +224,28 @@ const personaOptions = computed(() => {
   align-items: center;
   margin-bottom: 16px;
 }
+
+/* 热点风向卡 */
+.trend-card {
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-md);
+  background: var(--vf-bg-2);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+.trend-head {
+  display: flex; align-items: center; gap: 10px;
+}
+.trend-title { font-weight: 600; color: var(--vf-text-1); font-size: 13px; }
+.trend-note { font-size: 11px; color: var(--vf-text-3); margin-right: auto; }
+.trend-error { margin-top: 8px; font-size: 12px; color: var(--vf-err, #b5564f); }
+.trend-body { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.trend-line { margin: 0; font-size: 13px; color: var(--vf-text-1); line-height: 1.6; }
+.trend-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.trend-tag { cursor: pointer; }
+.trend-tag:hover { opacity: .8; }
+.trend-meta { font-size: 12px; color: var(--vf-text-2); }
+.trend-updated { margin: 0; font-size: 10px; color: var(--vf-text-3); }
 
 .tab-title {
   margin: 0;

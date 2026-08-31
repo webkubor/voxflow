@@ -141,6 +141,12 @@ export const api = {
   sunoGenerate: (p: { title: string; tags?: string; lyrics?: string; persona?: string }) =>
     post<{ task_id: string }>('suno/generate', p),
 
+  // ── 热点风格追踪（测试1：哪个火做哪个，不抄袭）──
+  trending: () => get<{
+    ok: boolean; updated?: string; error?: string;
+    trend?: { trend?: string; tags?: string; moods?: string[]; themes?: string[] };
+  }>('trending'),
+
   // ── 下载接管 ──
   inbox: () => get<{ files: unknown[]; downloads_dir: string }>('inbox'),
   inboxImport: (paths: string[]) => post<{ ok: boolean; count: number }>('inbox/import', { paths }),

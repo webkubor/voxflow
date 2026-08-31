@@ -1312,6 +1312,36 @@ async def llm_lyrics(req: LLMLyricsRequest):
         return {"ok": False, "error": str(e)}
 
 
+# ── 热点风格追踪（测试1：哪个音乐火做哪个风格，但不抄袭）──
+# 网易云热歌榜（API 真数据）→ LLM 提炼风格共性 → Suno 风格标签。
+# 反抄袭边界在 core/llm_client._TREND_SYSTEM 里写死：只谈流派/编曲/情绪
+# 共性，禁止复述任何单首歌的旋律/歌词/编曲。
+_trend_cache: dict = {"at": 0.0, "data": None}
+_TREND_TTL = 30 * 60   # 榜单和风格分析缓存 30 分钟，别每次点都打榜+调 LLM
+
+
+@app.get("/api/trending")
+async def trending():
+    now = time.time()
+    if _trend_cache["data"] and now - _trend_cache["at"] < _TREND_TTL:
+        return _trend_cache["data"]
+    try:
+        from scripts.trending import get_hot_songs          # noqa: PLC0415
+        from core.llm_client import analyze_trending        # noqa: PLC0415
+        songs = get_hot_songs()
+        if not songs:
+            return {"ok": False, "error": "拿不到热歌榜"}
+        result = analyze_trending(songs)
+        data = {"ok": True, "updated": time.strftime("%Y-%m-%d %H:%M"),
+                "songs": songs[:5], "trend": result}
+        # LLM 翻车时（空标签）不缓存 —— 下次点会重试，别把坏结果锁 30 分钟
+        if result.get("tags"):
+            _trend_cache.update(at=now, data=data)
+        return data
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 # ── Suno AI 音乐（voxsuno 集成）────────────────────────────
 #
 # 声音一条龙工作台的最后一环：用 VoxFlow 复刻的声音（或任何已建 persona）
