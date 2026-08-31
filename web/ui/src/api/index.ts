@@ -23,6 +23,13 @@
  *
  * ky 把这些变成默认行为：非 2xx 直接抛、超时和重试是配置项。
  * 它只有 ~4KB，基于原生 fetch，不是 axios 那种自带一套 XHR 实现的重家伙。
+ *
+ * ## 请求头
+ *
+ * 每个请求自动带：
+ *   X-Client-Version: 当前 package.json 版本
+ *   X-Request-ID: 单次请求唯一 ID（前后端日志串联）
+ *   X-Client-Tab: 当前路由名（多 tab 调试时区分）
  */
 
 import ky, { HTTPError, TimeoutError } from 'ky';
@@ -31,6 +38,10 @@ import type {
   Album, CapabilitiesResponse, PersonasResponse, PipelineResponse,
   PlatformAccount, PlatformKey, Stage, Track,
 } from '../types/api';
+import { CLIENT_VERSION, toError, toMessage, VoxError } from '../lib/errors';
+
+export { toError, toMessage };
+export type { ErrorContext, VoxError } from '../lib/errors';
 
 /**
  * 统一实例。
@@ -45,25 +56,36 @@ import type {
  * - `timeout` 20 秒：本地服务，比这久基本就是挂了；无限等只会让页面一直转。
  * - `retry` 只对幂等方法生效（ky 默认不重试 POST），够用。
  */
+let _currentTab = 'unknown';
+export function setCurrentTab(tab: string): void {
+  _currentTab = tab;
+}
+
 const http = ky.create({
   prefix: '/api',
   timeout: API_TIMEOUT_MS,
   retry: { limit: API_RETRY_LIMIT, methods: ['get'] },
+  hooks: {
+    beforeRequest: [
+      ((_input: unknown, options: { headers: Headers }) => {
+        // options.headers 是 ky 合并后的最终 Headers 对象，改它会带到请求里
+        options.headers.set('X-Client-Version', CLIENT_VERSION);
+        options.headers.set('X-Client-Tab', _currentTab);
+        if (!options.headers.has('X-Request-ID')) {
+          options.headers.set('X-Request-ID', genRequestId());
+        }
+      }) as unknown as ((...args: unknown[]) => void),
+    ],
+  },
 });
 
-/** 把 ky 的异常转成人能看懂的一句话。抛给调用方，由它决定怎么提示。 */
-export async function toMessage(err: unknown): Promise<string> {
-  if (err instanceof TimeoutError) return '请求超时，后端可能没在跑';
-  if (err instanceof HTTPError) {
-    try {
-      const body = await err.response.json<{ detail?: string; error?: string }>();
-      return body.detail || body.error || `HTTP ${err.response.status}`;
-    } catch {
-      return `HTTP ${err.response.status}`;
-    }
-  }
-  return (err as Error)?.message || String(err);
+/** 8 字符 ID，足够在一次会话里唯一 */
+function genRequestId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
+
+/** 导出给单测用 */
+export const __testing = { genRequestId };
 
 const get = <T>(path: string, searchParams?: Record<string, string>) =>
   http.get(path, searchParams ? { searchParams } : undefined).json<T>();

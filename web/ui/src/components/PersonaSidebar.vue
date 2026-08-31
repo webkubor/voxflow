@@ -15,9 +15,10 @@
       <div v-if="personas.length > 5" class="sider-search">
         <Icon name="search" size="sm" class="search-icon" />
         <input
+          ref="searchInput"
           v-model="keyword"
           type="text"
-          placeholder="搜索音色…"
+          placeholder="搜索音色…（按 / 聚焦）"
           class="search-input"
         />
         <button v-if="keyword" class="search-clear" @click="keyword = ''" title="清除">
@@ -112,7 +113,7 @@
  *
  * 进度条用 absolute 铺底，不占布局空间 —— 卡片高度不跳动。
  */
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { useVoicesStore } from '../stores/voices';
 import { storeToRefs } from 'pinia';
 import Icon from './Icon.vue';
@@ -127,6 +128,7 @@ const { personas, selectedPersona, previewKey, previewProgress } = storeToRefs(v
 const { selectPersona, togglePreview } = voicesStore;
 
 const keyword = ref('');
+const searchInput = ref(null);
 const personasArr = computed(() =>
   Object.entries(personas.value).map(([key, p]) => ({ key, ...p })),
 );
@@ -139,6 +141,12 @@ const filteredPersonas = computed(() => {
 });
 
 const select = (key) => voicesStore.selectPersona(key);
+
+/** 暴露给父组件触发：被父级的全局快捷键调用 */
+const focusSearch = () => {
+  nextTick(() => searchInput.value?.focus());
+};
+defineExpose({ focusSearch });
 </script>
 
 <style scoped>

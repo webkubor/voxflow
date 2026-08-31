@@ -114,7 +114,8 @@ export const useSynthStore = defineStore('synth', () => {
       savedScripts.value = (data.scripts || []) as SavedScript[];
       return data;
     } catch (cause) {
-      error.value = await toMessage(cause);
+      const vox = await useTasksStore().reportError(cause, { action: 'script.save' });
+      error.value = vox.message;
       throw cause;
     }
   };
@@ -150,9 +151,12 @@ export const useSynthStore = defineStore('synth', () => {
       tasks.showToast('任务已提交，请在右下角任务队列中关注进度', 'success');
       return data;
     } catch (cause) {
-      const msg = await toMessage(cause);
-      error.value = msg;
-      tasks.showToast(msg, 'error');
+      // 走标准错误入口：HTTP 上下文 + 堆栈都进错误日志，toast 8 秒可关
+      const vox = await tasks.reportError(cause, {
+        action: url.includes('design') ? 'synth.design' : url.includes('dialogue') ? 'synth.dialogue' : 'synth.clone',
+        tags: { textLen: typeof (body as { text?: string })?.text === 'string' ? (body as { text: string }).text.length : 0 },
+      });
+      error.value = vox.message;
       throw cause;
     } finally {
       tasks.hideLoading();

@@ -190,7 +190,7 @@ const saveScript = async () => {
     await synthStore.saveScript(cloneForm.text);
     tasksStore.showToast('已存入草稿箱', 'success');
   } catch (cause) {
-    tasksStore.showToast(`保存失败：${await toMessage(cause)}`, 'error');
+    await tasksStore.reportError(cause, { action: 'script.save' });
   }
 };
 

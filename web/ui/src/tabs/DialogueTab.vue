@@ -223,8 +223,8 @@ const importConfig = async () => {
       },
     ];
     showToast('本地样例剧本已载入', 'success');
-  } catch {
-    showToast('载入失败', 'error');
+  } catch (cause) {
+    await tasksStore.reportError(cause, { action: 'dialogue.loadSample' });
   } finally {
     hideLoading();
   }
@@ -241,8 +241,11 @@ const submitDialogue = async () => {
   submitting.value = true;
   try {
     await submitDialogueTask(form);
-  } catch (e) {
-    showToast('合成失败: ' + e.message, 'error');
+  } catch (cause) {
+    await tasksStore.reportError(cause, {
+      action: 'synth.dialogue',
+      tags: { lines: form.lines.length, title: form.title },
+    });
   } finally {
     submitting.value = false;
   }

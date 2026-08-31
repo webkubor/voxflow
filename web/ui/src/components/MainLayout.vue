@@ -50,6 +50,17 @@
             </n-tooltip>
           </div>
 
+          <!-- 错误日志角标 -->
+          <button
+            class="bell"
+            :class="{ 'has-active': errorCount > 0, 'has-error': errorCount > 0 }"
+            :title="`错误日志（${errorCount} 条）`"
+            @click="toggleErrorPanel"
+          >
+            <Icon name="warning" size="md" />
+            <span v-if="errorCount > 0" class="bell-num error">{{ errorCount }}</span>
+          </button>
+
           <!-- 任务队列角标 -->
           <button
             class="bell"
@@ -67,6 +78,7 @@
       <n-layout has-sider class="app-body">
         <!-- 左侧音色库 -->
         <PersonaSidebar
+          ref="sidebarRef"
           :collapsed="siderCollapsed"
           @toggle-collapse="siderCollapsed = !siderCollapsed"
           @add-persona="showAddPersona = true"
@@ -128,10 +140,16 @@
       </n-layout>
 
       <!-- 底部播放器 -->
-      <GlobalPlayer />
+      <GlobalPlayer ref="playerRef" />
 
       <!-- 任务抽屉 -->
       <TaskPanel v-if="taskPanelOpen" @close="taskPanelOpen = false" />
+
+      <!-- 错误日志面板 -->
+      <ErrorLogPanel v-if="errorPanelOpen" @close="errorPanelOpen = false" />
+
+      <!-- 快捷键帮助 -->
+      <ShortcutHelp v-model:show="helpOpen" />
 
       <!-- 添加/编辑音色弹窗 -->
       <AddPersonaModal v-model:show="showAddPersona" />
@@ -171,7 +189,7 @@
  * 难分辨。换成自定义按钮 + 路由切换，n-tabs 留在下面当「路由 ↔ tab」的
  * 同步源（它绑了 v-model 到 currentTab）。视觉上不显示，但行为仍在。
  */
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { BOARD_POLL_MS } from '../config/constants';
 import { TAB_NAMES } from '../router';
@@ -190,9 +208,14 @@ import AddPersonaModal from './AddPersonaModal.vue';
 import EditPersonaModal from './EditPersonaModal.vue';
 import PersonaSidebar from './PersonaSidebar.vue';
 import CurrentPersonaChip from './CurrentPersonaChip.vue';
+import ErrorLogPanel from './ErrorLogPanel.vue';
+import ShortcutHelp from './ShortcutHelp.vue';
 import Icon from './Icon.vue';
 
+import { setCurrentTab } from '../api';
+import { useShortcuts } from '../composables/useShortcuts';
 import { useCapabilitiesStore } from '../stores/capabilities';
+import { useErrorLogStore } from '../stores/errorLog';
 import { useLibraryStore } from '../stores/library';
 import { usePipelineStore } from '../stores/pipeline';
 import { useSunoStore } from '../stores/suno';
@@ -213,6 +236,8 @@ const { personas, selectedPersona } = storeToRefs(voicesStore);
 const { globalLoading, globalLoadingText, tasks, taskPanelCollapsed } = storeToRefs(tasksStore);
 const { modelStatus } = storeToRefs(capabilitiesStore);
 const { player } = storeToRefs(libraryStore);
+const errorLogStore = useErrorLogStore();
+const { unreadCount: errorCount } = storeToRefs(errorLogStore);
 
 // 「模型未就绪」时哪些 tab 需要显示下载提示
 const NEEDS_PERSONA_TABS = new Set(['clone', 'design', 'dialogue']);
@@ -225,6 +250,14 @@ const currentTab = computed({
     if (route.name !== tab) router.push({ name: tab });
   },
 });
+
+// 把当前路由名同步给 api 层，每次请求会带 X-Client-Tab
+// 后端日志按 tab 拆分能一眼看出是哪个屏在打
+watch(
+  () => route.name,
+  (name) => { if (typeof name === 'string') setCurrentTab(name); },
+  { immediate: true },
+);
 
 const tabs = [
   { name: 'clone', label: '声音克隆', icon: 'clone' },
@@ -261,12 +294,25 @@ const modelLabel = computed(() => {
 
 // 侧栏折叠
 const siderCollapsed = ref(false);
+const sidebarRef = ref(null);
+const playerRef = ref(null);
+const helpOpen = ref(false);
 
 // 任务面板：从「右下半抽屉」挪到由 header 铃铛开关控制
 const taskPanelOpen = ref(false);
 const toggleTaskPanel = () => {
   taskPanelOpen.value = !taskPanelOpen.value;
-  if (taskPanelOpen.value) taskPanelCollapsed.value = false;
+  if (taskPanelOpen.value) {
+    taskPanelCollapsed.value = false;
+    errorPanelOpen.value = false;
+  }
+};
+
+// 错误日志面板
+const errorPanelOpen = ref(false);
+const toggleErrorPanel = () => {
+  errorPanelOpen.value = !errorPanelOpen.value;
+  if (errorPanelOpen.value) taskPanelOpen.value = false;
 };
 
 // 进行中任务数
@@ -305,17 +351,16 @@ onMounted(async () => {
   // 用 allSettled 不用 all：Promise.all 里**任何一个 reject，后面的全不执行**。
   // 每项独立起来，一个上游挂了只影响它自己；而且失败要说出来，不能吞。
   const jobs = [
-    ['能力状态', () => capabilitiesStore.loadCaps()],
-    ['模型状态', () => capabilitiesStore.checkStatus()],
-    ['音色库', () => voicesStore.loadPersonas()],
-    ['任务队列', () => tasksStore.pollTasks()],
+    { name: '能力状态', action: 'app.loadCaps', fn: () => capabilitiesStore.loadCaps() },
+    { name: '模型状态', action: 'app.checkStatus', fn: () => capabilitiesStore.checkStatus() },
+    { name: '音色库', action: 'voices.load', fn: () => voicesStore.loadPersonas() },
+    { name: '任务队列', action: 'tasks.poll', fn: () => tasksStore.pollTasks() },
   ];
-  const results = await Promise.allSettled(jobs.map(([, fn]) => fn()));
+  const results = await Promise.allSettled(jobs.map((j) => j.fn()));
   results.forEach((r, i) => {
     if (r.status === 'rejected') {
-      const name = jobs[i][0];
-      console.error(`[VoxFlow] ${name}加载失败`, r.reason);
-      tasksStore.showToast(`${name}加载失败：${r.reason?.message || r.reason}`, 'error');
+      const job = jobs[i];
+      tasksStore.reportError(r.reason, { action: job.action, tags: { stage: job.name } });
     }
   });
 
@@ -330,6 +375,28 @@ onBeforeUnmount(() => {
 
 // 给 SunoTab 这种需要刷新状态的子组件用的 expose 触发器
 defineExpose({});
+
+// 全局快捷键
+useShortcuts({
+  onToggleTaskPanel: () => {
+    taskPanelOpen.value = !taskPanelOpen.value;
+    if (taskPanelOpen.value) {
+      taskPanelCollapsed.value = false;
+      errorPanelOpen.value = false;
+    }
+  },
+  onToggleErrorPanel: () => {
+    errorPanelOpen.value = !errorPanelOpen.value;
+    if (errorPanelOpen.value) taskPanelOpen.value = false;
+  },
+  onTogglePlayer: () => playerRef.value?.togglePlay(),
+  onToggleMute: () => playerRef.value?.toggleMute(),
+  onFocusPersonaSearch: () => {
+    if (siderCollapsed.value) siderCollapsed.value = false;
+    sidebarRef.value?.focusSearch?.();
+  },
+  onShowHelp: () => { helpOpen.value = true; },
+});
 </script>
 
 <style scoped>
@@ -471,6 +538,11 @@ defineExpose({});
   color: var(--vf-primary);
   background: var(--vf-primary-soft);
 }
+.bell.has-error {
+  border-color: var(--vf-err);
+  color: var(--vf-err);
+  background: var(--vf-err-soft);
+}
 .bell-num {
   position: absolute;
   top: -4px;
@@ -478,7 +550,7 @@ defineExpose({});
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
-  background: var(--vf-err);
+  background: var(--vf-primary);
   color: white;
   border-radius: var(--vf-radius-full);
   font-size: 10px;
@@ -488,6 +560,7 @@ defineExpose({});
   justify-content: center;
   box-shadow: 0 0 0 2px var(--vf-bg-0);
 }
+.bell-num.error { background: var(--vf-err); }
 
 /* ── 主体 ── */
 .app-body {

@@ -45,7 +45,7 @@ const load = async () => {
     albums.value = alb.albums || {};
     await pipelineStore.loadPipeline();
   } catch (cause) {
-    tasksStore.showToast(await toMessage(cause), 'error');
+    await tasksStore.reportError(cause, { action: 'publish.load' });
   } finally {
     loading.value = false;
   }

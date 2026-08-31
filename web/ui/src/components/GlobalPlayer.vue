@@ -340,6 +340,9 @@ onBeforeUnmount(() => {
 watch(visible, (v) => {
   if (!v && audioPlayer.value) audioPlayer.value.pause();
 });
+
+// 给父级全局快捷键调用
+defineExpose({ togglePlay, toggleMute });
 </script>
 
 <style scoped>

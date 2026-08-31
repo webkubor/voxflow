@@ -187,7 +187,7 @@ onMounted(async () => {
   try {
     await loadAudioList();
   } catch (cause) {
-    tasksStore.showToast(`音频列表加载失败：${await toMessage(cause)}`, 'error');
+    await tasksStore.reportError(cause, { action: 'library.load' });
   }
 });
 </script>

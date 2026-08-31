@@ -259,7 +259,7 @@ const load = async () => {
   try {
     await pipelineStore.loadPipeline();
   } catch (cause) {
-    tasksStore.showToast(cause.message || '加载流水线失败', 'error');
+    await tasksStore.reportError(cause, { action: 'pipeline.load' });
   }
 };
 onMounted(load);
@@ -280,7 +280,7 @@ const openInbox = async () => {
     const data = await api.inbox();
     inboxFiles.value = data.files || [];
   } catch (cause) {
-    tasksStore.showToast(await toMessage(cause), 'error');
+    await tasksStore.reportError(cause, { action: 'inbox.list' });
   } finally {
     inboxLoading.value = false;
   }
@@ -298,7 +298,7 @@ const doInboxImport = async () => {
     showInbox.value = false;
     await load();
   } catch (cause) {
-    tasksStore.showToast(await toMessage(cause), 'error');
+    await tasksStore.reportError(cause, { action: 'inbox.import', tags: { count: pickedFiles.value.length } });
   } finally {
     inboxImporting.value = false;
   }
@@ -352,7 +352,7 @@ const advance = async (track) => {
     await load();
     tasksStore.showToast(`「${track.title}」→ ${stageLabels.value[action.to]}`, 'success');
   } catch (cause) {
-    tasksStore.showToast(cause.message || '操作失败', 'error');
+    await tasksStore.reportError(cause, { action: 'pipeline.advance', tags: { trackId: track.id, to: action.to } });
   } finally {
     busyId.value = '';
   }
@@ -374,7 +374,10 @@ const confirmPublish = async () => {
     showPublish.value = false;
     tasksStore.showToast(`「${track.title}」进入发版流程`, 'success');
   } catch (cause) {
-    tasksStore.showToast(cause.message || '发版失败', 'error');
+    await tasksStore.reportError(cause, {
+      action: 'pipeline.publish',
+      tags: { trackId: track.id, platforms: pickedPlatforms.value.join(',') },
+    });
   } finally {
     busyId.value = '';
   }
