@@ -16,7 +16,11 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 
-from core.paths import DATA_DIR as BASE_DIR  # 数据根，不是代码目录
+# 分家之后 doctor 要同时看两边：
+#   DATA_DIR    数据根（~/.voxflow）—— 模型、音色、产物
+#   PROJECT_DIR 代码根 —— venv、内置预设、命令入口
+# 这两个混用会得出「模型没下载」「venv 不存在」这种错判。
+from core.paths import DATA_DIR as BASE_DIR, PROJECT_DIR
 
 console = Console()
 
@@ -57,7 +61,7 @@ def check_python_version():
 
 @register
 def check_venv():
-    venv_dir = BASE_DIR / ".venv"
+    venv_dir = PROJECT_DIR / ".venv"
     in_venv = hasattr(sys, "real_prefix") or (
         hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix
     )
@@ -198,26 +202,17 @@ def check_ffmpeg():
 
 # ── 8. 目录结构 ─────────────────────────────────────────────
 
-REQUIRED_DIRS = [
-    "cli",
-    "core",
-    "core/modes",
-    "web",
-    "web/static",
-    "configs",
-    "configs/presets",
-    "assets",
-    "assets/temp",
-    "out",
-]
+# 目录清单的真源在 core/paths.py，这里不再抄一份 ——
+# 抄一份就意味着某次改动后两边会对不上（数据搬家那次就是这么错的）
+from core.paths import DATA_SUBDIRS, CODE_SUBDIRS
 
 
 @register
 def check_directories():
+    """代码目录和数据目录分开查 —— 混用会得出「缺失 cli/core」这种错判。"""
     missing = []
-    for d in REQUIRED_DIRS:
-        if not (BASE_DIR / d).exists():
-            missing.append(d)
+    missing += [f"数据:{d}" for d in DATA_SUBDIRS if not (BASE_DIR / d).exists()]
+    missing += [f"代码:{d}" for d in CODE_SUBDIRS if not (PROJECT_DIR / d).exists()]
 
     if not missing:
         return _ok(f"目录结构完整（{len(REQUIRED_DIRS)} 个）")
@@ -272,7 +267,7 @@ def check_cli_entry():
     if voice_path:
         return _ok("voice 命令可用", voice_path)
 
-    venv_voice = BASE_DIR / ".venv" / "bin" / "voice"
+    venv_voice = PROJECT_DIR / ".venv" / "bin" / "voice"
     if venv_voice.exists():
         return _warn(
             "voice 在 .venv 中但未加入 PATH",
@@ -299,7 +294,10 @@ def check_web_ui():
 
 @register
 def check_presets():
-    presets_dir = BASE_DIR / "configs" / "presets"
+    # 内置预设跟着代码走；用户自己存的在数据目录，两边都看
+    presets_dir = next((d for d in (BASE_DIR / "configs" / "presets",
+                                    PROJECT_DIR / "configs" / "presets") if d.is_dir()),
+                       PROJECT_DIR / "configs" / "presets")
     if not presets_dir.exists():
         return _warn("configs/presets/ 不存在", "音色设计预设配方缺失")
     files = list(presets_dir.glob("*.json"))
@@ -441,7 +439,7 @@ def _try_fix(results):
             console.print(f"  [cyan]→[/cyan] 重新安装依赖...")
             subprocess.run(
                 [sys.executable, "-m", "pip", "install", "-e", "."],
-                cwd=str(BASE_DIR),
+                cwd=str(PROJECT_DIR),
             )
             fixed += 1
             break
