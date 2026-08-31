@@ -144,7 +144,11 @@ export const api = {
   // ── 热点风格追踪（测试1：哪个火做哪个，不抄袭）──
   trending: () => get<{
     ok: boolean; updated?: string; error?: string;
-    trend?: { trend?: string; tags?: string; moods?: string[]; themes?: string[] };
+    songs?: { rank: number; name: string; artist: string; score: number; platforms: string[] }[];
+    trend?: {
+      trend?: string; tags?: string; moods?: string[]; themes?: string[];
+      hotness?: number; hotness_reason?: string;
+    };
   }>('trending'),
 
   // ── 下载接管 ──

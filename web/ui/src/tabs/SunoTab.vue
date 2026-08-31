@@ -35,6 +35,14 @@
 
       <div v-else-if="trend" class="trend-body">
         <p class="trend-line">{{ trend.trend || '' }}</p>
+
+        <!-- 值得做程度 -->
+        <div v-if="trend.hotness" class="trend-hotness">
+          <span class="hotness-n">值得做：{{ trend.hotness }}/10</span>
+          <span class="hotness-bar"><span class="hotness-fill" :style="{ width: trend.hotness * 10 + '%' }"></span></span>
+          <span class="hotness-reason">{{ trend.hotness_reason }}</span>
+        </div>
+
         <div class="trend-tags">
           <n-tag
             v-for="tag in tagList"
@@ -56,7 +64,25 @@
         <div v-if="trend.themes?.length" class="trend-meta">
           主题：{{ trend.themes.join(' / ') }}
         </div>
-        <p class="trend-updated">更新于 {{ trendUpdated }} · 风格标签可点击填入左侧</p>
+
+        <!-- 热度榜 Top5（双榜交叉验证） -->
+        <div v-if="hotSongs.length" class="trend-chart">
+          <div class="chart-title">🔥 当前热度榜 Top{{ hotSongs.length }}</div>
+          <div v-for="s in hotSongs" :key="s.name" class="chart-row">
+            <span class="chart-rank">{{ s.rank }}</span>
+            <span class="chart-name">{{ s.name }}</span>
+            <span class="chart-artist">{{ s.artist }}</span>
+            <span v-if="s.platforms.length > 1" class="chart-both" title="网易云 + QQ 双榜上榜">双榜</span>
+            <span class="chart-score">{{ s.score }}</span>
+          </div>
+        </div>
+
+        <div class="trend-actions">
+          <n-button size="tiny" type="primary" secondary @click="useThemeForLyrics">
+            ✍️ 用热点主题写歌词
+          </n-button>
+          <span class="trend-updated">更新于 {{ trendUpdated }} · 只学风格不抄作品</span>
+        </div>
       </div>
     </div>
 
@@ -149,19 +175,25 @@
  * API 来源：GET /api/suno/status, POST /api/suno/generate
  */
 import { computed, ref } from 'vue';
+import { storeToRefs } from 'pinia';
 import copy from 'copy-to-clipboard';
 import { api, toMessage } from '../api';
 import { useSunoStore } from '../stores/suno';
 
-const {
-  suno, sunoForm, lyricsPrompt, lyricsGenerating,
-  loadSunoStatus, submitSuno, generateLyrics,
-} = useSunoStore();
+// suno / sunoForm 是 reactive（直接解构拿的是同一个响应式对象，没问题）；
+// lyricsPrompt / lyricsGenerating 是 ref —— 直接解构拿到的是**解包后的
+// 值快照**，模板 v-model 和 .value 赋值都静默失效（AI 生成歌词从 UI 一直
+// 是坏的：输入进不了 store、loading 永远不亮）。ref 必须走 storeToRefs。
+const sunoStore = useSunoStore();
+const { suno, sunoForm } = sunoStore;
+const { lyricsPrompt, lyricsGenerating } = storeToRefs(sunoStore);
+const { loadSunoStatus, submitSuno, generateLyrics } = sunoStore;
 
 // ── 热点风向（测试1：哪个音乐火做哪个风格，不抄袭）──
 const trend = ref(null);
 const trendError = ref('');
 const trendLoading = ref(false);
+const trendUpdated = ref('');
 
 const loadTrending = async () => {
   trendLoading.value = true;
@@ -172,6 +204,7 @@ const loadTrending = async () => {
       trendError.value = data.error || '热点获取失败';
     } else {
       trend.value = data.trend || null;
+      hotSongs.value = (data.songs || []).slice(0, 5);
       trendUpdated.value = data.updated || '';
     }
   } catch (cause) {
@@ -180,7 +213,7 @@ const loadTrending = async () => {
     trendLoading.value = false;
   }
 };
-const trendUpdated = ref('');
+const hotSongs = ref([]);
 
 /** 标签串拆成单个标签（逗号/顿号分隔，去掉空白） */
 const tagList = computed(() =>
@@ -190,6 +223,20 @@ const tagList = computed(() =>
 const applyTags = (tags) => {
   const current = sunoForm.tags.trim();
   sunoForm.tags = current ? `${current}, ${tags}` : tags;
+};
+
+/** 用热点主题写歌词：把趋势主题填进歌词 prompt 并触发生成（不抄原词） */
+const useThemeForLyrics = () => {
+  const themes = trend.value?.themes || [];
+  const theme = themes.length
+    ? themes.slice(0, 2).join('、')
+    : (trend.value?.trend || '');
+  if (!theme) {
+    window.$message?.warning?.('还没有热点主题，先点「看当前火什么」');
+    return;
+  }
+  lyricsPrompt.value = theme + '，写一首全新原创的歌';
+  generateLyrics();
 };
 
 const copyLyrics = () => {
@@ -241,6 +288,26 @@ const personaOptions = computed(() => {
 .trend-error { margin-top: 8px; font-size: 12px; color: var(--vf-err, #b5564f); }
 .trend-body { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
 .trend-line { margin: 0; font-size: 13px; color: var(--vf-text-1); line-height: 1.6; }
+.trend-hotness { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hotness-n { font-size: 12px; font-weight: 600; color: var(--vf-primary); }
+.hotness-bar {
+  width: 120px; height: 6px; border-radius: 3px;
+  background: var(--vf-bg-3); overflow: hidden;
+}
+.hotness-fill { display: block; height: 100%; background: var(--vf-primary); border-radius: 3px; }
+.hotness-reason { font-size: 11px; color: var(--vf-text-2); flex: 1; min-width: 200px; }
+.trend-chart { border-top: 1px dashed var(--vf-border); padding-top: 8px; }
+.chart-title { font-size: 11px; color: var(--vf-text-3); margin-bottom: 4px; }
+.chart-row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 2px 0; }
+.chart-rank { width: 18px; color: var(--vf-text-3); font-variant-numeric: tabular-nums; }
+.chart-name { color: var(--vf-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chart-artist { color: var(--vf-text-3); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
+.chart-both {
+  font-size: 10px; color: #ff8a50; border: 1px solid #ff8a50;
+  border-radius: 999px; padding: 0 5px; flex: none;
+}
+.chart-score { margin-left: auto; color: var(--vf-text-2); font-variant-numeric: tabular-nums; }
+.trend-actions { display: flex; align-items: center; gap: 10px; }
 .trend-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .trend-tag { cursor: pointer; }
 .trend-tag:hover { opacity: .8; }

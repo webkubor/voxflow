@@ -206,13 +206,17 @@ def polish_script(text: str, style: str = "") -> str:
 
 
 _TREND_SYSTEM = """\
-你是一个华语流行音乐趋势分析师。给你一份真实的热歌榜（含排名、歌名、艺人），
+你是一个华语流行音乐趋势分析师。给你一份真实的热歌榜（含排名、歌名、艺人、
+热度分，score 高的更火，标注 🔥双榜 的歌在网易云和 QQ 都上榜、趋势最可信），
 你要提炼「当前听众口味往哪走」，产出可以指导全新创作的风格方向。
 
 必须做：
 1. 提炼主线：当前主流曲风（如流行摇滚/国风/抒情芭乐/说唱…）、常见编曲特征
    （鼓点、和声、器乐）、常见情绪基调、常见歌词主题。
 2. 产出可直接给 Suno 用的风格标签（英文为主，5-8 个，逗号分隔，可带 BPM）。
+3. 给这个方向打「值得做」分（hotness，1-10 整数）：综合热度、市场饱和度、
+   可创作空间判断。双榜同火的题材分数更高，但任何方向都不能给 10 ——
+   市场没有空档到那个程度。
 
 严格边界（这是不可违反的红线）：
 - 只谈风格共性，禁止复述任何单首歌的旋律、歌词、歌名、具体编曲细节。
@@ -221,7 +225,9 @@ _TREND_SYSTEM = """\
   任何一段都不能让人认出对应榜单里哪首具体歌曲。
 
 只输出 JSON，不要 Markdown 代码块，结构：
-{"trend": "一句话主线", "tags": "suno 风格标签串", "moods": ["情绪", ...], "themes": ["主题", ...]}
+{"trend": "一句话主线", "tags": "suno 风格标签串", "moods": ["情绪", ...],
+ "themes": ["主题", ...], "hotness": 8,
+ "hotness_reason": "一句话说为什么值得做这个方向"}
 """
 
 
@@ -244,6 +250,8 @@ def analyze_trending(songs: list[dict]) -> dict:
     client = _get_client()
     chart = "\n".join(
         f"{s.get('rank', '?'):>3}. {s.get('name', '')} — {s.get('artist', '')}"
+        f"  [score={s.get('score', '?')}]"
+        f"{' 🔥双榜' if len(s.get('platforms') or []) > 1 else ''}"
         for s in songs[:30]
     )
 
@@ -272,7 +280,7 @@ def analyze_trending(songs: list[dict]) -> dict:
                     {"role": "user", "content": f"热歌榜（前 30）：\n{chart}"},
                 ],
                 temperature=0.4,
-                max_tokens=600,
+                max_tokens=1000,
             )
             data = _parse(resp.choices[0].message.content.strip())
             if data and data.get("tags"):
