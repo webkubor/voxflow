@@ -120,28 +120,122 @@ for k,v in d.items():
 "
 }
 
+# ── 批量 BGM 生成 ──
+# 用 suno generate 走纯音乐路径（无需 persona）。
+# 每首生成完等 3 秒，避开 Suno 速率限制。
+#
+# 用法：
+#   voxsuno batch "标题1:风格标签1" "标题2:风格标签2" ...
+#   voxsuno batch "破晓:epic orchestral, cinematic, 120 BPM" "长安月:chinese folk, guzheng"
+#
+# 风格标签自动追加 instrumental，告诉 Suno 走纯音乐路径。
+# --instrumental 双重保险（flag + tags 都标）。
+# 输出目录 ./out/（当前工作目录下），用 suno 自带的 --download 拉文件。
+cmd_batch() {
+  shift  # skip "batch"
+  if [ $# -eq 0 ]; then
+    die "用法: voxsuno batch \"标题1:标签1\" \"标题2:标签2\" ..."
+  fi
+
+  local total=$#
+  local ok=0
+  local fail=0
+  mkdir -p ./out
+
+  echo "🚀 批量生成 $total 首 BGM"
+  echo "   输出到 ./out/  ·  自动追加 instrumental ·  每首间隔 3 秒"
+  echo
+
+  local i=1
+  for spec in "$@"; do
+    # 用第一个 ":" 拆 title:tags
+    local title="${spec%%:*}"
+    local tags="${spec#*:}"
+
+    if [ -z "$title" ] || [ -z "$tags" ] || [ "$title" = "$tags" ]; then
+      echo "⚠️  [$i/$total] 格式错误（需要「标题:标签」），跳过: $spec"
+      i=$((i+1))
+      continue
+    fi
+
+    # 自动加 instrumental（去重）
+    local final_tags="$tags"
+    if ! echo "$final_tags" | grep -qi 'instrumental'; then
+      final_tags="$final_tags, instrumental"
+    fi
+
+    echo "[$i/$total] 🎵 $title"
+    echo "         tags: $final_tags"
+
+    # suno generate：传 title + tags + --instrumental flag
+    # 不用 persona：纯音乐不需要人声
+    "$SUNO_BIN" generate \
+      --title "$title" \
+      --tags "$final_tags" \
+      --instrumental \
+      --wait \
+      --download ./out/ 2>&1 | tail -5
+
+    local status=${PIPESTATUS[0]}
+
+    if [ $status -eq 0 ]; then
+      echo "✅ [$i/$total] 完成: $title"
+      ok=$((ok+1))
+    else
+      echo "❌ [$i/$total] 失败: $title (exit $status)"
+      fail=$((fail+1))
+    fi
+
+    # 最后一首不等
+    if [ $i -lt $total ]; then
+      echo "⏱️  等 3 秒避开 Suno 速率限制..."
+      sleep 3
+    fi
+    echo
+
+    i=$((i+1))
+  done
+
+  echo "════════════════════════════════════════"
+  echo "🎉 批量完成: 成功 $ok 首, 失败 $fail 首"
+  if [ $ok -gt 0 ]; then
+    echo "   输出目录: $(pwd)/out/"
+    echo "   听感建议: ls -lt out/ | head"
+  fi
+  echo "════════════════════════════════════════"
+}
+
 case "${1:-}" in
   login)  cmd_login ;;
   sample) cmd_sample "${2:-}" "${3:-}" ;;
   link)   cmd_link "${2:-}" "${3:-}" ;;
   song)   cmd_song "${2:-}" "${@:3}" ;;
   list)   cmd_list ;;
+  batch)  cmd_batch "${@:2}" ;;
   *) cat <<'EOF'
 voxsuno — VoxFlow 声流 × Suno 桥接工作流
 
 用法:
-  voxsuno login                         一键登录 Suno（从 Chrome 提取会话）
-  voxsuno sample <voxkey> [文本]        VoxFlow 克隆声音 → 生成样音 → 打开 Suno 建 persona 页
-  voxsuno link <persona_id> <名字>      保存 Suno persona ID
-  voxsuno list                          查看已保存的 persona
+  voxsuno login                                    一键登录 Suno（从 Chrome 提取会话）
+  voxsuno sample <voxkey> [文本]                   VoxFlow 克隆声音 → 生成样音 → 打开 Suno 建 persona 页
+  voxsuno link <persona_id> <名字>                 保存 Suno persona ID
+  voxsuno list                                     查看已保存的 persona
   voxsuno song <名字> --title ... --tags ... --lyrics ...
-                                         用 persona 生成音乐（透传 suno generate 参数）
+                                                   用 persona 生成音乐（透传 suno generate 参数）
+  voxsuno batch "标题1:标签1" "标题2:标签2" ...     批量生成 BGM（无需 persona，纯音乐路径）
 
 完整链路:
-  voxsuno sample jxx_host "你好，这是一段样音"   # 本地克隆 + 打开 Suno 建 voice
+  voxsuno sample jxx_host "你好，这是一段样音"      # 本地克隆 + 打开 Suno 建 voice
   # 网页上传样音 → 拿到 persona ID
-  voxsuno link a1b2c3d4-... 我的声音              # 保存
+  voxsuno link a1b2c3d4-... 我的声音                 # 保存
   voxsuno song 我的声音 --title "月下" --tags "古风, 古筝" --lyrics "[Verse]\n..." --wait
+
+批量 BGM 示例（抖音热门 4 种风格各 1 首）:
+  voxsuno batch \
+    "破晓:epic orchestral, cinematic, inspirational, building, 120 BPM" \
+    "长安月:chinese folk, guzheng, erhu, cinematic, traditional, 100 BPM" \
+    "无人街:sad piano, emotional strings, lo-fi, melancholic, 80 BPM" \
+    "心跳节拍:trap, transition hit, drop, cinematic, 110 BPM"
 EOF
     ;;
 esac
