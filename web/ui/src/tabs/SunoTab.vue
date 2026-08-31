@@ -245,6 +245,84 @@
           <Icon name="info" size="sm" />
           <span>本首将作为纯背景音乐生成，不含人声。系统会自动加上 <code>instrumental</code> 标签。</span>
         </div>
+
+        <!-- 批量生成面板 -->
+        <section class="batch-panel">
+          <header class="batch-head">
+            <div class="batch-title">
+              <Icon name="layers" size="sm" />
+              <span>批量生成</span>
+              <span class="batch-count">{{ batchItems.length }} 首</span>
+            </div>
+            <span class="batch-hint">一填一按，自动顺序提交，3 秒间隔避免压 Suno</span>
+          </header>
+
+          <div class="batch-list">
+            <div
+              v-for="item in batchItems"
+              :key="item.id"
+              class="batch-row"
+              :class="batchRowClass(item)"
+            >
+              <input
+                v-model="item.title"
+                placeholder="歌曲标题"
+                class="batch-title-input"
+                :disabled="batchRunning"
+              />
+              <n-select
+                v-model:value="item.presetKey"
+                :options="presetOptions"
+                placeholder="选择预设"
+                size="small"
+                :disabled="batchRunning"
+                class="batch-preset-select"
+              />
+              <span class="batch-status" :class="`status-${item.status}`">
+                {{ BATCH_STATUS[item.status] }}
+              </span>
+              <button
+                v-if="item.error"
+                class="batch-error-tip"
+                :title="item.error"
+              >
+                !
+              </button>
+              <button
+                v-if="!batchRunning"
+                class="batch-remove"
+                title="移除此行"
+                @click="batchRemoveRow(item.id)"
+              >
+                <Icon name="close" size="sm" />
+              </button>
+            </div>
+          </div>
+
+          <div v-if="batchItems.length === 0" class="batch-empty">
+            点「添加一行」开始批量
+          </div>
+
+          <div class="batch-actions">
+            <button class="ghost-btn" :disabled="batchRunning" @click="batchAddRow">
+              <Icon name="plus" size="sm" />
+              <span>添加一行</span>
+            </button>
+            <button class="primary-btn" :disabled="batchDisabled" @click="batchStart">
+              <Icon name="play" size="sm" />
+              <span>{{ batchRunning ? `生成中 (${batchDoneCount}/${batchItems.length})` : `开始批量 (${batchItems.length} 首)` }}</span>
+            </button>
+            <button v-if="batchRunning" class="ghost-btn" @click="batchCancel">
+              取消
+            </button>
+            <button v-if="!batchRunning && batchHasResult" class="ghost-btn" @click="batchReset">
+              重置状态
+            </button>
+            <span class="batch-cost" v-if="batchItems.length > 0">
+              预计 {{ batchItems.length * 35 }}-{{ batchItems.length * 100 }} credits
+            </span>
+          </div>
+        </section>
       </div>
 
       <!-- ─── COVER 模式：原曲 + 你的声音 ─── -->
@@ -799,6 +877,132 @@ const applyBGMPreset = (preset) => {
   tasksStore.showToast(`已套用 ${preset.label}`, 'success');
 };
 
+// ─── 批量生成 ───
+// 一次填多首 BGM，自动顺序提交到 Suno，每首间隔 3 秒避免触发速率限制
+const BATCH_STATUS = {
+  pending: '待提交',
+  submitting: '提交中…',
+  queued: '已提交',
+  error: '失败',
+};
+
+// preset label -> tags 映射，方便按 label 取 tags
+const PRESET_TAG_MAP = Object.fromEntries(BGM_PRESETS.map((p) => [p.label, p.tags]));
+const presetOptions = computed(() =>
+  BGM_PRESETS.map((p) => ({ label: p.label, value: p.label })),
+);
+
+const batchItems = ref([
+  { id: 1, title: '破晓',     presetKey: '🎬 励志燃',   status: 'pending', error: null },
+  { id: 2, title: '长安月',   presetKey: '🏮 国潮古风', status: 'pending', error: null },
+  { id: 3, title: '心跳节拍', presetKey: '🔥 抖音卡点', status: 'pending', error: null },
+]);
+const batchRunning = ref(false);
+const batchCancelled = ref(false);
+const batchCurrentId = ref(null);
+
+let _batchId = 100;
+
+const batchAddRow = () => {
+  if (batchRunning.value) return;
+  // 默认沿用最后一行的预设，省得每次重新选
+  const lastPreset = batchItems.value[batchItems.value.length - 1]?.presetKey
+    || BGM_PRESETS[0].label;
+  batchItems.value.push({
+    id: ++_batchId,
+    title: '',
+    presetKey: lastPreset,
+    status: 'pending',
+    error: null,
+  });
+};
+
+const batchRemoveRow = (id) => {
+  if (batchRunning.value) return;
+  batchItems.value = batchItems.value.filter((i) => i.id !== id);
+};
+
+const batchRowClass = (item) => ({
+  'is-current': batchCurrentId.value === item.id,
+  'is-error': item.status === 'error',
+  'is-done': item.status === 'queued',
+});
+
+const batchDisabled = computed(
+  () => batchRunning.value || batchItems.value.length === 0
+    || batchItems.value.some((i) => !i.title.trim() || !i.presetKey),
+);
+
+const batchDoneCount = computed(
+  () => batchItems.value.filter((i) => i.status === 'queued').length,
+);
+const batchHasResult = computed(
+  () => batchItems.value.some((i) => i.status === 'queued' || i.status === 'error'),
+);
+
+const batchStart = async () => {
+  batchRunning.value = true;
+  batchCancelled.value = false;
+
+  let submitted = 0;
+  let failed = 0;
+  const total = batchItems.value.length;
+
+  for (let i = 0; i < batchItems.value.length; i++) {
+    if (batchCancelled.value) break;
+    const item = batchItems.value[i];
+    batchCurrentId.value = item.id;
+    item.status = 'submitting';
+    item.error = null;
+
+    const tags = PRESET_TAG_MAP[item.presetKey];
+    if (!tags) {
+      item.status = 'error';
+      item.error = `未知预设：${item.presetKey}`;
+      failed++;
+      continue;
+    }
+
+    try {
+      await submitSuno({
+        title: item.title.trim(),
+        tags,
+        lyrics: '[Instrumental]',
+        persona: '',
+      });
+      item.status = 'queued';
+      submitted++;
+      // 最后一首不 sleep
+      if (i < batchItems.value.length - 1 && !batchCancelled.value) {
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    } catch (cause) {
+      item.status = 'error';
+      item.error = cause instanceof Error ? cause.message : String(cause);
+      failed++;
+    }
+  }
+
+  batchRunning.value = false;
+  batchCurrentId.value = null;
+
+  if (batchCancelled.value) {
+    tasksStore.showToast(`已取消 · 已提交 ${submitted}/${total}`, 'info');
+  } else if (failed > 0) {
+    tasksStore.showToast(`完成 · 成功 ${submitted} 首，失败 ${failed} 首`, 'warning');
+  } else {
+    tasksStore.showToast(`批量完成 · ${submitted} 首已提交，等任务完成即可在资产库听`, 'success');
+  }
+};
+
+const batchCancel = () => {
+  batchCancelled.value = true;
+};
+
+const batchReset = () => {
+  batchItems.value = batchItems.value.map((i) => ({ ...i, status: 'pending', error: null }));
+};
+
 const personaOptions = computed(() => {
   const options = [{ label: '（默认 Suno 声音）', value: '' }];
   if (suno.personas) {
@@ -1174,6 +1378,151 @@ const personaOptions = computed(() => {
   background: var(--vf-bg-2);
   color: var(--vf-text-1);
   font-size: 11px;
+}
+
+/* ── 批量生成面板 ── */
+.batch-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vf-space-3);
+  padding-top: var(--vf-space-4);
+  border-top: 1px dashed var(--vf-border);
+}
+.batch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--vf-space-2);
+}
+.batch-title {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vf-text-1);
+}
+.batch-count {
+  font-size: 11px;
+  background: var(--vf-primary-soft);
+  color: var(--vf-primary);
+  padding: 1px 7px;
+  border-radius: var(--vf-radius-full);
+  font-weight: 600;
+}
+.batch-hint { font-size: 11px; color: var(--vf-text-3); }
+
+.batch-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vf-space-2);
+}
+.batch-row {
+  display: grid;
+  grid-template-columns: 1fr 200px 90px auto auto;
+  gap: var(--vf-space-2);
+  align-items: center;
+  padding: var(--vf-space-2) var(--vf-space-3);
+  background: var(--vf-bg-3);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-sm);
+  transition: all 0.15s var(--vf-ease);
+}
+.batch-row.is-current {
+  border-color: var(--vf-primary);
+  background: var(--vf-primary-soft);
+}
+.batch-row.is-done {
+  border-left: 3px solid var(--vf-ok);
+}
+.batch-row.is-error {
+  border-left: 3px solid var(--vf-err);
+}
+.batch-title-input {
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-xs);
+  color: var(--vf-text-1);
+  font-size: 13px;
+  padding: 6px 10px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.batch-title-input:focus { border-color: var(--vf-border-focus); }
+.batch-title-input:disabled { opacity: 0.5; cursor: not-allowed; }
+.batch-preset-select { min-width: 0; }
+
+.batch-status {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: var(--vf-radius-full);
+  text-align: center;
+  background: var(--vf-bg-2);
+  color: var(--vf-text-3);
+  font-weight: 500;
+}
+.batch-status.status-pending { background: var(--vf-bg-2); color: var(--vf-text-3); }
+.batch-status.status-submitting { background: var(--vf-warn-soft); color: var(--vf-warn); }
+.batch-status.status-queued { background: var(--vf-ok-soft); color: var(--vf-ok); }
+.batch-status.status-error { background: var(--vf-err-soft); color: var(--vf-err); }
+
+.batch-error-tip {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--vf-err-soft);
+  color: var(--vf-err);
+  border: none;
+  font-weight: 700;
+  cursor: help;
+  font-size: 12px;
+}
+.batch-remove {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--vf-radius-xs);
+  background: transparent;
+  border: none;
+  color: var(--vf-text-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.batch-remove:hover {
+  background: var(--vf-err-soft);
+  color: var(--vf-err);
+}
+
+.batch-empty {
+  text-align: center;
+  padding: var(--vf-space-5);
+  color: var(--vf-text-3);
+  font-size: 12px;
+  border: 1px dashed var(--vf-border);
+  border-radius: var(--vf-radius-sm);
+}
+
+.batch-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+  flex-wrap: wrap;
+}
+.batch-cost {
+  font-size: 11px;
+  color: var(--vf-text-3);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 760px) {
+  .batch-row {
+    grid-template-columns: 1fr;
+    gap: var(--vf-space-2);
+  }
 }
 
 /* ─── Cover 专属 ─── */
