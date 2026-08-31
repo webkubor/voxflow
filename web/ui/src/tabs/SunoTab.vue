@@ -508,7 +508,15 @@ const MODES = [
 const mode = ref('song');
 
 // ─── BGM 场景预设 ───
+// 抖音热门分类单独列在前 4 个：BPM 在 110-130 甜蜜区，drop 明确，
+// 副歌位置在 1:00-1:30 区间让剪辑师能卡到。
 const BGM_PRESETS = [
+  // 抖音热门（前 4 个都是「火过或在火」的细分场景）
+  { label: '🔥 抖音卡点', tags: 'trap, transition hit, drop, cinematic, 110 BPM' },
+  { label: '💔 深夜伤感', tags: 'sad piano, emotional strings, lo-fi, melancholic, 80 BPM' },
+  { label: '🎬 励志燃',   tags: 'epic orchestral, cinematic, inspirational, building, 120 BPM' },
+  { label: '🏮 国潮古风', tags: 'chinese folk, guzheng, erhu, cinematic, traditional, 100 BPM' },
+  // 通用场景
   { label: '📚 专注学习', tags: 'lo-fi, study, calm piano, ambient, 80 BPM' },
   { label: '☕ 咖啡时光', tags: 'jazz, lo-fi, cozy, vinyl crackle, 90 BPM' },
   { label: '🌙 助眠冥想', tags: 'ambient, drone, meditation, peaceful, 60 BPM' },
