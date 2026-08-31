@@ -80,18 +80,19 @@ export const useSunoStore = defineStore('suno', () => {
     taskTimer = window.setTimeout(() => pollSunoTask(taskId), SUNO_TASK_POLL_MS);
   };
 
-  const submitSuno = async (): Promise<{ task_id: string }> => {
+  const submitSuno = async (overrides?: { title?: string; tags?: string; lyrics?: string; persona?: string }): Promise<{ task_id: string }> => {
     error.value = '';
     suno.error = '';
     suno.submitting = true;
     try {
       // 原 JS 里 `payload` 是未声明变量：一点「生成音乐」就 ReferenceError。
       // 后端 SunoGenerateRequest 要 {title, tags, lyrics, persona}。
+      // overrides 让 UI 层可以临时切到 BGM 模式而不污染用户编辑的表单
       const data = await api.sunoGenerate({
-        title: sunoForm.title,
-        tags: sunoForm.tags,
-        lyrics: sunoForm.lyrics,
-        persona: sunoForm.persona,
+        title: overrides?.title ?? sunoForm.title,
+        tags: overrides?.tags ?? sunoForm.tags,
+        lyrics: overrides?.lyrics ?? sunoForm.lyrics,
+        persona: overrides?.persona ?? sunoForm.persona,
       });
       taskTimer = window.setTimeout(() => pollSunoTask(data.task_id), 3000);
       return data;
