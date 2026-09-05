@@ -146,7 +146,6 @@ agent 无法代查 —— 结果出来需要你扫一次码或等平台通知）
 - [ ] `~/.voxflow/configs/*.migrated` —— SQLite 迁移后留的原 JSON，
       确认库没问题后可以删
 - [ ] `~/.voxflow/configs.backup-*` —— 迁移前的备份，同上
-- [ ] `social-banner.png` 还是改名前的旧图
 
 ---
 

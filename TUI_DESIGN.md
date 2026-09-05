@@ -152,7 +152,7 @@ CLI 入口（typer）
 
 ### 音色注册表
 
-路径：`~/.config/voice-editor/registry.json`（或项目内 `configs/personas.json`）
+路径：`~/.voxflow/configs/personas.json`（或项目内 `configs/personas.json`）
 
 ```json
 {
@@ -233,7 +233,7 @@ CLI 入口（typer）
 新增文件，现有 `core/` 不动：
 
 ```
-voice-editor/
+voxflow/
 ├── cli/                         # 新增：CLI 主体
 │   ├── __init__.py
 │   ├── app.py                   # typer App 定义，子命令注册

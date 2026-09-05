@@ -30,7 +30,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/web-ui-main.png" width="860" alt="VoxFlow 现代音频工作台" />
+  <img src="assets/branding/social-banner.png" width="100%" alt="VoxFlow 声流 — 本地中文语音克隆 · 音色设计 · 全网音乐发行" />
 </p>
 
 ---

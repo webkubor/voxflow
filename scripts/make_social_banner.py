@@ -13,8 +13,8 @@
 
 - 1200×630（OG 标准尺寸）
 - 深色渐变底（#16161a → #0e0e11），主色 #818cf8 做辉光和装饰声波柱
-- 左侧 logo 图标 + 右侧品牌名/定位文案
-- 声波柱装饰呼应 logo 的「低-升-顿-推到顶-收」曲线
+- 左侧用 assets/branding/logo-icon.png（品牌真源，不要另画一套）
+- 右侧品牌名 / 定位文案
 """
 
 from __future__ import annotations
@@ -38,7 +38,6 @@ BG_BOTTOM = "#0e0e11"
 HELV = "/System/Library/Fonts/Helvetica.ttc"
 HEITI = "/System/Library/Fonts/STHeiti Medium.ttc"
 
-# 声波柱曲线（与 logo.svg 注释里的「低-升-顿-推到顶-收」呼应）
 WAVE = [0.30, 0.45, 0.62, 0.52, 0.88, 0.70, 0.95, 0.60, 0.40, 0.55, 0.35, 0.22]
 
 

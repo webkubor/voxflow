@@ -2,7 +2,7 @@
 set -e
 
 # --- 核心配置 ---
-PROJECT_NAME="voice-editor"
+PROJECT_NAME="voxflow"
 VERSION=$(grep -m 1 'version =' pyproject.toml | cut -d '"' -f 2)
 CHANGELOG_FILE="CHANGELOG.md"
 
@@ -21,7 +21,7 @@ if [ -f "$CHANGELOG_FILE" ]; then
     # 提取当前版本号到下一个版本号之间的内容
     RELEASE_NOTES=$(sed -n "/## \[$VERSION\]/,/## \[/p" "$CHANGELOG_FILE" | sed '$d')
 else
-    RELEASE_NOTES="Release version $VERSION of Voice Editor."
+    RELEASE_NOTES="Release version $VERSION of VoxFlow."
 fi
 
 # 3. 自动打标 (Tag)
@@ -48,7 +48,7 @@ fi
 if command -v gh &> /dev/null; then
     echo "🚀 Creating GitHub Release..."
     echo "$RELEASE_NOTES" > temp_notes.md
-    gh release create "v$VERSION" dist/* --title "Voice Editor v$VERSION" --notes-file temp_notes.md
+    gh release create "v$VERSION" dist/* --title "VoxFlow v$VERSION" --notes-file temp_notes.md
     rm temp_notes.md
 else
     echo "⚠️ Warning: gh CLI not found. Please manually upload the files in dist/ to GitHub."

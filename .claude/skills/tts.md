@@ -1,15 +1,15 @@
 ---
 name: tts
-project: voice-editor
+project: voxflow
 for: ai-agent
 ---
 
-# VoxCraft 声坊 — Agent 调用 SOP
+# VoxFlow 声流 — Agent 调用 SOP
 
 ## 前置
 
 ```bash
-cd ~/Desktop/personal/github/voice-editor
+cd /path/to/voxflow
 source .venv/bin/activate
 # 或直接用绝对路径：.venv/bin/voice
 ```
