@@ -133,6 +133,44 @@ def check_status(force: bool = False) -> dict:
         }
 
 
+def _chat(system: str, user: str, *, action: str, temperature: float = 0.8,
+          max_tokens: int = 2048) -> str:
+    """
+    所有 LLM 调用的唯一出口。
+
+    抽出来的理由不是「少写几行」——是**计量只能埋一个地方**。四个函数各自
+    调 create()，就要埋四次，加第五个功能时必然忘记埋第五次，
+    然后成本表上会缺一块，而且没有任何报错提示你缺了。
+
+    token 用量取 resp.usage 的真实值，不是估的。走中台时它就是扣积分的依据。
+    """
+    from core import obs  # 延迟导入，避免 CLI 早期加载时的循环依赖
+
+    client = _get_client()
+    t0 = time.perf_counter()
+    try:
+        resp = client.chat.completions.create(
+            model=_default_model,
+            messages=[{"role": "system", "content": system},
+                      {"role": "user", "content": user}],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    except Exception as e:
+        obs.meter("llm", action, qty=1, credits=0, ok=False,
+                  duration_ms=int((time.perf_counter() - t0) * 1000),
+                  model=_default_model, error=str(e)[:120])
+        raise
+    usage = getattr(resp, "usage", None)
+    obs.meter("llm", action, qty=1,
+              credits=getattr(usage, "total_tokens", 0) or 0,
+              duration_ms=int((time.perf_counter() - t0) * 1000),
+              model=_default_model,
+              prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+              completion_tokens=getattr(usage, "completion_tokens", 0) or 0)
+    return resp.choices[0].message.content.strip()
+
+
 def generate_script(prompt: str, word_count: Optional[int] = None) -> str:
     """根据提示词生成配音文案
 
@@ -143,38 +181,17 @@ def generate_script(prompt: str, word_count: Optional[int] = None) -> str:
     Returns:
         生成的文案文本
     """
-    client = _get_client()
-
     user_msg = prompt
     if word_count:
         user_msg += f"\n\n(目标字数: 约 {word_count} 字)"
-
-    resp = client.chat.completions.create(
-        model=_default_model,
-        messages=[
-            {"role": "system", "content": _GEN_SYSTEM},
-            {"role": "user", "content": user_msg},
-        ],
-        temperature=0.8,
-        max_tokens=2048,
-    )
-    return resp.choices[0].message.content.strip()
+    return _chat(_GEN_SYSTEM, user_msg, action="script")
 
 
 def generate_lyrics(prompt: str, style: str = "") -> str:
     """根据创作提示生成带 Suno 段落标记的歌词。"""
-    client = _get_client()
     style_hint = f"\n曲风参考：{style}" if style.strip() else ""
-    resp = client.chat.completions.create(
-        model=_default_model,
-        messages=[
-            {"role": "system", "content": _LYRICS_SYSTEM},
-            {"role": "user", "content": f"创作主题：{prompt.strip()}{style_hint}"},
-        ],
-        temperature=0.9,
-        max_tokens=1600,
-    )
-    return resp.choices[0].message.content.strip()
+    return _chat(_LYRICS_SYSTEM, f"创作主题：{prompt.strip()}{style_hint}",
+                 action="lyrics", temperature=0.9, max_tokens=1600)
 
 
 def polish_script(text: str, style: str = "") -> str:
@@ -187,22 +204,10 @@ def polish_script(text: str, style: str = "") -> str:
     Returns:
         润色后的文案
     """
-    client = _get_client()
-
     user_msg = text
     if style:
         user_msg += f"\n\n(风格要求: {style})"
-
-    resp = client.chat.completions.create(
-        model=_default_model,
-        messages=[
-            {"role": "system", "content": _POLISH_SYSTEM},
-            {"role": "user", "content": user_msg},
-        ],
-        temperature=0.6,
-        max_tokens=2048,
-    )
-    return resp.choices[0].message.content.strip()
+    return _chat(_POLISH_SYSTEM, user_msg, action="polish", temperature=0.6)
 
 
 _TREND_SYSTEM = """\
@@ -247,7 +252,6 @@ def analyze_trending(songs: list[dict]) -> dict:
     import json as _json
     import re as _re
 
-    client = _get_client()
     chart = "\n".join(
         f"{s.get('rank', '?'):>3}. {s.get('name', '')} — {s.get('artist', '')}"
         f"  [score={s.get('score', '?')}]"
@@ -273,16 +277,8 @@ def analyze_trending(songs: list[dict]) -> dict:
 
     for attempt in range(3):
         try:
-            resp = client.chat.completions.create(
-                model=_default_model,
-                messages=[
-                    {"role": "system", "content": _TREND_SYSTEM},
-                    {"role": "user", "content": f"热歌榜（前 30）：\n{chart}"},
-                ],
-                temperature=0.4,
-                max_tokens=1000,
-            )
-            data = _parse(resp.choices[0].message.content.strip())
+            data = _parse(_chat(_TREND_SYSTEM, f"热歌榜（前 30）：\n{chart}",
+                                action="trending", temperature=0.4, max_tokens=1000))
             if data and data.get("tags"):
                 return data
         except Exception:                                # noqa: BLE001

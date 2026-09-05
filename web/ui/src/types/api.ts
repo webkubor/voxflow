@@ -185,3 +185,142 @@ export interface Capability {
 }
 
 export type CapabilitiesResponse = Record<'tts' | 'suno' | 'studio' | 'llm', Capability>;
+
+// ── 可观测性与成本 ─────────────────────────────────────────
+// 后端契约见 web/app.py 的 /api/health · /api/metrics · /api/logs · /api/economics。
+
+/** 单项健康检查。ok=false 是坏了，ok=true+warn=true 是「还能用但要注意」。 */
+export interface HealthCheck {
+  ok: boolean;
+  warn?: boolean;
+  detail: string;
+  [k: string]: unknown;
+}
+
+export interface HealthResponse {
+  /** ok 全绿 · degraded 能用但有隐患 · down 有项目坏了 */
+  status: 'ok' | 'degraded' | 'down';
+  failed: string[];
+  warned: string[];
+  checks: Record<string, HealthCheck>;
+  uptime_s: number;
+}
+
+export interface RouteMetric {
+  key: string;
+  n: number;
+  errors: number;
+  error_rate: number;
+  p50_ms: number;
+  p95_ms: number;
+  max_ms: number;
+}
+
+export interface MetricsResponse {
+  uptime_s: number;
+  started_at: string;
+  pid: number;
+  routes: RouteMetric[];
+  tasks: Record<string, number>;
+  models_loaded: { base: boolean; design: boolean };
+}
+
+export interface LogRecord {
+  ts: string;
+  level: 'info' | 'warn' | 'error';
+  event: string;
+  [k: string]: unknown;
+}
+
+export interface ProviderUsage {
+  provider: string;
+  n: number;
+  /** 业务量：秒 / 次 / 张，单位见 pricing.providers[x].unit */
+  qty: number;
+  /** 只统计成功调用的量 —— 「省下多少」按它算，失败的不能算成收益 */
+  qty_ok: number;
+  credits: number;
+  cost_cny: number;
+  /** 该 provider 成本里的估算部分 */
+  estimated_cny: number;
+  failed: number;
+  /** 同样的量在商业 API 上要花多少（没有对标价的 provider 为 0） */
+  market_cny: number;
+  /** market_cny − cost_cny，本地跑省下的钱 */
+  saved_cny: number;
+}
+
+export interface TrackEconomics {
+  track_id: string;
+  title: string;
+  stage: string;
+  cost_cny: number;
+  by_provider: Record<string, { credits: number; cost_cny: number; n: number }>;
+  /** 近 30 日播放量（音乐人后台）。null = 还没抓过，不是 0 —— 两者含义完全不同 */
+  plays: number | null;
+  /** 按实测千播单价折算的收益（不是平台实付，界面要标出来）。null 同上 */
+  earned_cny: number | null;
+  /** 折算收益 ÷ 成本。null = 缺收入数据或成本为 0 */
+  roi: number | null;
+  net_cny: number | null;
+  /** 各平台按公开分成率算的回本播放数；0 = 该平台分成率未证实，算不了 */
+  breakeven_plays: Record<string, number>;
+}
+
+/** 一个平台的收入侧实况。rate_source 说明千播单价是实测还是配置估算。 */
+export interface PlatformRevenue {
+  label: string;
+  artist: string;
+  songs: number;
+  plays: number;
+  earned_cny: number;
+  cny_per_1k_plays: number;
+  /** measured = 后台收益 ÷ 播放量反推（准）；configured = 公开资料估算 */
+  rate_source: 'measured' | 'configured';
+  plays_7d: number;
+  fans: number;
+  synced_at: string;
+}
+
+export interface EconomicsResponse {
+  summary: {
+    ok: boolean;
+    days: number;
+    total_cny: number;
+    /** 全部 provider 省下的钱之和 —— 本地方案的价值，不算出来没人感知得到 */
+    saved_cny: number;
+    /** 总额里有多少来自 `voice backfill-costs` 的估算回填。不标出来，
+     *  回填过一次之后就再也分不清哪些数字是实测的。 */
+    estimated_cny: number;
+    currency: string;
+    by_provider: ProviderUsage[];
+    by_day: { day: string; cost_cny: number; n: number }[];
+    by_action: { provider: string; action: string; n: number; cost_cny: number }[];
+  };
+  revenue: Record<string, PlatformRevenue>;
+  pnl: {
+    /** 累计收益（平台后台的可提现金额） */
+    lifetime_earned_cny: number;
+    /** 有计量记录的作品的成本合计。注意与收益口径不同：收益是累计的，
+     *  成本只覆盖接入计量之后的作品 —— 界面上必须写明，别当净利润用。 */
+    lifetime_cost_cny: number;
+    net_cny: number;
+    total_plays: number;
+    cny_per_1k_plays_measured: number;
+  };
+  avg_cost_per_track_cny: number;
+  avg_breakeven_plays: number;
+  tracks: TrackEconomics[];
+  pricing: {
+    providers: Record<string, {
+      label: string; unit: string; cny_per_unit: number;
+      market_cny_per_unit?: number; billing?: string; note?: string;
+    }>;
+    revenue: Record<string, { label: string; cny_per_1k_plays: number; confidence: string }>;
+  };
+  /** 有成本数据的作品数 / 台账总作品数。差额 = 接入计量前的历史作品。 */
+  covered: number;
+  total_tracks: number;
+  /** 有单曲维度收入数据的作品数。0 = 还没跑过 scripts/ncm_track_stats.py */
+  revenue_covered: number;
+}

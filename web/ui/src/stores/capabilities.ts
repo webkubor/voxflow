@@ -100,12 +100,33 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
         renewDate: sunoCaps?.renew_date,
         detail: sunoCaps?.detail,
       },
-      { key: 'museav', label: 'museav', what: caps.value.museav?.identity || '未接',
-        ready: caps.value.museav?.ready, detail: caps.value.museav?.detail },
+      {
+        key: 'museav', label: 'museav',
+        // 显示积分而不是只显示租户名。中台积分是**硬约束**（没了出不了图），
+        // 和 Suno 积分完全同性质 —— 那边顶栏一直显示剩余，这边只显示一个
+        // 租户名，于是「为什么出不了图」每次都要重新查一遍。
+        // 2026-09-05 实测：余额已经是 0，而界面上任何地方都看不出来。
+        what: formatMuseavBadge(caps.value.museav),
+        ready: caps.value.museav?.ready,
+        num: caps.value.museav?.credits,
+        creditsRemaining: caps.value.museav?.credits,
+        detail: caps.value.museav?.detail,
+      },
       { key: 'llm', label: '文案', what: caps.value.llm?.model || '未接',
         ready: caps.value.llm?.ready, detail: caps.value.llm?.detail },
     ];
   });
+
+  /**
+   * 顶栏 museav chip 的文案。中台是预付制，没有「总额」概念，只显示剩余。
+   * 归零时特意显示「0 分」而不是退回租户名 —— 0 才是最需要被看见的那个数。
+   */
+  const formatMuseavBadge = (m: typeof caps.value.museav): string => {
+    if (!m?.ready) return '未接';
+    const c = m.credits;
+    if (c === undefined || c === null) return m.identity || 'museav';
+    return `${m.identity || 'museav'} · ${c} 分`;
+  };
 
   /** 顶栏 Suno chip 的文案。优先「套餐 · 已用/总额」，降级到「套餐 · 剩余」。 */
   const formatSunoBadge = (s: typeof caps.value.suno): string => {

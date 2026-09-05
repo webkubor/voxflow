@@ -38,9 +38,40 @@ from core.paths import (  # noqa: E402
     PERSONAS_FILE, SCRIPTS_FILE, PROJECT_DIR, ensure_dirs,
 )
 
+from core import obs  # noqa: E402
+
 # BASE_DIR 是数据根 —— personas.json 里的 ref 存的是相对它的路径
 BASE_DIR = DATA_DIR
 ensure_dirs()
+
+# 建表 + 清过期日志。都是幂等的，放启动路径上跑一次比另起一个定时器省事得多。
+try:
+    from core import db as _db  # noqa: E402
+    _db.init()
+except Exception as _e:  # 库起不来不该让服务起不来 —— 台账坏了合成还能用
+    obs.log("db_init_failed", level="error", error=str(_e))
+obs.prune_logs()
+
+# 版本号的唯一来源是 pyproject.toml。之前这个文件里硬编码了三处
+# （FastAPI title、启动日志、发给中台的 User-Agent），发版时改一处漏两处，
+# 于是日志里写着 0.3.0、接口文档写着 0.2.0，排查时根本不知道跑的是哪版。
+# 先读 pyproject.toml 而不是 importlib.metadata：这是个用 editable install
+# 装的本地工具，metadata 是**安装那一刻的快照**，改了 pyproject 也不会更新
+# （实测改成 0.4.0 后 metadata 仍报 0.3.0）。源码文件才是跑着的那份代码的真源。
+try:
+    import tomllib  # noqa: E402
+    VERSION = tomllib.loads(
+        (_PROJECT_DIR / "pyproject.toml").read_text(encoding="utf-8")
+    )["project"]["version"]
+except Exception:
+    try:
+        from importlib.metadata import version as _pkg_version  # noqa: E402
+        VERSION = _pkg_version("voxflow")
+    except Exception:
+        # 读不到就说 unknown —— 比写一个可能已经过期的常量诚实。
+        VERSION = "unknown"
+
+obs.log("server_start", version=VERSION)
 
 # ── 引擎单例（懒加载） ────────────────────────────────────
 _engine_lock = threading.Lock()
@@ -97,6 +128,27 @@ def _ensure_worker():
     t.start()
 
 
+def _audio_seconds_of(task: dict) -> float:
+    """
+    任务产出的音频有多长（秒）。量不出来就返回 0，调用方退回按「次」计。
+
+    用 soundfile 读文件头而不是整段读进来：只要 frames/samplerate 两个数，
+    没必要为了算个时长把几十 MB 的 wav 解码一遍。
+    """
+    res = (task.get("result") or {})
+    names = res.get("files") or ([res["filename"]] if res.get("filename") else [])
+    total = 0.0
+    for n in names:
+        try:
+            import soundfile as sf  # noqa: PLC0415
+            path = n if os.path.isabs(n) else str(OUT_DIR / n)
+            info = sf.info(path)
+            total += info.frames / info.samplerate
+        except Exception:
+            continue
+    return round(total, 2)
+
+
 def _task_worker():
     """后台 worker：从队列取任务执行"""
     while True:
@@ -109,6 +161,12 @@ def _task_worker():
                 continue
             task["status"] = "running"
 
+        # 计量埋在 worker 这一层，不埋在每个 _run_*_task 里：四种任务都从这里过，
+        # 埋一处覆盖全部，将来加第五种任务也自动被计上。
+        # 例外是 suno —— 它要记 credits，只有它自己知道扣了多少，所以由
+        # _run_suno_task 自己记，这里跳过，免得记两遍。
+        _t0 = time.perf_counter()
+        _err = ""
         try:
             if task["type"] == "clone":
                 _run_clone_task(task_id, task["params"], _update_task)
@@ -118,9 +176,23 @@ def _task_worker():
                 _run_suno_task(task_id, task["params"], _update_task)
             elif task["type"] == "dialogue":
                 _run_dialogue_task(task_id, task["params"], _update_task)
+            elif task["type"] == "cover":
+                _run_cover_task(task_id, task["params"], _update_task)
         except Exception as e:
-            _update_task(task_id, status="error", error=str(e),
+            _err = str(e)
+            _update_task(task_id, status="error", error=_err,
                          completed_at=datetime.now().strftime("%H:%M:%S"))
+            obs.log("task_failed", level="error", task_type=task["type"],
+                    task_id=task_id, label=task.get("label", ""), error=_err[:300])
+        finally:
+            if task["type"] not in ("suno", "cover"):
+                # 本地 TTS 单价是 0，但**量**要记 —— 「本月本地合成了多少秒」
+                # 乘上对标商业 API 的单价，就是本地方案实际省下的钱。
+                # 不记量的话，这个工具最大的价值恰好是唯一看不见的那个。
+                _audio_s = _audio_seconds_of(task)
+                obs.meter("tts", task["type"], qty=_audio_s or 1, credits=0,
+                          track_id="", duration_ms=int((time.perf_counter() - _t0) * 1000),
+                          ok=not _err, unit="seconds" if _audio_s else "calls")
 
 
 def _run_dialogue_task(task_id: str, params: dict, update_fn):
@@ -429,7 +501,7 @@ class ScriptSaveRequest(BaseModel):
 
 
 # ── FastAPI 应用 ──────────────────────────────────────────
-app = FastAPI(title="VoxFlow 声流", version="0.2.0")
+app = FastAPI(title="VoxFlow 声流", version=VERSION)
 
 app.add_middleware(
     CORSMiddleware,
@@ -437,6 +509,42 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def _observe(request, call_next):
+    """
+    每个 API 请求记一条耗时 + 失败时记一条错误日志。
+
+    为什么按「方法 + 路由模板」而不是完整 URL 聚合：/api/audio/xxx.wav 每个文件
+    一个 URL，按完整路径分组的话指标表会被几百个只出现一次的 key 撑爆，
+    什么也看不出来。这里只取前三段做 key，够区分端点又不会爆。
+
+    静态资源不记 —— 它们量大、恒定成功、耗时只反映磁盘，混进来会把
+    真正的 API 分位数稀释掉。
+    """
+    path = request.url.path
+    if not path.startswith("/api/"):
+        return await call_next(request)
+    key = f"{request.method} /" + "/".join(path.strip("/").split("/")[:3])
+    t0 = time.perf_counter()
+    status = 500
+    try:
+        resp = await call_next(request)
+        status = resp.status_code
+        return resp
+    except Exception as e:
+        obs.log("request_error", level="error", route=key, error=str(e)[:300],
+                error_type=type(e).__name__)
+        raise
+    finally:
+        ms = (time.perf_counter() - t0) * 1000
+        obs.record_latency(key, ms, ok=status < 500)
+        # 只有慢请求和失败请求写日志。全量写的话一天几万行，
+        # 真正要找的那条反而被淹掉了 —— 量的信息已经在 metrics 里。
+        if status >= 400 or ms > 3000:
+            obs.log("request", level="warn" if status >= 400 else "info",
+                    route=key, status=status, ms=round(ms, 1))
 
 class _NoCacheStaticFiles(StaticFiles):
     """
@@ -468,7 +576,7 @@ if _ASSETS_DIR.is_dir():
 
 # ── 页面路由 ──────────────────────────────────────────────
 @app.get("/")
-async def index():
+def index():
     # 入口页也不缓存 —— 它缓存了，整个前端就都停在旧版本上，
     # 后面所有资源无论怎么改都看不到。
     return FileResponse(
@@ -510,7 +618,7 @@ def _model_download_progress(model_type: str) -> dict:
 
 
 @app.get("/api/status")
-async def get_status():
+def get_status():
     """检查模型和系统状态"""
     base_prog = _model_download_progress("Base")
     design_prog = _model_download_progress("VoiceDesign")
@@ -558,8 +666,301 @@ def _scan_design_presets() -> list:
     return result
 
 
+# ── 可观测性：健康 / 指标 / 日志 / 成本 ────────────────────
+#
+# 四个端点分工明确，别合并成一个大而全的 /api/debug：
+#   health     现在能不能干活（给人和监控看的红绿灯）
+#   metrics    快不快、错多少（性能回归）
+#   logs       刚才为什么失败（排查）
+#   economics  花了多少、回本没有（生意）
+# 合成一个的话，想看一眼健康状态得等它把日志和聚合查询也跑完。
+
+@app.get("/api/health")
+def health():
+    """
+    深度健康检查。**不是** ping —— ping 只能证明进程还在，
+    而这里真正会坏的是磁盘满了、库锁了、模型没下完。
+
+    三档而不是布尔：degraded 是最有用的那一档（还能出歌但快没空间了），
+    只有 ok/down 两档的话，degraded 会被算成 ok，等发现时已经是 down。
+    """
+    checks = {}
+
+    # 库：真的读一次，不是看文件在不在
+    try:
+        from core import db
+        with db.connect() as c:
+            n = c.execute("SELECT COUNT(*) FROM tracks").fetchone()[0]
+        checks["database"] = {"ok": True, "detail": f"{n} 首作品在库"}
+    except Exception as e:
+        checks["database"] = {"ok": False, "detail": f"{type(e).__name__}: {str(e)[:80]}"}
+
+    # 数据目录可写：只读挂载 / 权限错乱时，症状是「合成成功但没有文件」，
+    # 极难猜。这里直接写一个字节验证。
+    try:
+        probe = DATA_DIR / ".health_probe"
+        probe.write_text("1")
+        probe.unlink()
+        checks["data_dir"] = {"ok": True, "detail": str(DATA_DIR)}
+    except Exception as e:
+        checks["data_dir"] = {"ok": False, "detail": f"不可写: {str(e)[:80]}"}
+
+    # 磁盘：模型 8.4 GB、每首歌几十 MB，空间是这个工具最现实的死法
+    try:
+        du = shutil.disk_usage(DATA_DIR)
+        free_gb = du.free / 1024**3
+        checks["disk"] = {
+            "ok": free_gb > 5, "warn": 5 <= free_gb < 20,
+            "free_gb": round(free_gb, 1), "used_pct": round(du.used / du.total * 100),
+            "detail": f"剩余 {free_gb:.1f} GB",
+        }
+    except Exception as e:
+        checks["disk"] = {"ok": False, "detail": str(e)[:80]}
+
+    # 模型：**没下 ≠ 坏了**。
+    #
+    # 这里之前把「模型没下」判成 ok=False，于是刚装好的用户打开就看到红色的
+    # 「有项目坏了」—— 而那恰恰是全新安装的正常状态，第一印象直接变成
+    # 「这东西是不是装坏了」。真正的 down 要留给「库读不出、目录不可写」
+    # 这种确实坏了的情况。
+    #
+    # 所以分三种：都在 = ok；缺一部分 = warn（对应的功能不可用，别的照跑）；
+    # 全没有 = 仍然 ok 但 warn，因为**不下模型也能用**：AI 音乐、发行台账、
+    # 运营台都不碰本地模型。
+    base_ok = _check_model_dir("Base")
+    design_ok = _check_model_dir("VoiceDesign")
+    downloading = _model_downloading("Base") or _model_downloading("VoiceDesign")
+    checks["tts_models"] = {
+        "ok": True,
+        "warn": not (base_ok and design_ok),
+        "base": base_ok, "design": design_ok, "downloading": downloading,
+        "detail": ("Base + VoiceDesign 就绪" if base_ok and design_ok
+                   else "Base 就绪，VoiceDesign 未下载（音色设计不可用）" if base_ok
+                   else "模型下载中…" if downloading
+                   else "本地模型未下载 —— 语音合成不可用，AI 音乐和发行台账照常"),
+    }
+
+    # 任务队列积压：worker 是单线程，堵住了前端只会一直转圈
+    with _tasks_lock:
+        queued = sum(1 for t in _tasks.values() if t["status"] == "queued")
+        running = sum(1 for t in _tasks.values() if t["status"] == "running")
+    checks["task_queue"] = {"ok": queued < 20, "warn": queued >= 5,
+                            "queued": queued, "running": running,
+                            "detail": f"排队 {queued} · 执行中 {running}"}
+
+    failed = [k for k, v in checks.items() if not v.get("ok")]
+    warned = [k for k, v in checks.items() if v.get("ok") and v.get("warn")]
+    status = "down" if failed else ("degraded" if warned else "ok")
+    if failed:
+        obs.log("health_degraded", level="error", failed=failed)
+    return {"status": status, "failed": failed, "warned": warned,
+            "checks": checks, "uptime_s": obs.metrics()["uptime_s"]}
+
+
+@app.get("/api/metrics")
+def metrics_endpoint():
+    """进程指标：各端点的量、错误率、P50/P95。性能回归的对照基线。"""
+    m = obs.metrics()
+    with _tasks_lock:
+        by_status: dict[str, int] = {}
+        for t in _tasks.values():
+            by_status[t["status"]] = by_status.get(t["status"], 0) + 1
+    m["tasks"] = by_status
+    m["models_loaded"] = {"base": _base_engine is not None,
+                          "design": _design_engine is not None}
+    return m
+
+
+@app.get("/api/logs")
+def logs_endpoint(limit: int = 200, level: str = "", event: str = "", days: int = 3):
+    """最近的结构化日志，倒序。前端「运行日志」面板的数据源。"""
+    return {"logs": obs.read_logs(limit=min(limit, 1000), level=level,
+                                  event=event, days=min(days, 14))}
+
+
+@app.get("/api/economics")
+def economics(days: int = 30):
+    """
+    单位经济学 —— 这门生意的账。
+
+    为什么它值得一个端点：本地 TTS 免费、Suno 走订阅、出图烧中台积分，
+    三条成本链路各记各的，**没有任何一个地方能回答「这首歌到底花了多少、
+    发出去回本了吗」**。不合起来看，就只能凭感觉判断要不要继续做。
+
+    回本播放数按各平台公开分成率算；分成率没证实的平台（腾讯系）返回 0
+    表示算不了 —— 见 configs/pricing.json 里为什么不填猜的数。
+    """
+    summary = obs.usage_summary(days)
+    costs = obs.track_costs()
+
+    titles: dict[str, str] = {}
+    stages: dict[str, str] = {}
+    try:
+        from core import db
+        with db.connect() as c:
+            for r in c.execute("SELECT id, title, stage FROM tracks"):
+                titles[r["id"]] = r["title"]
+                stages[r["id"]] = r["stage"]
+    except Exception:
+        pass
+
+    # 收入侧。回本播放数优先用**实测**千播单价（后台的累计收益 ÷ 累计播放），
+    # 它比公开资料的区间中位数准 —— 实测已经包含了这个账号的实际权益档位。
+    revenue = obs.platform_revenue()
+    rates = {k: (v["cny_per_1k_plays"] if v["rate_source"] == "measured" else None)
+             for k, v in revenue.items()}
+
+    # 单曲实际收入（音乐人后台抓的，可能为空 —— 为空就如实说没有，不摊派）
+    track_rev = obs.track_revenue()
+
+    # 有成本或有收入的作品都要出现：只赚不花（历史作品）和只花不赚（还没发）
+    # 都是这门生意里真实存在的状态，漏掉哪一边看到的都是残缺的账。
+    all_ids = set(costs) | set(track_rev)
+    tracks = []
+    for tid in all_ids:
+        c = costs.get(tid) or {"total_cny": 0.0, "by_provider": {}}
+        rev = track_rev.get(tid) or {}
+        cost = round(c["total_cny"], 2)
+        earned = round(rev.get("earned_cny", 0.0), 2)
+        tracks.append({
+            "track_id": tid,
+            "title": titles.get(tid, tid),
+            "stage": stages.get(tid, ""),
+            "cost_cny": cost,
+            "by_provider": c["by_provider"],
+            # 有后台数据才给，没有就是 None —— 前端据此显示「暂无数据」
+            # 而不是显示一个 0（0 会被读成「一分没赚」，那是另一回事）。
+            "earned_cny": earned if rev else None,
+            "plays": rev.get("plays") if rev else None,
+            "roi": (round(earned / cost, 2) if rev and cost > 0 else None),
+            "net_cny": (round(earned - cost, 2) if rev else None),
+            "breakeven_plays": {
+                p: obs.breakeven_plays(cost, p, rate_override=rates.get(p))
+                for p in ("qishui", "netease", "tencent")
+            },
+        })
+    # 有真实收入的排前面（那是最该看的），其次按成本从高到低
+    tracks.sort(key=lambda x: (x["earned_cny"] is None, -(x["earned_cny"] or 0), -x["cost_cny"]))
+
+    priced = [t for t in tracks if t["cost_cny"] > 0]
+    avg = round(sum(t["cost_cny"] for t in priced) / len(priced), 2) if priced else 0.0
+
+    # 盈亏。**收入是累计的、成本只统计最近 N 天** —— 两个口径不同，
+    # 不能直接相减当成「这个月赚了多少」，所以字段名写清楚是 lifetime，
+    # 并且把两个口径一起返回，让界面能如实标注而不是含糊地放一个「净利润」。
+    earned = round(sum(v["earned_cny"] for v in revenue.values()), 2)
+    plays = sum(v["plays"] for v in revenue.values())
+    lifetime_cost = round(sum(t["cost_cny"] for t in tracks), 2)
+    return {
+        "summary": summary,
+        "revenue": revenue,
+        "pnl": {
+            "lifetime_earned_cny": earned,
+            "lifetime_cost_cny": lifetime_cost,
+            "net_cny": round(earned - lifetime_cost, 2),
+            "total_plays": plays,
+            # 单位经济学的那个数：每一次播放实际带来多少钱。
+            "cny_per_1k_plays_measured": round(earned / plays * 1000, 4) if plays else 0.0,
+        },
+        "avg_cost_per_track_cny": avg,
+        "avg_breakeven_plays": obs.breakeven_plays(
+            avg, "netease", rate_override=rates.get("netease")),
+        "tracks": tracks[:100],
+        "pricing": obs.pricing(),
+        # 计过量的作品数 vs 台账总数 —— 差额就是「历史作品没有成本数据」，
+        # 直接说出来，免得看到 0 元以为是免费做出来的。
+        "covered": len(costs), "total_tracks": len(titles),
+        # 有多少首拿到了单曲维度的收入数据。0 表示还没跑过
+        # scripts/ncm_track_stats.py（要登录音乐人后台）。
+        "revenue_covered": len(track_rev),
+    }
+
+
+# ── 模型下载 ─────────────────────────────────────────────
+#
+# 为什么要在界面里做：新用户装好之后打开的第一屏是「声音克隆」，而模型没下 ——
+# 空音色库、灰按钮、一条「请回终端运行 ./install.sh」。整屏都是死路，
+# 而这时候 Suno、发行台账、运营台其实全都能用，只是他看不到。
+#
+# 进度读取（_model_download_progress）早就写好了，一直缺的只是**触发的入口**。
+# 补上之后，下载这 7 GB 的等待期里人可以去用别的功能，而不是盯着终端。
+
+_download_procs: dict[str, object] = {}
+_MODEL_REPOS = {
+    "Base": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+    "VoiceDesign": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+}
+
+
+@app.post("/api/models/download")
+def start_model_download(model: str = Form(...)):
+    """
+    起一个后台子进程下模型。幂等：已经在下或已经下完的直接返回现状，
+    不会重复起进程 —— 连点两下按钮就下两份 7 GB 是很容易发生的。
+    """
+    if model not in _MODEL_REPOS:
+        raise HTTPException(400, f"未知模型 {model}，只能是 Base 或 VoiceDesign")
+    if _check_model_dir(model):
+        return {"ok": True, "status": "already_done", "detail": f"{model} 已就绪"}
+
+    proc = _download_procs.get(model)
+    if proc is not None and getattr(proc, "poll", lambda: 0)() is None:
+        return {"ok": True, "status": "downloading", "detail": f"{model} 正在下载"}
+
+    target = MODELS_DIR / f"{model}-1.7B"
+    target.mkdir(parents=True, exist_ok=True)
+    import subprocess                                             # noqa: PLC0415
+    # 用当前解释器跑 modelscope，不依赖 PATH 里有没有它 —— 服务是用
+    # .venv/bin/python 起的，那个环境里一定装了（install.sh 装的）。
+    cmd = [sys.executable, "-m", "modelscope.cli.cli", "download",
+           "--model", _MODEL_REPOS[model], "--local_dir", str(target)]
+    log_path = obs.LOG_DIR / f"download-{model}.log"
+    obs.LOG_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        # 输出重定向到文件而不是管道：管道没人读满了就会把子进程卡死，
+        # 而下载要跑十几分钟，没人会一直读。
+        logf = log_path.open("ab")
+        _download_procs[model] = subprocess.Popen(
+            cmd, stdout=logf, stderr=subprocess.STDOUT, cwd=str(PROJECT_DIR))
+    except Exception as e:
+        obs.log("model_download_failed", level="error", model=model, error=str(e)[:200])
+        raise HTTPException(500, f"起下载进程失败：{type(e).__name__} {e}")
+
+    obs.log("model_download_started", model=model, repo=_MODEL_REPOS[model],
+            target=str(target))
+    return {"ok": True, "status": "downloading",
+            "detail": f"{model} 开始下载（约 3.4 GB），可以先去用别的功能",
+            "log": str(log_path)}
+
+
+@app.get("/api/models/download")
+def model_download_status():
+    """
+    两个模型的下载进度 + 「现在能做什么」。
+
+    第二部分才是新用户真正需要的：只说「模型没下」是在说他不能做什么，
+    而这时候 AI 音乐、发行台账、运营台全都不碰本地模型，照常可用。
+    """
+    out = {}
+    for name in _MODEL_REPOS:
+        prog = _model_download_progress(name)
+        proc = _download_procs.get(name)
+        alive = proc is not None and getattr(proc, "poll", lambda: 0)() is None
+        out[name] = {**prog, "ready": _check_model_dir(name), "running": alive}
+
+    base_ready = out["Base"]["ready"]
+    caps_now = ["AI 音乐（Suno）", "作品看板与全网发行台账", "运营台（成本 / 健康 / 日志）"]
+    caps_after = ["声音克隆", "多角色剧本合成"] + (
+        [] if out["VoiceDesign"]["ready"] else ["音色设计（需 VoiceDesign）"])
+    return {
+        "models": out,
+        "can_do_now": caps_now if not base_ready else caps_now + caps_after,
+        "needs_base": [] if base_ready else caps_after,
+    }
+
+
 @app.get("/api/persona-audio")
-async def get_persona_audio(key: str):
+def get_persona_audio(key: str):
     """获取音色的参考音频（优先 temp 样音，其次原始 ref）"""
     if not PERSONAS_FILE.exists():
         raise HTTPException(404, "personas.json 不存在")
@@ -585,7 +986,7 @@ async def get_persona_audio(key: str):
 
 
 @app.get("/api/personas")
-async def list_personas():
+def list_personas():
     """列出所有已注册音色 + 设计预设"""
     # 从 personas.json 加载已注册音色
     registered = {}
@@ -668,7 +1069,7 @@ async def add_persona(
 
 
 @app.patch("/api/personas/{key}")
-async def update_persona(key: str, name: str = Form(None), desc: str = Form(None)):
+def update_persona(key: str, name: str = Form(None), desc: str = Form(None)):
     """
     改音色的名字和描述。就是改两个字段，不碰任何文件。
 
@@ -704,7 +1105,7 @@ async def update_persona(key: str, name: str = Form(None), desc: str = Form(None
 
 
 @app.delete("/api/personas/{key}")
-async def delete_persona(key: str):
+def delete_persona(key: str):
     """删除音色注册（不删除音频文件）"""
     if not PERSONAS_FILE.exists():
         raise HTTPException(404, "personas.json 不存在")
@@ -723,7 +1124,7 @@ async def delete_persona(key: str):
 
 
 @app.post("/api/clone")
-async def clone(req: CloneRequest):
+def clone(req: CloneRequest):
     """提交克隆合成任务（异步）"""
     if not req.text.strip():
         raise HTTPException(400, "文本不能为空")
@@ -739,7 +1140,7 @@ async def clone(req: CloneRequest):
 
 
 @app.post("/api/design")
-async def design(req: DesignRequest):
+def design(req: DesignRequest):
     """提交音色设计任务（异步）"""
     if not (req.tone or req.emotion):
         raise HTTPException(400, "必须提供 tone 或 emotion（至少一个）")
@@ -752,7 +1153,7 @@ async def design(req: DesignRequest):
 
 
 @app.get("/api/tasks")
-async def list_tasks():
+def list_tasks():
     """列出所有任务（按创建时间倒序）"""
     with _tasks_lock:
         tasks = sorted(
@@ -785,7 +1186,7 @@ async def list_tasks():
 
 
 @app.delete("/api/tasks/{task_id}")
-async def cancel_task(task_id: str):
+def cancel_task(task_id: str):
     """取消任务（仅 queued 状态可取消）"""
     with _tasks_lock:
         task = _tasks.get(task_id)
@@ -799,7 +1200,7 @@ async def cancel_task(task_id: str):
 
 
 @app.get("/api/scripts")
-async def list_scripts():
+def list_scripts():
     """列出所有保存的文案"""
     if not SCRIPTS_FILE.exists():
         return {"scripts": []}
@@ -811,7 +1212,7 @@ async def list_scripts():
 
 
 @app.post("/api/scripts")
-async def save_script(req: ScriptSaveRequest):
+def save_script(req: ScriptSaveRequest):
     """保存文案到文案库"""
     if not req.content.strip():
         raise HTTPException(400, "文案内容不能为空")
@@ -851,7 +1252,7 @@ async def save_script(req: ScriptSaveRequest):
 
 
 @app.delete("/api/scripts/{script_id}")
-async def delete_script(script_id: str):
+def delete_script(script_id: str):
     """删除文案"""
     if not SCRIPTS_FILE.exists():
         raise HTTPException(404, "文案库不存在")
@@ -883,7 +1284,7 @@ MEDIA_TYPES = {
 
 
 @app.get("/api/audio-list")
-async def audio_list():
+def audio_list():
     """列出已生成的音频文件（TTS wav + Suno 音乐 mp3/m4a 统一管理）"""
     files = []
     if OUT_DIR.exists():
@@ -904,7 +1305,7 @@ async def audio_list():
 
 
 @app.get("/api/audio/{filename}")
-async def get_audio(filename: str):
+def get_audio(filename: str):
     """获取音频文件"""
     # 防止路径穿越
     safe = os.path.basename(filename)
@@ -916,7 +1317,7 @@ async def get_audio(filename: str):
 
 
 @app.delete("/api/audio/{filename}")
-async def delete_audio(filename: str):
+def delete_audio(filename: str):
     """删除音频文件"""
     safe = os.path.basename(filename)
     path = OUT_DIR / safe
@@ -943,7 +1344,7 @@ class LLMLyricsRequest(BaseModel):
 
 
 @app.get("/api/llm/status")
-async def llm_status():
+def llm_status():
     """检测 LLM 后端是否可用"""
     from core.llm_client import check_status
     return check_status()
@@ -952,7 +1353,7 @@ async def llm_status():
 # ── 作品流水线（可观测：每首歌走到哪一步）──────────────────
 
 @app.get("/api/inbox")
-async def inbox_scan():
+def inbox_scan():
     """
     扫下载目录里等着入库的音乐文件。
 
@@ -997,7 +1398,7 @@ async def inbox_scan():
 
 
 @app.post("/api/inbox/import")
-async def inbox_import(req: dict):
+def inbox_import(req: dict):
     """
     把选中的音频收进音乐库，并在流水线登记一条「已出歌」。
 
@@ -1042,7 +1443,7 @@ async def inbox_import(req: dict):
 
 
 @app.get("/api/pipeline")
-async def pipeline_list():
+def pipeline_list():
     """
     作品看板数据。
 
@@ -1060,14 +1461,14 @@ async def pipeline_list():
 
 
 @app.get("/api/publish-board")
-async def publish_board():
+def publish_board():
     """发布账号、已发布曲目与云备份状态的同源看板数据。"""
     from core import pipeline
     return pipeline.publication_board()
 
 
 @app.get("/api/artist")
-async def get_artist():
+def get_artist():
     """获取艺人档案与平台绑定信息"""
     from core.paths import ARTIST_FILE
     import json
@@ -1094,7 +1495,7 @@ class ArtistUpdateRequest(BaseModel):
 
 
 @app.post("/api/artist")
-async def update_artist(req: ArtistUpdateRequest):
+def update_artist(req: ArtistUpdateRequest):
     """更新艺人档案"""
     from core.paths import CONFIG_DIR, ARTIST_FILE
     import json
@@ -1132,7 +1533,7 @@ class PipelineStageRequest(BaseModel):
 
 
 @app.post("/api/pipeline/stage")
-async def pipeline_set_stage(req: PipelineStageRequest):
+def pipeline_set_stage(req: PipelineStageRequest):
     """
     推进作品状态。**每一步都要人点** —— 尤其 selected → publishing
     那一下是「我确认要发这首」，不能因为文件齐了就自动跳。
@@ -1153,7 +1554,7 @@ class PipelineTrackRequest(BaseModel):
 
 
 @app.post("/api/pipeline/track")
-async def pipeline_upsert(req: PipelineTrackRequest):
+def pipeline_upsert(req: PipelineTrackRequest):
     """登记或更新一首作品。"""
     from core import pipeline
     return {"ok": True, "track": pipeline.upsert(
@@ -1171,7 +1572,7 @@ class PipelinePlatformRequest(BaseModel):
 
 
 @app.post("/api/pipeline/platform")
-async def pipeline_platform(req: PipelinePlatformRequest):
+def pipeline_platform(req: PipelinePlatformRequest):
     """
     记录某平台的发布状态。每个平台单独记 —— 同一首歌可能汽水已上架、
     网易云还在审核，只有一个全局状态表达不出这种情况。
@@ -1241,13 +1642,27 @@ async def capabilities():
             # 必须带 User-Agent：默认的 Python-urllib/3.x 会被 CDN 当爬虫挡掉（403），
             # 而 curl 同样的请求是通的 —— 这种差异很容易被误判成「网络不通」。
             rq = _req.Request(f"{base_url}/me", headers={
-                "Authorization": f"Bearer {api_key}", "User-Agent": "VoxFlow/0.3.0"})
+                "Authorization": f"Bearer {api_key}", "User-Agent": f"VoxFlow/{VERSION}"})
             with _req.urlopen(rq, timeout=10) as resp:
                 me = _json.loads(resp.read().decode())
             t = me.get("tenant") or {}
             who = t.get("nickname") or t.get("name") or "未知"
+            # 顺手把积分带上。它是硬约束（没了就出不了图），和 Suno 的积分
+            # 完全同性质 —— 那边顶栏一直显示，这边一直没有，于是「为什么出不了图」
+            # 每次都要重新查一遍。
+            from core import cover as _cover                       # noqa: PLC0415
+            bal = _cover.balance()
+            credits = bal.get("credits", 0)
+            unmetered = bal.get("unmetered", False)
             return {"ready": True, "identity": who, "model": who,
-                    "detail": f"museav 中台 · 租户 {who}（出图 + 文案）"}
+                    "credits": credits, "unmetered": unmetered,
+                    "credits_total": None,   # 中台是预付制，没有「总额」概念
+                    "detail": (f"museav 中台 · 租户 {who} · 自家租户，不限额"
+                               if unmetered else
+                               f"museav 中台 · 租户 {who} · 剩 {credits} 积分"
+                               f"（够出 {credits // _cover.CREDITS_PER_COVER} 张封面）"
+                               if credits else
+                               f"museav 中台 · 租户 {who} · 余额闸门拦住，出图会被拒")}
         except Exception as e:
             # 把真实错误带出来，不要用「连不上」这种模糊话盖住 ——
             # 那样人只能猜是网络、凭据还是超时，每种猜法都要花时间验证一遍。
@@ -1279,7 +1694,7 @@ async def capabilities():
 
 
 @app.post("/api/llm/generate")
-async def llm_generate(req: LLMGenerateRequest):
+def llm_generate(req: LLMGenerateRequest):
     """AI 文案生成"""
     from core.llm_client import generate_script
     try:
@@ -1290,7 +1705,7 @@ async def llm_generate(req: LLMGenerateRequest):
 
 
 @app.post("/api/llm/polish")
-async def llm_polish(req: LLMPolishRequest):
+def llm_polish(req: LLMPolishRequest):
     """AI 文案润色"""
     from core.llm_client import polish_script
     try:
@@ -1301,7 +1716,7 @@ async def llm_polish(req: LLMPolishRequest):
 
 
 @app.post("/api/llm/lyrics")
-async def llm_lyrics(req: LLMLyricsRequest):
+def llm_lyrics(req: LLMLyricsRequest):
     """生成可直接提交给 Suno 的结构化歌词。"""
     if not req.prompt.strip():
         raise HTTPException(400, "请填写歌词主题，或先填写歌曲标题和风格标签")
@@ -1321,7 +1736,7 @@ _TREND_TTL = 30 * 60   # 榜单和风格分析缓存 30 分钟，别每次点都
 
 
 @app.get("/api/trending")
-async def trending():
+def trending():
     now = time.time()
     if _trend_cache["data"] and now - _trend_cache["at"] < _TREND_TTL:
         return _trend_cache["data"]
@@ -1367,7 +1782,7 @@ class SunoGenerateRequest(BaseModel):
 
 
 @app.get("/api/suno/status")
-async def suno_status():
+def suno_status():
     """Suno 登录态 + 余额 + 已保存 persona"""
     import subprocess
     try:
@@ -1398,7 +1813,7 @@ async def suno_status():
 
 
 @app.post("/api/suno/generate")
-async def suno_generate(req: SunoGenerateRequest):
+def suno_generate(req: SunoGenerateRequest):
     """提交 Suno 音乐生成任务（异步，走现有任务队列）"""
     task_id = _submit_task("suno", f"🎵 {req.title or 'Suno 音乐'}", req.model_dump())
     return {"task_id": task_id, "status": "queued"}
@@ -1490,6 +1905,125 @@ async def suno_batch(req: SunoBatchRequest):
     return {"results": results, "elapsed_sec": round(time.time() - start, 1)}
 
 
+class CoverRequest(BaseModel):
+    """
+    出封面。prompt 留空时由 title/tags 拼一句 —— 大多数时候不需要人自己想词。
+    """
+    track_id: str = ""
+    title: str = ""
+    tags: str = ""
+    prompt: str = ""
+    # 任意 W:H。默认方形（专辑封面就是方的），但**不限枚举** —— 中台的
+    # gpt-image-2 可传任意尺寸，写死枚举等于把上游能力阉掉一半。
+    # 合法性由中台判定（它是尺寸规则的真源），这里只挡格式明显写错的。
+    ratio: str = "1:1"
+    # 留空则按 ratio 自动算一个短边 ≥1440 的合法尺寸（平台要求：汽水 ≥1440、
+    # 网易云 ≥1400）。中台的 ratioToSize 默认预算只出到 1248，够不着。
+    size: str = ""
+    # **留空**。传 "high" 会让中台按 hd 档扣 2 分，而对照实验证明：
+    # 传与不传出来的图尺寸体积完全一样（1254×1254），画质也一样
+    # （gen-worker 对 gpt-image 系不传时自动补 high）。见 core/cover.py 文件头。
+    #
+    # 这里当初漏改过一次：改了 cover.generate() 的默认值却没改这个 Pydantic
+    # 模型的，于是「默认」实际上仍然是 high —— 一个默认值分散在两处，
+    # 只改一处就是这种下场。
+    quality: str = ""
+
+
+@app.post("/api/cover/generate")
+def cover_generate(req: CoverRequest):
+    """
+    提交封面出图任务（异步）。
+
+    为什么走任务队列而不是同步等：中台出图要几十秒到几分钟，同步等会让
+    前端一直转圈、还占着一个线程池的位置。而队列这套（进度、取消、失败原因）
+    早就为 Suno 和 TTS 建好了，封面是第五种任务而已。
+    """
+    from core import cover
+    if not cover.available():
+        raise HTTPException(400, "未接 museav 中台。用 ./run.sh web 启动会自动注入凭据。")
+    if not (req.prompt.strip() or req.title.strip()):
+        raise HTTPException(400, "至少要有标题或提示词")
+    # 比例写错是用户输入问题，要在提交时就 400 挡掉 —— 丢进任务队列再失败的话，
+    # 人得等到任务跑起来才看到「看不懂的比例」，中间还白等一次调度。
+    try:
+        cover.normalize_ratio(req.ratio)
+    except cover.CoverError as e:
+        raise HTTPException(400, str(e))
+    label = f"🖼 封面：{req.title or req.track_id or '未命名'}"
+    return {"task_id": _submit_task("cover", label, req.model_dump()), "status": "queued"}
+
+
+@app.get("/api/cover/status")
+def cover_status():
+    """中台能不能出图、一张多少积分。界面用它决定按钮是可点还是灰掉。"""
+    from core import cover
+    unit = obs.unit_price("museav")
+    bal = cover.balance()
+    est = round(cover.CREDITS_PER_COVER * unit, 2)
+    return {
+        "available": cover.available(),
+        # 给界面填下拉用。**不是白名单** —— 用户填别的照样放行，
+        # 能不能出由中台判定。
+        "common_ratios": [{"value": v, "label": lb} for v, lb in cover.COMMON_RATIOS],
+        # 目标边长与各比例算出的实际尺寸 —— 界面能直接告诉人「你会拿到多大的图」
+        "cover_side": cover.COVER_SIDE,
+        "sizes": {v: cover._size_for(v) for v, _ in cover.COMMON_RATIOS},
+        "credits_per_cover": cover.CREDITS_PER_COVER,
+        "est_cny": est,
+        "credits": bal["credits"],
+        "unmetered": bal.get("unmetered", False),
+        "covers_left": bal.get("covers_left", 0),
+        # 能不能真的出图 = 接了中台**且**（不受额度约束 或 余额够）。
+        #
+        # 只看 available 的话按钮是亮的、点下去必然失败；只看余额的话，
+        # 自家租户余额恒为 0 但出图正常，按钮会一直是灰的 —— 两种误判
+        # 都会让人朝错误方向排查。
+        "can_generate": bool(cover.available() and
+                             (bal.get("unmetered") or bal["credits"] >= cover.CREDITS_PER_COVER)),
+        "detail": (f"{bal['detail']}，一张约 ¥{est:.2f}"
+                   if cover.available() else "未接中台（本地模式）"),
+    }
+
+
+def _run_cover_task(task_id: str, params: dict, update_fn):
+    """执行封面出图：中台出图 → 下载 → 回填台账的 cover_file。"""
+    from core import cover, pipeline
+
+    req = CoverRequest(**params)
+    prompt = req.prompt.strip() or cover.build_prompt(req.title, req.tags)
+
+    result = cover.generate(
+        prompt,
+        track_id=req.track_id,
+        ratio=req.ratio,
+        size=req.size,
+        quality=req.quality,
+        on_progress=lambda pct, stage: update_fn(task_id, progress=pct, stage=stage),
+    )
+
+    # 回填台账。出了图不落台账等于没出 —— 下次打开看板还是没封面，
+    # 人会以为失败了然后再出一张，白烧一次积分。
+    if req.track_id:
+        try:
+            pipeline.upsert(req.track_id, cover_file=result["path"])
+        except Exception as e:                                    # noqa: BLE001
+            obs.log("cover_ledger_write_failed", level="warn",
+                    track_id=req.track_id, error=str(e)[:200])
+
+    # 比例被上游改掉时把话说明白 —— 图是好图，但画幅不是要的那个，
+    # 拿去当封面会被平台裁掉或留白。不静默通过。
+    note = ""
+    if result.get("ratio_ok") is False:
+        note = (f"⚠️ 上游没按 {result['ratio_requested']} 出图，"
+                f"实际 {result.get('width')}×{result.get('height')} —— "
+                f"换个上游重出可能就对了")
+
+    update_fn(task_id, status="done", progress=100, stage="完成",
+              result={"ok": True, "prompt": prompt, "note": note, **result},
+              completed_at=datetime.now().strftime("%H:%M:%S"))
+
+
 def _run_suno_task(task_id: str, params: dict, update_fn):
     """执行 Suno 音乐生成：调 suno CLI → 产物拷回 out/music"""
     import subprocess, shutil, glob
@@ -1529,10 +2063,21 @@ def _run_suno_task(task_id: str, params: dict, update_fn):
     cmd += ["--download", tmp]
     update_fn(task_id, progress=30, stage="Suno 生成中（约 1-3 分钟）...")
 
+    _t0 = time.perf_counter()
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=360)
+    _ms = int((time.perf_counter() - _t0) * 1000)
+    # 每次调用扣的 credits 从 pricing.json 读，不写死在这里 ——
+    # 换模型/套餐时改配置，不用改代码。
+    _cr = float((obs.pricing().get("providers", {}).get("suno") or {}).get("credits_per_call", 10))
     if r.returncode != 0:
         err = (r.stderr or r.stdout or "")[-500:]
+        # 失败也计量：Suno 生成失败照样扣积分，只记成功的话账对不上，
+        # 而「失败率 × 单价」正是最该被看见的那笔浪费。
+        obs.meter("suno", "generate", credits=_cr, track_id=req.title[:40],
+                  duration_ms=_ms, ok=False, model=req.model, error=err[-120:])
         raise ValueError(f"Suno 生成失败: {err}")
+    obs.meter("suno", "generate", credits=_cr, track_id=req.title[:40],
+              duration_ms=_ms, ok=True, model=req.model, tags=req.tags[:60])
 
     update_fn(task_id, progress=85, stage="入库音频库...")
     # 把下载的音频拷回 out/music，带 [Suno] 前缀便于音频库识别
@@ -1557,7 +2102,7 @@ def _run_suno_task(task_id: str, params: dict, update_fn):
 
 
 @app.post("/api/dialogue")
-async def dialogue(req: dict):
+def dialogue(req: dict):
     """提交多角色对话合成任务（异步）"""
     if "lines" not in req or not isinstance(req["lines"], list):
         raise HTTPException(400, "剧本格式错误，缺少台词 lines 列表")
@@ -1570,7 +2115,7 @@ async def dialogue(req: dict):
 
 
 @app.get("/api/audio/{subdir}/{filename}")
-async def get_audio_subdir(subdir: str, filename: str):
+def get_audio_subdir(subdir: str, filename: str):
     """获取子目录音频（out/music/...）"""
     safe_sub = os.path.basename(subdir)
     safe_name = os.path.basename(filename)
@@ -1582,7 +2127,7 @@ async def get_audio_subdir(subdir: str, filename: str):
 
 
 @app.get("/api/platform-accounts")
-async def platform_accounts():
+def platform_accounts():
     """
     各平台账号资产：我是谁、发了多少首、主页在哪。
 
@@ -1597,7 +2142,7 @@ async def platform_accounts():
 
 
 @app.get("/api/albums")
-async def albums_endpoint(platform: str = None):
+def albums_endpoint(platform: str = None):
     """
     专辑 + 每张专辑的曲目。
 
@@ -1612,7 +2157,7 @@ async def albums_endpoint(platform: str = None):
 
 
 @app.get("/api/album-cover/{album_key}")
-async def album_cover(album_key: str):
+def album_cover(album_key: str):
     """专辑封面（同步时下到本地那份，不依赖平台图床 —— 图床 URL 会失效）。"""
     from core import pipeline
     from core.paths import DATA_DIR
@@ -1627,7 +2172,7 @@ async def album_cover(album_key: str):
 
 
 @app.get("/api/cover/{track_id}")
-async def get_cover(track_id: str):
+def get_cover(track_id: str):
     """
     作品封面。
 

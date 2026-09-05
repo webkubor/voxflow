@@ -84,6 +84,14 @@ CREATE TABLE IF NOT EXISTS track_platforms (
     config       TEXT DEFAULT '{}',     -- JSON：这首歌在这个平台的发布配置
     note         TEXT DEFAULT '',
     submitted_at TEXT DEFAULT '',
+    -- 单曲维度的平台实况。账号级汇总（platform_accounts.stats）回答不了
+    -- 「哪首歌在赚钱」—— 而那恰恰是决定「下一首做什么风格」的依据。
+    -- 公开 API 给不了这些（网易云的 playedNum 恒为 0，2026-09-05 实测），
+    -- 只能从音乐人后台抓，所以可能长期为空；为空时界面要如实说「没有数据」，
+    -- 不能按比例分摊猜一个 —— 猜出来的单曲收益会直接误导选题。
+    plays        INTEGER DEFAULT 0,
+    earned_cny   REAL DEFAULT 0,
+    stats_at     TEXT DEFAULT '',
     updated_at   TEXT,
     PRIMARY KEY (track_id, platform),
     FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE
@@ -124,6 +132,36 @@ CREATE TABLE IF NOT EXISTS platform_accounts (
     synced_at    TEXT
 );
 
+-- 计量事件：每次调用上游（Suno / 中台出图 / LLM / 本地 TTS）记一条。
+--
+-- 为什么要单独一张表而不是塞进日志文件：成本要能按作品、按 provider、按天
+-- **聚合查询**——「这首歌到底花了多少」「这个月中台烧了多少积分」。
+-- JSONL 能记录但不能查，SQL 一句话的事。
+--
+-- cost_cny 在写入时就换算好并落盘（而不是查询时按当前单价算）：单价会变
+-- （Suno 换套餐、中台调价），历史成本应该定格在**当时**的单价上，
+-- 不然改一次价，过去半年的账全变了。
+CREATE TABLE IF NOT EXISTS usage_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts          TEXT NOT NULL,
+    provider    TEXT NOT NULL,          -- suno | museav | llm | tts
+    action      TEXT NOT NULL,          -- generate | cover | lyrics | clone | design
+    qty         REAL DEFAULT 1,         -- 业务量：首/张/次/秒
+    credits     REAL DEFAULT 0,         -- 消耗的上游积分
+    cost_cny    REAL DEFAULT 0,         -- 换算成人民币（写入时定格）
+    track_id    TEXT DEFAULT '',        -- 关联作品，用于算单曲成本
+    duration_ms INTEGER DEFAULT 0,
+    ok          INTEGER DEFAULT 1,      -- 失败也要记：失败的调用照样烧钱
+    -- 这条是实测还是估算。回填历史作品时只能按「有 clip_id = 用过 Suno」推算，
+    -- 那是**估计值**，必须和真实计量分得开 —— 混在一起之后，看到的数字就再也
+    -- 说不清有多少是真的，而说不清的数字会被当成真的拿去做决策。
+    estimated   INTEGER DEFAULT 0,
+    meta        TEXT DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_events(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_usage_track ON usage_events(track_id);
+CREATE INDEX IF NOT EXISTS idx_usage_provider ON usage_events(provider, ts DESC);
+
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT
@@ -157,10 +195,29 @@ def connect() -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+# 已有库的增量迁移：(表, 列, 列定义)。
+#
+# 为什么用清单而不是版本号迁移框架：这是本地单用户工具，表只有五张，
+# 迁移全是「加个列」。一套 migration 框架要引入版本表、上下迁移、
+# 执行顺序 —— 解决的是「多环境、多人、要能回滚」的问题，这里一个都没有。
+#
+# ADD COLUMN 在 SQLite 里不幂等（重复加会报错），所以先查 PRAGMA。
+_ADD_COLUMNS = [
+    ("usage_events", "estimated", "INTEGER DEFAULT 0"),
+    ("track_platforms", "plays", "INTEGER DEFAULT 0"),
+    ("track_platforms", "earned_cny", "REAL DEFAULT 0"),
+    ("track_platforms", "stats_at", "TEXT DEFAULT ''"),
+]
+
+
 def init() -> None:
-    """建表。幂等，每次启动跑一次。"""
+    """建表 + 补列。幂等，每次启动跑一次。"""
     with connect() as c:
         c.executescript(SCHEMA)
+        for table, col, ddl in _ADD_COLUMNS:
+            have = {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
+            if col not in have:
+                c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
 
 
 def _j(v: Any, default: Any = None) -> Any:

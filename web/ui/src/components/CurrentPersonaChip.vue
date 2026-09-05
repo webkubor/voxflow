@@ -12,12 +12,13 @@
     </span>
   </div>
   <div v-else class="persona-chip is-empty" @click="$emit('openLibrary')">
-    <span class="empty-icon">🎙️</span>
+    <Icon name="voice" size="sm" class="empty-icon" />
     <span class="empty-text">尚未选择音色 · 点击左侧「音色库」挑选</span>
   </div>
 </template>
 
 <script setup>
+import Icon from './Icon.vue';
 import { computed } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useVoicesStore } from '../stores/voices';
@@ -84,6 +85,6 @@ const initial = computed(() => (name.value || '?').charAt(0).toUpperCase());
   color: var(--vf-text-3);
   cursor: pointer;
 }
-.empty-icon { font-size: 18px; }
+.empty-icon { width: 16px; height: 16px; color: var(--vf-text-3); }
 .empty-text { font-size: 12px; }
 </style>

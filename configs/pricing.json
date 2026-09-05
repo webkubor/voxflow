@@ -1,0 +1,63 @@
+{
+  "_doc": "上游单价表 —— 成本核算的唯一来源。改这里，不要在代码里写价格。用户可复制到 ~/.voxflow/configs/pricing.json 覆盖，升级不会被冲掉。",
+  "_note_history": "改价只影响**之后**的调用。历史成本在写入 usage_events 时已按当时单价定格，不会被回溯改写。",
+  "currency": "CNY",
+  "providers": {
+    "suno": {
+      "label": "Suno AI 音乐",
+      "unit": "credits",
+      "cny_per_unit": 0.0288,
+      "billing": "subscription",
+      "note": "Pro $10/月 ≈ ¥72，含 2500 credits。一次生成扣 10 credits（出两首）≈ ¥0.29/次。换套餐后改这个数。",
+      "credits_per_call": 10,
+      "_note_calibrate": "一次 generate 出两首扣 10 credits（v5.5 实测）。换模型或套餐后用顶栏的 credits 前后差值校准这个数。"
+    },
+    "museav": {
+      "label": "museav 中台（出图 / 文案）",
+      "unit": "credits",
+      "cny_per_unit": 0.83,
+      "billing": "prepaid",
+      "note": "出图按成品规格计价（中台真源：museav-manager 的 shared/credits-catalog.js）：标准档 1 积分、hd 档 2 积分。**封面走标准档 1 积分** —— hd 档只由 quality='high' 触发，而 quality 是 gpt-image 系的私有画质参数、不控制尺寸，且 worker 不传时本来就自动按 high 出。传它除了多扣一分换不来任何东西。",
+      "credits_per_image": 1,
+      "_note_price_source": "单价取自中台的积分包定价 Pro Pack $69/600 积分 ≈ $0.115/积分 ≈ ¥0.83。买小包更贵（Starter $9/50 ≈ ¥1.30/积分），按你实际买的包改这个数。（2026-09-05 修正：此前写的 0.05 是纯占位值，低了 16 倍，会让封面成本看起来无关紧要 —— 而它其实是单曲成本的大头。）"
+    },
+    "llm": {
+      "label": "LLM 文案",
+      "unit": "calls",
+      "cny_per_unit": 0.0,
+      "billing": "included",
+      "note": "走中台时已计入 museav 积分，这里不重复计价；换成按量付费的上游再填。",
+      "market_cny_per_unit": 0.02
+    },
+    "tts": {
+      "label": "本地 TTS（Qwen3-TTS）",
+      "unit": "seconds",
+      "cny_per_unit": 0.0,
+      "billing": "free",
+      "note": "本地推理，边际成本只有电费。记 0 —— 它的价值恰恰是「这一栏永远是 0」。",
+      "market_cny_per_unit": 0.0018,
+      "_note_market": "对标价：ElevenLabs 约 $0.18/1000 字符，按中文 4 字/秒折算 ≈ ¥0.0018/秒。用来算「本地跑省下了多少」—— 这是本地方案的价值，不写出来就没人感知得到。"
+    }
+  },
+  "revenue": {
+    "_doc": "各平台 AI 曲分成，用于算 ROI 回本点。数据来源见 docs/ROADMAP.md 的平台对比表。",
+    "qishui": {
+      "label": "汽水音乐",
+      "cny_per_1k_plays": 1.0,
+      "confidence": "range",
+      "note": "0.8–1.5 元/千播，取中位数"
+    },
+    "netease": {
+      "label": "网易云",
+      "cny_per_1k_plays": 0.3,
+      "confidence": "range",
+      "note": "0.2–0.4 元/千播，AI 音乐人权益降级"
+    },
+    "tencent": {
+      "label": "腾讯系",
+      "cny_per_1k_plays": 0.0,
+      "confidence": "unknown",
+      "note": "零一手资料，未证实。填 0 而不是猜一个数 —— 猜的数会被当成真数据用来做决策。"
+    }
+  }
+}

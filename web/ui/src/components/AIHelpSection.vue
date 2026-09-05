@@ -18,7 +18,7 @@
       <!-- 生成文案 -->
       <n-grid-item>
         <div class="ai-panel">
-          <div class="panel-title">✍️ 文案生成</div>
+          <div class="panel-title"><Icon name="edit" size="sm" />文案生成</div>
           <n-space vertical size="medium">
             <n-input 
               v-model:value="llm.genPrompt" 
@@ -49,7 +49,7 @@
       <!-- 润色文案 -->
       <n-grid-item>
         <div class="ai-panel">
-          <div class="panel-title">🪄 一键润色</div>
+          <div class="panel-title"><Icon name="sparkles" size="sm" />一键润色</div>
           <n-space vertical size="medium">
             <n-input 
               v-model:value="llm.polStyle" 
@@ -77,6 +77,7 @@
 </template>
 
 <script setup>
+import Icon from '../components/Icon.vue';
 /**
  * AI 文案助手组件
  * 职责：连接中台 LLM 接口，提供按 Prompt 生成文案以及对现有文本框内容的一键润色

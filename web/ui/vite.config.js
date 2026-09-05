@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
@@ -20,6 +21,13 @@ export default defineConfig({
   // 之前没有这个，改了代码看不到效果时永远要先怀疑一遍「是不是没 build」。
   define: {
     __BUILD_TIME__: JSON.stringify(new Date().toLocaleString('zh-CN', { hour12: false })),
+    // 版本号从 package.json 注入，不在源码里手抄一份。
+    // 之前 lib/errors.ts 写着 `CLIENT_VERSION = '0.3.0' // 与 package.json 同步`
+    // —— 靠注释提醒人去同步的地方，最后一定会不同步，然后每个请求头上
+    // 带着的都是过期版本号，排查线上问题时反而误导人。
+    __APP_VERSION__: JSON.stringify(
+      createRequire(import.meta.url)('./package.json').version,
+    ),
   },
   plugins: [
     vue(),

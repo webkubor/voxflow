@@ -34,6 +34,25 @@ VoxFlow 现在把三样东西写死了：本地 TTS 模型、Suno 出歌、DeepS
 AI 文案助手从「写死 FreeLLMAPI 容器」改成「三个环境变量换后端」，
 一行业务代码都没改。TTS 可以照这个形状做。
 
+### ⛔ 2026-09-05 核实：**前提不成立，暂不做**
+
+上面写的「云端上游（比如中台已有的 TTS 通道）」——**中台没有这个通道**。
+查了 museav-manager 的源码：
+
+- `shared/mimo-audio.js` 只有**协议层**（纯函数构造请求/解析响应），文件头自己
+  写着「尚未接线」，还列出了接线缺的三件事：upstream-catalog 声明 audio 能力、
+  路由表支持 `media_type=audio`、结果落 R2 回 cdn_url。
+- `shared/credits-catalog.js`（计费真源）只有 image / video / reverse / chat
+  四种，**没有 audio 档位** —— 就是说即便打通了也不知道怎么计费。
+
+所以现在抽 provider 接口，第二个实现无处可接，等于**为一个实现造一层抽象**。
+先决条件是中台那边先把 audio 链路接完（含计费档位），那件事在中台的仓库里，
+不在这里。
+
+真要提前动手，能做且有意义的只有一件：把 `core/modes/cloner.py` 里对
+engine 的调用收敛成一个函数，将来换实现时只动那一处。但那是重构不是功能，
+**没有第二个实现之前不值得动**。
+
 ---
 
 ## 2. 出图（封面）：本地 ⇄ 中台
@@ -48,6 +67,61 @@ AI 文案助手从「写死 FreeLLMAPI 容器」改成「三个环境变量换�
 
 **为什么值得做**：封面是上架物料里唯一有审美要求的东西，
 放大的糊图会直接影响点击率。而中台本来就是干这个的。
+
+### ✅ 2026-09-05 已做
+
+`core/cover.py` + `POST /api/cover/generate`（异步任务）+ 作品看板的「出封面」
+按钮。走 HTTP 直调 `/api/generate` 而不是 museav CLI —— CLI 的 README 明确说
+产品集成走 HTTP 或把 StudioClient 当库导入，CLI 只给「人在终端 / agent 跑 shell」。
+
+### 计费：一张 1 积分 ≈ ¥0.83
+
+真源 `shared/credits-catalog.js`：标准档 1 分、hd 档 2 分，hd 由
+`quality === 'high'` 触发。
+
+⚠️ 这里踩过一个坑：一开始传了 `quality: "high"`（想着「封面要高清」），
+**纯亏一倍**。做了对照实验（2026-09-05）：
+
+| job | quality | 扣分 | 尺寸 | 体积 |
+|---|---|---|---|---|
+| e2f4d996 | `high` | 2 分 | 1254×1254 | 2466 KB |
+| 0813840f | 未传 | **1 分** | 1254×1254 | 2512 KB |
+
+同样尺寸、同样体积，扣费差一倍。三条原因：`quality` 是 gpt-image 系的私有
+**画质**参数、不控制尺寸；gen-worker 不传时本来就自动补 high（index.js:615）；
+`providers.js` 明写「有带画质参数的也有不带的，单张价基本纹丝不动」。
+
+这个默认值当时还漏改过一处 —— 改了 `cover.generate()` 却没改 `CoverRequest`
+这个 Pydantic 模型，于是「默认」实际上仍然是 high。**一个默认值分散在两处，
+只改一处就是这种下场。**
+
+### ⚠️ 尺寸不够，而且没有「换个上游」这条路
+
+实测出图 **1254×1254**，达不到汽水要的 ≥1440 / 网易云要的 ≥1400。
+
+中台当前启用的出图上游**全是 gpt-image-2**（token4ai-upstream-1 / xinhankr /
+tronzen / jizhi / modelgo），走 `resolveImage2Size(ratio, {prefer: 1_572_864})`，
+1:1 恒定 1254。
+
+`providers.js` 里那个返回 2048×2048 的 `ratioToVolcSize` 看着像出路，
+**它是死代码**：`upstream_routing_profiles` 里没有任何 volcengine 行（连
+disabled 的都没有），`gen_jobs` 里 volcengine 共 19 单、最后一单停在 2026-08-13。
+`provider.kind === 'volcengine'` 恒为假。（第一次读代码时我把它当成了可选方案，
+是没查路由表就下结论 —— 记在这里免得再被同一段死代码骗到。）
+
+所以**现在的封面不满足平台尺寸要求，只能当预览/试稿**。要真正解决得中台接一个
+能出大图的上游，那件事在 museav-manager，不在这里。
+
+### 额度：已解决（2026-09-05）
+
+voxcraft 是自家租户，余额 0 却被闸门拦住。根因是中台 `deduct_tenant_credit`
+硬检查余额、没有自家租户豁免，而 `_credit-charge.js` 里那条「负责人不吃个人
+额度」的例外只覆盖个人账户路径，租户拿 API Key 直调根本进不去。
+
+已在 museav-manager 提交 `20260906090000_platform_tenant_unmetered` 修掉，
+含退款侧对称处理（否则失败退款会让余额凭空增长）。`/api/balance` 新增
+`unmetered` 字段，VoxFlow 据此判断而不再只看余额 —— 自家租户余额恒为 0
+而出图正常，只看余额会一直把按钮灰着。
 
 ---
 

@@ -1,23 +1,8 @@
 <template>
   <div class="tab-content-container">
-    <WarnBanner
-      v-if="!modelStatus.design.ready && !modelStatus.design.downloading"
-      type="warn"
-      title="VoiceDesign 设计大模型未下载"
-      hint="请在终端先跑 ./install.sh（选择下载音色设计大模型），否则音色设计功能无法运行。"
-    />
-
-    <WarnBanner
-      v-else-if="modelStatus.design.downloading"
-      type="info"
-      title="VoiceDesign 模型正在下载"
-    >
-      <n-progress
-        type="line"
-        :percentage="modelStatus.design.progress || 0"
-        :show-indicator="true"
-      />
-    </WarnBanner>
+    <!-- 下载中的进度也由这张卡自己管（它每 5 秒问一次后端），
+         不再需要单独一条「正在下载」的 banner。 -->
+    <ModelSetupCard v-if="!modelStatus.design.ready" model="VoiceDesign" />
 
     <!-- 预设配方 -->
     <section v-if="designPresets.length > 0" class="presets-section">
@@ -48,14 +33,14 @@
     <section class="form-card">
       <div class="grid-2">
         <div class="form-cell">
-          <label class="form-label">🎙️ 新音色名称</label>
+          <label class="form-label"><Icon name="voice" size="sm" />新音色名称</label>
           <n-input
             v-model:value="designForm.name"
             placeholder="如：冷酷刺客 / 温柔主播"
           />
         </div>
         <div class="form-cell">
-          <label class="form-label">🗣️ 语气描述</label>
+          <label class="form-label"><Icon name="speech" size="sm" />语气描述</label>
           <n-input
             v-model:value="designForm.tone"
             placeholder="如：声音低沉、沙哑、冰冷，语速缓慢"
@@ -64,7 +49,7 @@
       </div>
 
       <div class="form-cell">
-        <label class="form-label">📝 建模配音短句（声音母本，15-50 字）</label>
+        <label class="form-label"><Icon name="edit" size="sm" />建模配音短句（声音母本，15-50 字）</label>
         <n-input
           v-model:value="designForm.text"
           type="textarea"
@@ -74,7 +59,7 @@
       </div>
 
       <div class="form-cell">
-        <label class="form-label">🎭 情绪控制描述</label>
+        <label class="form-label"><Icon name="mask" size="sm" />情绪控制描述</label>
         <n-input
           v-model:value="designForm.emotion"
           placeholder="如：非常开心、咬牙切齿、悲伤抽泣（不填默认使用基础声音）"
@@ -105,7 +90,7 @@ import { useCapabilitiesStore } from '../stores/capabilities';
 import { useSynthStore } from '../stores/synth';
 import { useTasksStore } from '../stores/tasks';
 import { storeToRefs } from 'pinia';
-import WarnBanner from '../components/WarnBanner.vue';
+import ModelSetupCard from '../components/ModelSetupCard.vue';
 import Icon from '../components/Icon.vue';
 
 const synthStore = useSynthStore();

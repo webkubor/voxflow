@@ -98,35 +98,59 @@ pip install pydub modelscope
 echo "✓ 依赖安装完成"
 
 # ── 6. 下载模型 ──
+#
+# ⚠️ 模型必须下到**数据目录**（~/.voxflow/models），不是项目目录。
+#
+# 真源是 core/paths.py 的 MODELS_DIR。之前这里写死 ./models/，而运行时去
+# ~/.voxflow/models 找 —— 新用户老老实实跑完 install.sh、下了 7 GB，
+# 打开界面还是「模型未就绪」，而且完全看不出为什么。这是数据从项目目录
+# 搬到 ~/.voxflow 那次改造漏改的地方（paths.py 里详细写了为什么要搬）。
+#
+# 直接问 Python 要路径，不在这里重新拼一遍 —— 拼第二遍就会有第二次对不上。
+VOXFLOW_MODELS_DIR=$(.venv/bin/python -c "from core.paths import MODELS_DIR; print(MODELS_DIR)")
+mkdir -p "$VOXFLOW_MODELS_DIR"
+echo "→ 模型目录: $VOXFLOW_MODELS_DIR"
+
+# 老版本可能把模型下在项目目录里，搬过去而不是重下 —— 7 GB 重下一遍
+# 是最没必要的等待。同磁盘 mv 是瞬间完成的。
+for _m in Base-1.7B VoiceDesign-1.7B; do
+  if [ -d "models/$_m" ] && [ -n "$(ls -A "models/$_m" 2>/dev/null)" ] \
+     && [ ! -d "$VOXFLOW_MODELS_DIR/$_m" ]; then
+    echo "→ 发现项目目录里的旧模型 $_m，搬到数据目录（不重下）..."
+    mv "models/$_m" "$VOXFLOW_MODELS_DIR/$_m"
+    echo "✓ $_m 已搬到 $VOXFLOW_MODELS_DIR/$_m"
+  fi
+done
+
 if [ "$SKIP_MODELS" = true ]; then
   echo ""
   echo "[跳过模型下载] 如需下载模型，请手动运行:"
-  echo "  python -m modelscope.cli.cli download --model Qwen/Qwen3-TTS-12Hz-1.7B-Base --local_dir ./models/Base-1.7B"
-  echo "  python -m modelscope.cli.cli download --model Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign --local_dir ./models/VoiceDesign-1.7B"
+  echo "  python -m modelscope.cli.cli download --model Qwen/Qwen3-TTS-12Hz-1.7B-Base --local_dir $VOXFLOW_MODELS_DIR/Base-1.7B"
+  echo "  python -m modelscope.cli.cli download --model Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign --local_dir $VOXFLOW_MODELS_DIR/VoiceDesign-1.7B"
 else
   # Base 模型（克隆合成必需）
-  if [ -d "models/Base-1.7B" ] && [ "$(ls -A models/Base-1.7B/ 2>/dev/null)" ]; then
+  if [ -d "$VOXFLOW_MODELS_DIR/Base-1.7B" ] && [ "$(ls -A "$VOXFLOW_MODELS_DIR/Base-1.7B/" 2>/dev/null)" ]; then
     echo "✓ Base-1.7B 模型已存在，跳过下载"
   else
     echo "→ 下载 Base-1.7B 模型 (~4.2GB)..."
-    python -m modelscope.cli.cli download --model Qwen/Qwen3-TTS-12Hz-1.7B-Base --local_dir ./models/Base-1.7B
+    python -m modelscope.cli.cli download --model Qwen/Qwen3-TTS-12Hz-1.7B-Base --local_dir "$VOXFLOW_MODELS_DIR/Base-1.7B"
     echo "✓ Base-1.7B 下载完成"
   fi
 
   # VoiceDesign 模型（音色设计）
   if [ "$SKIP_VOICE_DESIGN" = false ]; then
-    if [ -d "models/VoiceDesign-1.7B" ] && [ "$(ls -A models/VoiceDesign-1.7B/ 2>/dev/null)" ]; then
+    if [ -d "$VOXFLOW_MODELS_DIR/VoiceDesign-1.7B" ] && [ "$(ls -A "$VOXFLOW_MODELS_DIR/VoiceDesign-1.7B/" 2>/dev/null)" ]; then
       echo "✓ VoiceDesign-1.7B 模型已存在，跳过下载"
     else
       if [ "$NON_INTERACTIVE" = true ]; then
         echo "→ 下载 VoiceDesign-1.7B 模型 (~4.2GB)..."
-        python -m modelscope.cli.cli download --model Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign --local_dir ./models/VoiceDesign-1.7B
+        python -m modelscope.cli.cli download --model Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign --local_dir "$VOXFLOW_MODELS_DIR/VoiceDesign-1.7B"
         echo "✓ VoiceDesign-1.7B 下载完成"
       else
         read -p "是否下载 VoiceDesign 模型？（用于音色设计，~4.2GB）(y/N) " vd_confirm
         if [ "$vd_confirm" = "y" ] || [ "$vd_confirm" = "Y" ]; then
           echo "→ 下载 VoiceDesign-1.7B 模型..."
-          python -m modelscope.cli.cli download --model Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign --local_dir ./models/VoiceDesign-1.7B
+          python -m modelscope.cli.cli download --model Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign --local_dir "$VOXFLOW_MODELS_DIR/VoiceDesign-1.7B"
           echo "✓ VoiceDesign-1.7B 下载完成"
         else
           echo "[跳过 VoiceDesign] 如需音色设计功能，请后续手动下载"

@@ -3,7 +3,7 @@
     :show="show" 
     preset="card" 
     style="width: 500px;" 
-    title="🎙️ 注册新音色"
+    title="注册新音色"
     :bordered="false"
     @update:show="closeModal"
   >
@@ -49,13 +49,13 @@
           />
           
           <div v-if="!addForm.audioFile" class="drop-placeholder">
-            <span class="upload-icon">📁</span>
+            <Icon name="folder" size="lg" class="upload-icon" />
             <p>点击选择 或 拖拽 WAV/MP3 音频文件到此处</p>
             <span class="sub-tip">建议长度 3-15 秒，波形完整无杂音</span>
           </div>
           
           <div v-else class="selected-file-info" @click.stop>
-            <span class="audio-file-icon">🎵</span>
+            <Icon name="music" size="sm" class="audio-file-icon" />
             <div class="file-meta">
               <span class="file-name">{{ addForm.audioFile.name }}</span>
               <span class="file-size">{{ formatBytes(addForm.audioFile.size) }}</span>
@@ -80,6 +80,7 @@
 </template>
 
 <script setup>
+import Icon from './Icon.vue';
 /**
  * 注册添加音色弹窗
  * 职责：支持表单信息填写，接收本地音频文件（支持点击及拖放上传），并提交 Multipart 上传
@@ -215,7 +216,11 @@ const submitAdd = async () => {
 }
 
 .upload-icon {
-  font-size: 28px;
+  /* SVG 图标不吃 font-size（Icon 组件用 width/height 属性），
+     这里显式给尺寸；原来是 emoji 靠 28px 字号撑起来的。 */
+  width: 28px;
+  height: 28px;
+  color: var(--vf-text-3);
   margin-bottom: 6px;
 }
 
@@ -240,7 +245,9 @@ const submitAdd = async () => {
 }
 
 .audio-file-icon {
-  font-size: 24px;
+  width: 20px;
+  height: 20px;
+  color: var(--vf-primary);
 }
 
 .file-meta {

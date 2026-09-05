@@ -66,7 +66,10 @@ def get(path: str):
 print("── 后端端点 ──")
 try:
     for path in ("/api/status", "/api/personas", "/api/pipeline",
-                 "/api/albums", "/api/platform-accounts", "/api/capabilities"):
+                 "/api/albums", "/api/platform-accounts", "/api/capabilities",
+                 # 可观测性四件套。它们坏了不会有人立刻发现 —— 没人会每天
+                 # 主动打开成本看板，等到想看的时候才发现三个月没数据了。
+                 "/api/health", "/api/metrics", "/api/logs", "/api/economics"):
         code, _ = get(path)
         check(path, code == 200, f"HTTP {code}")
 except Exception as e:
@@ -75,6 +78,68 @@ except Exception as e:
     raise SystemExit(1)
 
 print("\n── 数据自洽 ──")
+# 健康端点返回 200 只说明它自己没崩，真正要看的是它判断出来的结论。
+# 这里断言的是**结构**而不是「必须 ok」—— 磁盘快满时它就该报 degraded，
+# 那时候测试不该失败，失败的应该是「它连 degraded 都报不出来」。
+_, health = get("/api/health")
+check("健康端点给出三档状态之一",
+      health.get("status") in ("ok", "degraded", "down"),
+      f"status={health.get('status')}")
+check("健康端点列出了体检项",
+      isinstance(health.get("checks"), dict) and len(health["checks"]) >= 3,
+      f"checks={list((health.get('checks') or {}).keys())}")
+check("坏掉的体检项都进了 failed 清单",
+      sorted(health.get("failed", [])) ==
+      sorted([k for k, v in (health.get("checks") or {}).items() if not v.get("ok")]))
+
+# 首次体验：这几条挡的是「新用户装完打不开」那一类问题，它们不会报错，
+# 只会让人默默关掉页面。
+_, dl = get("/api/models/download")
+check("模型下载端点给出「现在能做什么」",
+      isinstance(dl.get("can_do_now"), list) and len(dl["can_do_now"]) >= 1,
+      f"can_do_now={dl.get('can_do_now')}")
+check("install.sh 把模型下到数据目录而不是项目目录",
+      "VOXFLOW_MODELS_DIR" in (PROJECT / "install.sh").read_text(encoding="utf-8")
+      and "--local_dir ./models/" not in (PROJECT / "install.sh").read_text(encoding="utf-8"),
+      "install.sh 还在往 ./models/ 下模型，运行时按 core/paths.py 去 ~/.voxflow/models 找，对不上")
+check("模型没下不算 down（degraded 才对）",
+      health["checks"]["tts_models"].get("ok") is True,
+      "「还没下模型」被判成故障，新用户打开就是红色报错")
+
+# UI 一致性：图标语言只能有一套。
+#
+# Icon.vue 的文件头写清了为什么不用 emoji（三套系统渲染完全不同、不能跟主题
+# 变色），但老屏幕的表单标签一度全是 emoji —— 同一个产品里两套图标语言，
+# 是最容易被忽略又最显廉价的不一致。改净之后这条断言挡住它再混回来。
+#
+# 只查**元件位**（标签、标题、pill 这类），不查文案里的 emoji ——
+# 提示语里出现一个表情是文案风格，不是 UI 元件。
+import re as _re                                                  # noqa: E402
+_EMOJI = _re.compile(r"[\U0001F300-\U0001FAFF]")
+_ELEMENT_TAG = _re.compile(
+    r'<(?:label|span|div)\s+class="[^"]*'
+    r'(?:form-label|param-label|meta-label|line-label|panel-title|lines-title'
+    r'|chart-title|section-title|meta-pill|credit-pill|upload-icon|empty-icon)'
+    r'[^"]*"\s*>[^<]*'
+)
+_emoji_hits = []
+for _vue in sorted((PROJECT / "web/ui/src").rglob("*.vue")):
+    for _m in _ELEMENT_TAG.finditer(_vue.read_text(encoding="utf-8")):
+        if _EMOJI.search(_m.group(0)):
+            _emoji_hits.append(f"{_vue.name}: {_m.group(0)[:60]}")
+check("UI 元件位没有 emoji（图标统一走 Icon.vue）",
+      not _emoji_hits, "; ".join(_emoji_hits[:3]))
+
+_, eco = get("/api/economics")
+check("成本端点带覆盖率（0 元要能和「没记账」区分开）",
+      "covered" in eco and "total_tracks" in eco and "revenue_covered" in eco)
+# null 和 0 必须分开：「—」是还没抓数据，「0」是真的没播。混在一起会让
+# 「没同步」被读成「没人听」，那是两个完全不同的行动。
+_no_rev = [t for t in eco.get("tracks", []) if t.get("earned_cny") is None]
+check("没有收入数据的作品用 null 而不是 0 表示",
+      all(t.get("plays") is None and t.get("roi") is None for t in _no_rev),
+      "有作品 earned_cny 是 null 但 plays/roi 给了 0，含义会被读错")
+
 _, pipe = get("/api/pipeline")
 _, albums = get("/api/albums")
 _, accounts = get("/api/platform-accounts")

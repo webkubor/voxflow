@@ -1,12 +1,7 @@
 <template>
   <div class="tab-content-container">
     <!-- 模型未就绪 / 正在下载 -->
-    <WarnBanner
-      v-if="!modelStatus.base.ready && !modelStatus.base.downloading"
-      type="warn"
-      title="Base 基础大模型未就绪"
-      hint="请在终端运行 ./install.sh 下载模型权重，下载完成后此警告会自动消失。"
-    />
+    <ModelSetupCard v-if="!modelStatus.base.ready" model="Base" />
 
     <!-- AI 助手折叠 -->
     <n-collapse class="ai-collapse" :default-expanded-names="[]">
@@ -80,14 +75,14 @@
       <!-- 参数 -->
       <div class="params-grid">
         <div class="param-cell">
-          <label class="param-label">🗣️ 语气描述</label>
+          <label class="param-label"><Icon name="speech" size="sm" />语气描述</label>
           <n-input
             v-model:value="cloneForm.tone"
             placeholder="如：沉稳深情、语速适中（留空继承音色描述）"
           />
         </div>
         <div class="param-cell">
-          <label class="param-label">🎭 情绪标签</label>
+          <label class="param-label"><Icon name="mask" size="sm" />情绪标签</label>
           <n-input
             v-model:value="cloneForm.emotion"
             placeholder="如：happy、sad、angry（留空自动适配）"
@@ -125,7 +120,7 @@ import { reactive, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { toMessage } from '../api';
 import AIHelpSection from '../components/AIHelpSection.vue';
-import WarnBanner from '../components/WarnBanner.vue';
+import ModelSetupCard from '../components/ModelSetupCard.vue';
 import Icon from '../components/Icon.vue';
 
 import { useCapabilitiesStore } from '../stores/capabilities';

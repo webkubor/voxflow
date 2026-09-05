@@ -36,6 +36,7 @@ import ky, { HTTPError, TimeoutError } from 'ky';
 import { API_TIMEOUT_MS, API_RETRY_LIMIT } from '../config/constants';
 import type {
   Album, CapabilitiesResponse, PersonasResponse, PipelineResponse,
+  EconomicsResponse, HealthResponse, LogRecord, MetricsResponse,
   PlatformAccount, PlatformKey, Stage, Track,
 } from '../types/api';
 import { CLIENT_VERSION, toError, toMessage, VoxError } from '../lib/errors';
@@ -66,15 +67,23 @@ const http = ky.create({
   timeout: API_TIMEOUT_MS,
   retry: { limit: API_RETRY_LIMIT, methods: ['get'] },
   hooks: {
+    // ky 2.x 的 beforeRequest 收**一个 state 对象** `{ request, options }`，
+    // 不是 1.x 的 `(input, options)` 两个参数，而且 headers 挂在 request 上
+    // （options 上没有）。之前这里按 1.x 的形状写，还用 `as unknown as`
+    // 把类型强转掉了 —— 于是升级到 2.x 后每个请求都在 hook 里抛
+    // `Cannot read properties of undefined (reading 'headers')`，
+    // **整个界面的接口全挂**，而编译期一声不吭。
+    //
+    // 教训：`as unknown as` 把类型检查关掉的地方，正是升级时最先坏、
+    // 又最难发现的地方。这里不再强转，签名对不上就让它编译失败。
     beforeRequest: [
-      ((_input: unknown, options: { headers: Headers }) => {
-        // options.headers 是 ky 合并后的最终 Headers 对象，改它会带到请求里
-        options.headers.set('X-Client-Version', CLIENT_VERSION);
-        options.headers.set('X-Client-Tab', _currentTab);
-        if (!options.headers.has('X-Request-ID')) {
-          options.headers.set('X-Request-ID', genRequestId());
+      ({ request }) => {
+        request.headers.set('X-Client-Version', CLIENT_VERSION);
+        request.headers.set('X-Client-Tab', _currentTab);
+        if (!request.headers.has('X-Request-ID')) {
+          request.headers.set('X-Request-ID', genRequestId());
         }
-      }) as unknown as ((...args: unknown[]) => void),
+      },
     ],
   },
 });
@@ -87,7 +96,10 @@ function genRequestId() {
 /** 导出给单测用 */
 export const __testing = { genRequestId };
 
-const get = <T>(path: string, searchParams?: Record<string, string>) =>
+// searchParams 放宽到 string | number | boolean —— ky 本来就接受这三种并各自
+// 序列化。收窄成 string 只是逼调用方在每个数字参数上写 String()，
+// 那既没有换来任何安全性，还容易漏一个就编译不过。
+const get = <T>(path: string, searchParams?: Record<string, string | number | boolean>) =>
   http.get(path, searchParams ? { searchParams } : undefined).json<T>();
 const post = <T>(path: string, json?: unknown) => http.post(path, { json }).json<T>();
 const postForm = <T>(path: string, body: FormData) => http.post(path, { body }).json<T>();
@@ -133,7 +145,7 @@ export const api = {
   llmStatus: () => get<{ available: boolean; model: string; error?: string }>('llm/status'),
 
   // ── 任务 ──
-  tasks: () => get<{ tasks: unknown[] }>('tasks'),
+  tasks: () => get<{ tasks: { id: string; status: string; error?: string }[] }>('tasks'),
   cancelTask: (id: string) => del<{ ok: boolean }>(`tasks/${id}`),
 
   // ── 合成 ──
@@ -184,6 +196,53 @@ export const api = {
       hotness?: number; hotness_reason?: string;
     };
   }>('trending'),
+
+  // ── 模型下载（首次运行）──
+  modelDownloadStatus: () => get<{
+    models: Record<string, {
+      ready: boolean; running: boolean; downloading: boolean;
+      percent: number; downloaded_mb: number; total_mb: number;
+    }>;
+    can_do_now: string[];
+    needs_base: string[];
+  }>('models/download'),
+  startModelDownload: (model: 'Base' | 'VoiceDesign') => {
+    // 后端收的是 Form（和其它几个上传类端点一致），不是 JSON
+    const fd = new FormData();
+    fd.append('model', model);
+    return postForm<{ ok: boolean; status: string; detail: string }>('models/download', fd);
+  },
+
+  // ── 封面出图（museav 中台）──
+  coverStatus: () => get<{
+    available: boolean; can_generate: boolean; credits: number;
+    /** 不受额度闸门约束（自家租户）。余额恒为 0 但出图正常，只看 credits 会误判 */
+    unmetered: boolean;
+    covers_left: number; credits_per_cover: number; est_cny: number; detail: string;
+    /** 常用比例，给下拉填值用。**不是白名单** */
+    common_ratios: { value: string; label: string }[];
+    /** 目标短边（平台要求：汽水 ≥1440、网易云 ≥1400） */
+    cover_side: number;
+    /** 各常用比例算出的实际出图尺寸，如 { "1:1": "1440x1440" } */
+    sizes: Record<string, string>;
+  }>('cover/status'),
+  generateCover: (p: {
+    track_id: string; title: string; tags?: string; prompt?: string;
+    /** 任意 W:H（1:1 / 3:4 / 1:2.1 …）。不限枚举 —— 中台支持任意尺寸，
+     *  合法性由它判定；写错会在提交时 400 挡掉。 */
+    ratio?: string;
+    /** 显式尺寸 'WxH'。留空则按 ratio 自动算一个短边 ≥1440 的 */
+    size?: string;
+  }) => post<{ task_id: string }>('cover/generate', p),
+
+  // ── 可观测性与成本 ──
+  // 四个分开而不是合成一个 /debug：想看一眼健康状态时，不该等日志和
+  // 聚合查询也跑完。前端也按这个粒度各自刷新（健康 10 秒、成本 60 秒）。
+  health: () => get<HealthResponse>('health'),
+  metrics: () => get<MetricsResponse>('metrics'),
+  logs: (p?: { limit?: number; level?: string; event?: string; days?: number }) =>
+    get<{ logs: LogRecord[] }>('logs', p),
+  economics: (days = 30) => get<EconomicsResponse>('economics', { days }),
 
   // ── 下载接管 ──
   inbox: () => get<{ files: unknown[]; downloads_dir: string }>('inbox'),

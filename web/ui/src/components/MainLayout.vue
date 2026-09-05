@@ -157,6 +157,7 @@
             <n-tab-pane name="works" tab="看板"><PipelineBoard /></n-tab-pane>
             <n-tab-pane name="publish" tab="发行"><PublishTab /></n-tab-pane>
             <n-tab-pane name="library" tab="资产"><LibraryTab /></n-tab-pane>
+            <n-tab-pane name="ops" tab="运营"><OpsTab /></n-tab-pane>
           </n-tabs>
         </n-layout-content>
       </n-layout>
@@ -224,6 +225,7 @@ const SunoTab = defineAsyncComponent(() => import('../tabs/SunoTab.vue'));
 const PipelineBoard = defineAsyncComponent(() => import('./PipelineBoard.vue'));
 const PublishTab = defineAsyncComponent(() => import('../tabs/PublishTab.vue'));
 const LibraryTab = defineAsyncComponent(() => import('../tabs/LibraryTab.vue'));
+const OpsTab = defineAsyncComponent(() => import('../tabs/OpsTab.vue'));
 import GlobalPlayer from './GlobalPlayer.vue';
 import TaskPanel from './TaskPanel.vue';
 import AddPersonaModal from './AddPersonaModal.vue';
@@ -289,6 +291,7 @@ const tabs = [
   { name: 'works', label: '作品看板', icon: 'board' },
   { name: 'publish', label: '全网发行', icon: 'publish' },
   { name: 'library', label: '资产库', icon: 'library' },
+  { name: 'ops', label: '运营台', icon: 'pulse' },
 ];
 
 const goTab = (name) => {

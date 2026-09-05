@@ -6,6 +6,27 @@
         <span>作品流水线</span>
       </h3>
       <div class="board-tools">
+        <!-- 出封面的比例。放在顶栏而不是每一行：封面绝大多数是方图，
+             逐行放选择器会让操作区变重，而这个选择改一次就够用一批。
+             不限于下拉里的几个 —— 可以直接输入任意 W:H（如 1:2.1）。 -->
+        <label class="ratio-pick" :title="`出封面用的画幅。可直接输入任意 W:H，合法性由中台判定`">
+          <span class="ratio-label">封面比例</span>
+          <input
+            v-model="coverRatio"
+            class="ratio-input"
+            list="cover-ratios"
+            placeholder="1:1"
+            spellcheck="false"
+          />
+          <datalist id="cover-ratios">
+            <option v-for="r in coverCaps.common_ratios || []" :key="r.value" :value="r.value">
+              {{ r.label }}
+            </option>
+          </datalist>
+          <!-- 直接把「会拿到多大的图」写出来。平台对封面有硬性尺寸要求
+               （汽水 ≥1440、网易云 ≥1400），光给个比例人判断不了够不够。 -->
+          <span v-if="coverSize" class="ratio-size">→ {{ coverSize }}</span>
+        </label>
         <button class="ghost-btn" @click="openInbox">
           <Icon name="upload" size="sm" />
           <span>从下载导入</span>
@@ -94,7 +115,7 @@
 
         <div class="track-foot">
           <div class="track-tags">
-            <span v-if="t.voice" class="meta-pill">🎙️ {{ t.voice }}</span>
+            <span v-if="t.voice" class="meta-pill"><Icon name="voice" size="sm" />{{ t.voice }}</span>
             <span
               v-for="(info, pk) in t.platforms"
               :key="pk"
@@ -104,6 +125,18 @@
             </span>
           </div>
           <div class="track-actions">
+            <!-- 只在**缺封面**时出现：已经有封面的曲目再放一个出图按钮，
+                 唯一的作用就是让人误点、白烧 2 积分。 -->
+            <button
+              v-if="!t.cover_url"
+              class="ghost-btn small"
+              :disabled="!coverCaps.can_generate || coverBusyId === t.id"
+              :title="coverCaps.detail"
+              @click="genCover(t)"
+            >
+              <Icon name="sparkles" size="sm" />
+              <span>{{ coverBusyId === t.id ? '出图中…' : coverBtnLabel }}</span>
+            </button>
             <button
               v-if="t.lyrics || Object.keys(t.platforms || {}).length"
               class="ghost-btn small"
@@ -232,7 +265,7 @@
  * 计数条里数字最多的那一列才值得关注 —— 那是流水线堵的地方。
  * 其他阶段都是上下文，给个 muted 就行。
  */
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { api, toMessage } from '../api';
 import { usePipelineStore } from '../stores/pipeline';
@@ -251,6 +284,82 @@ const toggleExpand = (id) => {
   expanded.value = n;
 };
 
+// ── 封面出图（走 museav 中台）────────────────────────────
+//
+// 中台积分是硬约束：没了就出不了图。所以按钮的可用性绑在 can_generate 上
+// （= 接了中台 **且** 余额够），而不是只看「接没接」—— 亮着但点下去必然
+// 失败的按钮，比灰掉的按钮更让人困惑。
+const coverBusyId = ref('');
+const coverCaps = ref({
+  can_generate: false, credits: 0, est_cny: 0, detail: '检查中…',
+  common_ratios: [], sizes: {}, cover_side: 1440,
+});
+
+// 当前比例会出多大的图。常用比例后端已经算好；自定义比例算不出来就不显示 ——
+// 与其显示一个猜的数，不如什么都不说。
+const coverSize = computed(() => coverCaps.value.sizes?.[coverRatio.value] || '');
+
+// 出封面的画幅。用 <input list> 而不是 <select>：中台支持**任意** W:H
+// （gpt-image-2 可传任意尺寸，见 shared/image-size.js），下拉里那几个只是
+// 常用值。用 select 就把上游的能力锁死在五个枚举上了。
+//
+// 记在 localStorage：这是「我这批封面用什么画幅」的偏好，每次打开都要重选很烦。
+const coverRatio = ref(localStorage.getItem('vf.coverRatio') || '1:1');
+watch(coverRatio, (v) => {
+  try { localStorage.setItem('vf.coverRatio', v || '1:1'); } catch { /* 隐私模式下会抛，忽略 */ }
+});
+
+const coverBtnLabel = computed(() => {
+  if (!coverCaps.value.can_generate) {
+    // 措辞不写「积分不足」—— 那暗示「去充值」，而 voxcraft 是自家租户，
+    // 真因是中台的 deduct_tenant_credit 缺自家租户豁免（见 docs/TODO.md）。
+    // 把配置问题写成消费问题，会让人朝错误的方向排查。
+    return coverCaps.value.credits === 0 ? '中台额度闸门拦住' : '出封面（不可用）';
+  }
+  return `出封面 ≈¥${(coverCaps.value.est_cny || 0).toFixed(2)}`;
+});
+
+const loadCoverCaps = async () => {
+  try { coverCaps.value = await api.coverStatus(); } catch { /* 查不到就保持不可用 */ }
+};
+
+const genCover = async (t) => {
+  coverBusyId.value = t.id;
+  try {
+    const { task_id } = await api.generateCover({
+      track_id: t.id, title: t.title, tags: t.tags || '',
+      ratio: coverRatio.value || '1:1',
+    });
+    tasksStore.showToast(`封面出图已提交（约 ¥${(coverCaps.value.est_cny || 0).toFixed(2)}）`, 'info');
+    // 轮到任务终态再刷看板 —— 出图要几十秒，立刻刷新只会看到没变化。
+    const done = await waitTask(task_id);
+    if (done?.status === 'done') {
+      tasksStore.showToast('封面已生成并回填台账', 'success');
+      await load();
+    } else {
+      await tasksStore.reportError(new Error(done?.error || '出图失败'), { action: 'cover.generate' });
+    }
+  } catch (cause) {
+    await tasksStore.reportError(cause, { action: 'cover.generate' });
+  } finally {
+    coverBusyId.value = '';
+    loadCoverCaps();      // 出完图余额变了，顺手刷一次
+  }
+};
+
+/** 轮询到任务终态。5 秒一次、最多 5 分钟 —— 与后端出图超时对齐。 */
+const waitTask = async (taskId) => {
+  for (let i = 0; i < 60; i++) {
+    await new Promise((r) => setTimeout(r, 5000));
+    try {
+      const { tasks } = await api.tasks();
+      const t = tasks.find((x) => x.id === taskId);
+      if (t && ['done', 'error', 'cancelled'].includes(t.status)) return t;
+    } catch { /* 单次查询失败不算数，下一轮再试 */ }
+  }
+  return null;
+};
+
 const showPublish = ref(false);
 const publishTrack = ref(null);
 const pickedPlatforms = ref([]);
@@ -262,7 +371,7 @@ const load = async () => {
     await tasksStore.reportError(cause, { action: 'pipeline.load' });
   }
 };
-onMounted(load);
+onMounted(() => { load(); loadCoverCaps(); });
 defineExpose({ load });
 
 // 下载目录导入
@@ -464,7 +573,35 @@ const statusLabel = (s) => PLATFORM_STATUS[s] || s;
   font-weight: 600;
   color: var(--vf-text-1);
 }
-.board-tools { display: flex; gap: var(--vf-space-2); }
+.board-tools { display: flex; gap: var(--vf-space-2); align-items: center; }
+.ratio-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-sm);
+  background: var(--vf-bg-2);
+}
+.ratio-label { font-size: 11px; color: var(--vf-text-3); white-space: nowrap; }
+.ratio-input {
+  width: 62px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--vf-text-1);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  padding: 5px 4px;
+}
+.ratio-input::placeholder { color: var(--vf-text-4); }
+.ratio-size {
+  font-size: 11px;
+  color: var(--vf-text-3);
+  font-variant-numeric: tabular-nums;
+  padding-right: 8px;
+  white-space: nowrap;
+}
 
 /* counters */
 .counters {
@@ -657,6 +794,9 @@ const statusLabel = (s) => PLATFORM_STATUS[s] || s;
 .track-tags { display: flex; gap: var(--vf-space-2); flex-wrap: wrap; }
 .track-actions { display: flex; gap: var(--vf-space-2); }
 .meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   padding: 3px 8px;
   background: var(--vf-bg-3);

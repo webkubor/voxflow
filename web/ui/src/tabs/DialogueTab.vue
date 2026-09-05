@@ -1,25 +1,20 @@
 <template>
   <div class="tab-content-container">
-    <WarnBanner
-      v-if="!modelStatus.base.ready && !modelStatus.base.downloading"
-      type="warn"
-      title="Base 基础大模型未下载"
-      hint="请在终端先跑 ./install.sh 下载模型，否则剧本合成无法运行。"
-    />
+    <ModelSetupCard v-if="!modelStatus.base.ready" model="Base" />
 
     <!-- 剧目元信息 -->
     <section class="meta-card">
       <div class="meta-grid">
         <div class="meta-cell">
-          <label class="meta-label">📂 项目标识（英文/拼音）</label>
+          <label class="meta-label"><Icon name="folder" size="sm" />项目标识（英文/拼音）</label>
           <n-input v-model:value="form.project_name" placeholder="如：jianghu_anfang_reveal" />
         </div>
         <div class="meta-cell">
-          <label class="meta-label">🎭 剧目名称</label>
+          <label class="meta-label"><Icon name="mask" size="sm" />剧目名称</label>
           <n-input v-model:value="form.title" placeholder="如：无厘头暗坊" />
         </div>
         <div class="meta-cell">
-          <label class="meta-label">🎭 全局情绪控制优先</label>
+          <label class="meta-label"><Icon name="mask" size="sm" />全局情绪控制优先</label>
           <label class="switch-row">
             <n-switch v-model:value="form.emotion_priority" />
             <span class="switch-tip">开启后剧本内每行默认强力匹配情绪标签</span>
@@ -30,7 +25,7 @@
 
     <!-- 台词行 -->
     <div class="lines-head">
-      <span class="lines-title">🎬 剧本台词</span>
+      <span class="lines-title"><Icon name="film" size="sm" />剧本台词</span>
       <span class="lines-count">共 {{ form.lines.length }} 句</span>
       <button class="add-line-btn" @click="addLine">
         <Icon name="plus" size="sm" />
@@ -48,7 +43,7 @@
         <div class="line-body">
           <div class="line-grid">
             <div class="line-persona">
-              <label class="line-label">👤 配音角色</label>
+              <label class="line-label"><Icon name="user" size="sm" />配音角色</label>
               <n-select
                 v-model:value="line.persona"
                 :options="personaOptions"
@@ -57,7 +52,7 @@
               />
             </div>
             <div class="line-text">
-              <label class="line-label">📝 角色台词</label>
+              <label class="line-label"><Icon name="edit" size="sm" />角色台词</label>
               <n-input
                 v-model:value="line.text"
                 type="textarea"
@@ -75,19 +70,19 @@
             </summary>
             <div class="line-advanced-body">
               <div class="form-cell">
-                <label class="line-label">🗣️ 语气细节</label>
+                <label class="line-label"><Icon name="speech" size="sm" />语气细节</label>
                 <n-input v-model:value="line.tone" placeholder="如：语速偏慢，低声沉吟" />
               </div>
               <div class="form-cell">
-                <label class="line-label">🎭 情绪控制</label>
+                <label class="line-label"><Icon name="mask" size="sm" />情绪控制</label>
                 <n-input v-model:value="line.emotion" placeholder="如：Sad、Anger" />
               </div>
               <div class="form-cell">
-                <label class="line-label">⚡ 独立情绪优先</label>
+                <label class="line-label"><Icon name="zap" size="sm" />独立情绪优先</label>
                 <n-switch v-model:value="line.emotion_priority" />
               </div>
               <div class="form-cell">
-                <label class="line-label">💾 输出文件名（可选）</label>
+                <label class="line-label"><Icon name="save" size="sm" />输出文件名（可选）</label>
                 <n-input v-model:value="line.output_name" placeholder="如：line_1.wav" />
               </div>
             </div>
@@ -141,7 +136,7 @@ import { useCapabilitiesStore } from '../stores/capabilities';
 import { useSynthStore } from '../stores/synth';
 import { useTasksStore } from '../stores/tasks';
 import { useVoicesStore } from '../stores/voices';
-import WarnBanner from '../components/WarnBanner.vue';
+import ModelSetupCard from '../components/ModelSetupCard.vue';
 import Icon from '../components/Icon.vue';
 
 const { personas } = storeToRefs(useVoicesStore());

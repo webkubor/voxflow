@@ -5,6 +5,7 @@ from cli.commands.job import app as job_app
 from cli.commands.preset import app as preset_app
 from cli.commands.doctor import doctor
 from cli.commands.ai import ai_script, ai_polish
+from cli.commands.stats import stats, logs, backfill
 
 app = typer.Typer(
     name="voice",
@@ -20,6 +21,9 @@ app.command("dialogue")(tts_dialogue)
 app.command("doctor")(doctor)
 app.command("ai-script")(ai_script)
 app.command("ai-polish")(ai_polish)
+app.command("stats")(stats)
+app.command("logs")(logs)
+app.command("backfill-costs")(backfill)
 
 
 @app.command("web")
@@ -33,13 +37,17 @@ def web(
     typer.echo(typer.style("  VoxFlow 声流 Web UI", fg=typer.colors.BRIGHT_YELLOW, bold=True))
     typer.echo(typer.style(f"  http://localhost:{port}", fg=typer.colors.CYAN))
     typer.echo(typer.style("=" * 50, fg=typer.colors.BRIGHT_YELLOW))
-    # 多 worker：默认单进程单线程，一个慢请求就把整个服务堵死 ——
-    # 实测开着几个标签页轮询时（每个都在打 status/capabilities），
-    # 后端队列被塞满、curl 都会超时。
+    # **单 worker**。之前开 2 个是为了绕开「一个慢请求堵死整个服务」，
+    # 但那是在治症状：真因是 40 多个端点写成 `async def` 却在里面跑同步
+    # 阻塞调用（LLM 几十秒、suno CLI 十几秒、SQLite、文件 IO）——
+    # 同步代码在 async 端点里会**冻住事件循环**，所有其他请求一起排队。
     #
-    # 不用太多：这是本地工具，2 个足够让「一个请求在等上游」时另一个还能响应。
-    # 更多 worker 只会让 4GB 的模型被重复加载进内存。
-    uvicorn.run("web.app:app", host=host, port=port, reload=False, workers=2)
+    # 根因修法是把那些端点改回普通 `def`：FastAPI 会自动把同步端点丢进
+    # 线程池，事件循环不受影响。改完之后多 worker 不但没必要，还有害 ——
+    # 任务队列和指标都在**进程内存**里，2 个 worker 就是两份互相看不见的
+    # 状态：任务提交给 worker A，前端下一次轮询打到 worker B 就查不到，
+    # 表现为任务在界面上忽隐忽现。而且 4GB 的模型会被加载两遍。
+    uvicorn.run("web.app:app", host=host, port=port, reload=False, workers=1)
 
 
 @app.callback(invoke_without_command=True)
@@ -58,6 +66,9 @@ def main(ctx: typer.Context):
       ai-polish  AI 文案润色（需 FreeLLMAPI）
       preset     预设管理（list / show / run / batch）
       job        任务历史（list / show / clean）
+      stats      成本与用量（钱花在哪 / 本地省了多少 / 每首歌多少钱）
+      logs       运行日志（失败的调用、慢请求）
+      backfill-costs  给接入计量前的老作品补估算成本（默认预演）
     """
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())

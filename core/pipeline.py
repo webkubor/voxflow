@@ -302,7 +302,9 @@ def set_platform_status(track_id: str, platform: str, status: str, **extra: Any)
         mapping = {"song_id": "song_id", "song_url": "song_url", "album_id": "album_id",
                    "track_no": "track_no", "duration": "duration", "publish_date": "publish_date",
                    "cover_url": "cover_url", "cover_local": "cover_local", "note": "note",
-                   "submitted_at": "submitted_at"}
+                   "submitted_at": "submitted_at",
+                   # 单曲维度的平台实况（来自音乐人后台，见 scripts/ncm_track_stats.py）
+                   "plays": "plays", "earned_cny": "earned_cny", "stats_at": "stats_at"}
         for k, col in mapping.items():
             if k in extra and extra[k] is not None:
                 sets.append(f"{col} = ?"); vals.append(extra[k])

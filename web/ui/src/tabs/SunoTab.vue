@@ -16,7 +16,7 @@
         <span v-if="suno.authenticated" class="credit-pill">
           ✅ {{ suno.plan || 'Suno' }} · {{ suno.total_credits_left }} credits
         </span>
-        <span v-else class="credit-pill warn">⚠️ 未登录</span>
+        <span v-else class="credit-pill warn"><Icon name="warning" size="sm" />未登录</span>
         <button class="icon-btn" title="刷新状态" @click="loadSunoStatus">
           <Icon name="refresh" size="sm" />
         </button>
@@ -116,7 +116,7 @@
         </div>
 
         <div v-if="hotSongs.length" class="hot-chart">
-          <div class="chart-title">🔥 当前热度榜 Top{{ hotSongs.length }}</div>
+          <div class="chart-title"><Icon name="flame" size="sm" />当前热度榜 Top{{ hotSongs.length }}</div>
           <div v-for="s in hotSongs" :key="s.name" class="chart-row">
             <span class="chart-rank">{{ s.rank }}</span>
             <span class="chart-name">{{ s.name }}</span>
@@ -151,12 +151,12 @@
       <div v-if="mode === 'song'" class="form-grid">
         <div class="form-col">
           <div class="form-cell">
-            <label class="form-label">🎵 歌曲标题</label>
+            <label class="form-label"><Icon name="music" size="sm" />歌曲标题</label>
             <n-input v-model:value="sunoForm.title" placeholder="如：月下竹林" />
           </div>
 
           <div class="form-cell">
-            <label class="form-label">🎤 风格标签（逗号分隔）</label>
+            <label class="form-label"><Icon name="voice" size="sm" />风格标签（逗号分隔）</label>
             <n-input
               v-model:value="sunoForm.tags"
               placeholder="古风, 古筝, 武侠, cinematic, 110 BPM"
@@ -164,7 +164,7 @@
           </div>
 
           <div class="form-cell">
-            <label class="form-label">👤 声音 Persona</label>
+            <label class="form-label"><Icon name="user" size="sm" />声音 Persona</label>
             <n-select
               v-model:value="sunoForm.persona"
               :options="personaOptions"
@@ -179,7 +179,7 @@
         <div class="form-col">
           <div class="form-cell">
             <div class="lyrics-head">
-              <label class="form-label">📝 歌词（支持 [Verse] [Chorus] 结构）</label>
+              <label class="form-label"><Icon name="edit" size="sm" />歌词（支持 [Verse] [Chorus] 结构）</label>
               <div class="lyrics-actions">
                 <button
                   class="ghost-btn small"
@@ -217,12 +217,12 @@
       <!-- ─── BGM 模式：单栏 + 场景预设 ─── -->
       <div v-else-if="mode === 'bgm'" class="bgm-form">
         <div class="form-cell">
-          <label class="form-label">🎵 标题（可选）</label>
+          <label class="form-label"><Icon name="music" size="sm" />标题（可选）</label>
           <n-input v-model:value="sunoForm.title" placeholder="留空则用 'Untitled BGM'" />
         </div>
 
         <div class="form-cell">
-          <label class="form-label">🎼 风格标签（必填，自动追加 instrumental）</label>
+          <label class="form-label"><Icon name="music" size="sm" />风格标签（必填，自动追加 instrumental）</label>
           <n-input
             v-model:value="sunoForm.tags"
             placeholder="lo-fi, study, calm piano, ambient, 80 BPM"
@@ -339,7 +339,7 @@
         <div class="form-grid">
           <div class="form-col">
             <div class="form-cell">
-              <label class="form-label">🎤 原曲（必填）</label>
+              <label class="form-label"><Icon name="voice" size="sm" />原曲（必填）</label>
               <n-input
                 v-model:value="originalSong"
                 placeholder="如：起风了"
@@ -347,12 +347,12 @@
             </div>
 
             <div class="form-cell">
-              <label class="form-label">🎵 翻唱标题（自动：原曲名 + Cover）</label>
+              <label class="form-label"><Icon name="music" size="sm" />翻唱标题（自动：原曲名 + Cover）</label>
               <n-input v-model:value="sunoForm.title" placeholder="如：起风了 (Cover)" />
             </div>
 
             <div class="form-cell">
-              <label class="form-label">🎼 风格标签</label>
+              <label class="form-label"><Icon name="music" size="sm" />风格标签</label>
               <n-input
                 v-model:value="sunoForm.tags"
                 placeholder="已自动套用热点 tags，可调整"
@@ -362,7 +362,7 @@
             <!-- Persona 在 cover 模式下提到主位 -->
             <div class="form-cell persona-highlight">
               <div class="persona-label-row">
-                <label class="form-label">🎙️ 用你的声音翻唱</label>
+                <label class="form-label"><Icon name="voice" size="sm" />用你的声音翻唱</label>
                 <span v-if="suno.personas && Object.keys(suno.personas).length > 0" class="persona-available">
                   ✓ 已链接 {{ Object.keys(suno.personas).length }} 个
                 </span>
@@ -382,8 +382,7 @@
             <!-- 原曲音频：上传后做真「同曲不同演绎」 -->
             <div class="form-cell">
               <div class="cover-audio-head">
-                <label class="form-label">
-                  🎵 原曲音频
+                <label class="form-label"><Icon name="music" size="sm" />原曲音频
                   <span class="form-label-optional">（可选 · 上传后做真"同曲不同演绎"）</span>
                 </label>
               </div>
@@ -423,7 +422,7 @@
           <div class="form-col">
             <div class="form-cell">
               <div class="lyrics-head">
-                <label class="form-label">📝 歌词</label>
+                <label class="form-label"><Icon name="edit" size="sm" />歌词</label>
                 <div class="lyrics-actions">
                   <button
                     class="ghost-btn small"
@@ -546,6 +545,7 @@
 </template>
 
 <script setup>
+import Icon from '../components/Icon.vue';
 /**
  * Suno 音乐生成 - 三种模式：
  *
@@ -574,7 +574,6 @@ import { useLibraryStore } from '../stores/library';
 import { useSunoStore } from '../stores/suno';
 import { useTasksStore } from '../stores/tasks';
 import WarnBanner from '../components/WarnBanner.vue';
-import Icon from '../components/Icon.vue';
 
 const sunoStore = useSunoStore();
 const tasksStore = useTasksStore();
@@ -1054,6 +1053,9 @@ const personaOptions = computed(() => {
 .renew-hint .vf-icon { color: var(--vf-text-3); }
 .auth-status { display: flex; align-items: center; gap: var(--vf-space-2); }
 .credit-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 12px;
   background: var(--vf-ok-soft);
   color: var(--vf-ok);

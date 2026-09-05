@@ -1,0 +1,45 @@
+name: Test
+
+# 门禁只跑**不需要模型、不需要凭据**的那部分：计量算钱的逻辑和前端类型。
+# 完整的端到端（scripts/smoke.py）要起服务、要 8.4 GB 模型、要上游凭据，
+# 那是本机跑的事 —— 放进 CI 只会得到一个长期红着、然后被所有人忽略的徽章。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    name: 计量逻辑自检
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # 不装 requirements —— tests/test_obs.py 只用标准库（sqlite3 / json /
+      # pathlib）。装 torch 要几分钟且和被测逻辑毫无关系。
+      - name: 跑计量自检
+        run: python tests/test_obs.py
+      # 封面的纯逻辑（比例校验 + 出图后的画幅核对）。同样只用标准库，
+      # 不碰网络、不花积分。
+      - name: 跑封面逻辑自检
+        run: python tests/test_cover.py
+
+  frontend:
+    name: 前端类型检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/ui/package-lock.json
+      - run: npm ci
+        working-directory: web/ui
+      # typecheck + build。ky 2.x 那次 hook 签名不兼容之所以能溜进生产，
+      # 正是因为调用点用 `as unknown as` 把类型关掉了 —— 类型检查是这类
+      # 「升级后运行时全挂、编译期一声不吭」问题唯一的防线。
+      - run: npm run check
+        working-directory: web/ui

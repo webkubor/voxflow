@@ -227,3 +227,35 @@ a:hover { color: var(--vf-primary); }
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
+
+/* ── 表单标签：图标 + 文字 ────────────────────────────────
+ *
+ * 老屏幕（克隆 / 设计 / 剧本 / AI 音乐）的表单标签原本是 emoji 开头，
+ * 和 Icon.vue 存在的理由直接冲突 —— 那个文件头写得很清楚：emoji 在
+ * Win / mac / Linux 三套系统上渲染完全不同，也不能跟着主题变色，
+ * 而其它地方（导航、看板、运营台）一直用的是 SVG 图标。
+ * 同一个产品里两套图标语言，是最容易被忽略、又最显廉价的不一致。
+ *
+ * 换成 <Icon> 之后需要的对齐规则写在这里**一次**，不在五个组件里各写一遍
+ * —— 那正是当初 emoji 能散开的原因：每处各写各的，没有一个共同的地方。
+ * 这些 class 的 scoped 样式都没有设 display，所以全局规则能生效。
+ */
+.form-label,
+.param-label,
+.meta-label,
+.line-label,
+.panel-title,
+.lines-title,
+.chart-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 标签里的图标比文字淡一档：它是定位提示，不该跟文字抢注意力。 */
+.form-label > .vf-icon,
+.param-label > .vf-icon,
+.meta-label > .vf-icon,
+.line-label > .vf-icon {
+  color: var(--vf-text-3);
+}
