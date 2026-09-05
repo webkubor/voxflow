@@ -300,7 +300,7 @@ const coverCaps = ref({
 const coverSize = computed(() => coverCaps.value.sizes?.[coverRatio.value] || '');
 
 // 出封面的画幅。用 <input list> 而不是 <select>：中台支持**任意** W:H
-// （gpt-image-2 可传任意尺寸，见 shared/image-size.js），下拉里那几个只是
+// （中台支持任意尺寸），下拉里那几个只是
 // 常用值。用 select 就把上游的能力锁死在五个枚举上了。
 //
 // 记在 localStorage：这是「我这批封面用什么画幅」的偏好，每次打开都要重选很烦。
@@ -311,8 +311,8 @@ watch(coverRatio, (v) => {
 
 const coverBtnLabel = computed(() => {
   if (!coverCaps.value.can_generate) {
-    // 措辞不写「积分不足」—— 那暗示「去充值」，而 voxcraft 是自家租户，
-    // 真因是中台的 deduct_tenant_credit 缺自家租户豁免（见 docs/TODO.md）。
+    // 措辞不写「积分不足」—— 那暗示「去充值」，而余额为 0 也可能只是
+    // 中台那边的额度配置（自家租户本来就不该被闸门卡）。
     // 把配置问题写成消费问题，会让人朝错误的方向排查。
     return coverCaps.value.credits === 0 ? '中台额度闸门拦住' : '出封面（不可用）';
   }
