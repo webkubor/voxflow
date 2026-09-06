@@ -1784,6 +1784,26 @@ class PublishRunRequest(BaseModel):
     platform: str = "qishui"
 
 
+def _probe_login_account(platform: str) -> str:
+    """当前浏览器登录的是哪个平台账号。读不到返回空串 —— 调用方按「验不了」处理。"""
+    import subprocess  # noqa: PLC0415
+
+    from core.paths import PROJECT_DIR as PD  # noqa: PLC0415
+
+    probe = PD / "scripts/check_login.py"
+    if not (shutil.which("browser-harness") and probe.exists()):
+        return ""
+    try:
+        with open(probe, encoding="utf-8") as f:
+            r = subprocess.run(["browser-harness"], stdin=f, timeout=120,
+                               env={**os.environ, "VF_BASE": str(PD), "VF_PLATFORM": platform},
+                               capture_output=True, text=True)
+        lines = [ln for ln in (r.stdout or "").splitlines() if ln.strip().startswith("{")]
+        return (json.loads(lines[-1]) if lines else {}).get("account", "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _run_publish_task(task_id: str, params: dict, update_fn):
     """跑平台填表脚本 —— 真的拉起浏览器，不是改个状态就完事。
 
@@ -1816,6 +1836,28 @@ def _run_publish_task(task_id: str, params: dict, update_fn):
     if not r.get("ok"):
         raise ValueError("备料没齐，先补：" + "、".join(
             i["名称"] for i in r["items"] if not i["就绪"]))
+
+    # ── 账号校验：登录的账号必须是这首歌负责人的账号 ──────────────
+    #
+    # 一个人可能有好几个平台账号（自己的、帮别人发的）。登错了照样能填完
+    # 整张表 —— 直到歌出现在**错误的艺人名下**才发现，那时候要撤回、
+    # 重发，还可能已经进了审核队列。
+    #
+    # 所以发之前必须比一次。**比不了就拦住**（比如没读到账号名），
+    # 不赌「大概是对的」—— 发错的代价远大于多问一句。
+    from core import notify  # noqa: PLC0415
+
+    info = (pipeline.get_track(track_id) or {}).get("platforms", {}).get(platform) or {}
+    who = info.get("publisher") or ""
+    cfg = (notify.account() or {}).get("assignees") or {}
+    people = {p["name"]: p for p in [cfg.get("owner") or {}, *(cfg.get("others") or [])] if p.get("name")}
+    want = ((people.get(who) or {}).get("platform_accounts") or {}).get(platform, "")
+    if who and want:
+        st = notify.account() and _probe_login_account(platform)
+        if st and st != want:
+            raise ValueError(
+                f"账号对不上：这首歌归「{who}」发（账号 {want}），"
+                f"但浏览器现在登录的是「{st}」。换账号登录后再发，别发错人名下。")
 
     update_fn(task_id, progress=15, stage="拉起浏览器…")
     env = {**os.environ, "VF_BASE": str(PROJECT_DIR), "VF_TRACK": track_id}

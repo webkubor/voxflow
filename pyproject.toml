@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "voxflow"
-version = "0.4.0"
+version = "0.5.0"
 description = "VoxFlow 声流 — 从 AI 声音到 AI 音乐再到自动发布的一条流水线：本地克隆音色 → Suno 出歌 → 整理物料上架各平台。"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -77,8 +77,40 @@ url = (info or {}).get("url", "")
 LOGIN_MARKS = ("/login", "/passport", "/sign", "accounts.", "sso.")
 logged_in = bool(url) and not any(m in url.lower() for m in LOGIN_MARKS)
 
+# ── 登录的是**哪个账号** ────────────────────────────────────
+#
+# 只知道「已登录」是不够的：一个人可能有好几个平台账号（自己的、
+# 帮别人发的），登错了照样能填完整张表，直到歌出现在错误的艺人名下
+# 才发现 —— 那时候要撤回、要重发，还可能已经进了审核队列。
+#
+# 账号名在右上角头像的下拉里。点开读一次，比任何猜测都可靠。
+account = ""
+if logged_in:
+    try:
+        pos = js("""(() => {
+          const av=[...document.querySelectorAll('img')].filter(i=>i.offsetParent &&
+            /avatar|aweme|user/i.test((i.src||'')+(i.className||'')) && i.width<60);
+          if(!av.length) return null;
+          const r=av[av.length-1].getBoundingClientRect();
+          return {x:Math.round(r.left+r.width/2), y:Math.round(r.top+r.height/2)};
+        })()""")  # noqa: F821
+        if pos:
+            click_at_xy(pos["x"], pos["y"])  # noqa: F821
+            wait(2)  # noqa: F821
+            account = js("""(() => {
+              const pops=[...document.querySelectorAll('[class*=dropdown],[class*=popover],[class*=menu]')]
+                .filter(e=>e.offsetParent).map(e=>e.innerText.replace(/\\s+/g,' ').trim());
+              const hit=pops.find(t=>/退出登录/.test(t));
+              return hit ? hit.split(' ')[0] : '';
+            })()""") or ""  # noqa: F821
+            js("document.body.click()")  # noqa: F821
+    except Exception:
+        account = ""
+
 print(json.dumps({
     "ok": True, "platform": platform, "logged_in": logged_in,
     "url": url, "title": (info or {}).get("title", ""),
-    "hint": "已登录" if logged_in else "被踢回登录页 —— 在浏览器里登录后重试",
+    "account": account,
+    "hint": (f"已登录：{account}" if account else "已登录（没读到账号名）")
+            if logged_in else "被踢回登录页 —— 在浏览器里登录后重试",
 }, ensure_ascii=False))
