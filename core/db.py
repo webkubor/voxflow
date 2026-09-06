@@ -62,6 +62,10 @@ CREATE TABLE IF NOT EXISTS tracks (
     cover_file  TEXT DEFAULT '',
     note        TEXT DEFAULT '',
     cloud_backup TEXT DEFAULT '{}',     -- JSON：R2 同步位置，预留
+    -- 发行身份。生成歌名（title）可以重复（Suno 一次出两首同名）；
+    -- 发出去的歌名必须唯一。独家授权：一首只能投一个平台。
+    release_title    TEXT DEFAULT '',
+    release_platform TEXT DEFAULT '',
     created_at  TEXT,
     updated_at  TEXT
 );
@@ -210,6 +214,8 @@ _ADD_COLUMNS = [
     ("track_platforms", "earned_cny", "REAL DEFAULT 0"),
     ("track_platforms", "stats_at", "TEXT DEFAULT ''"),
     ("track_platforms", "platform_title", "TEXT DEFAULT ''"),
+    ("tracks", "release_title", "TEXT DEFAULT ''"),
+    ("tracks", "release_platform", "TEXT DEFAULT ''"),
 ]
 
 
@@ -282,6 +288,29 @@ def init() -> None:
             have = {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
             if col not in have:
                 c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+        c.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_release_title "
+            "ON tracks(release_title) WHERE release_title != ''"
+        )
+        # 存量回填只跑一次。每次 init 都回填会把后挂上的孤儿歌名写进
+        # release_title，撞上已占用的唯一索引。
+        done = c.execute("SELECT 1 FROM meta WHERE key='release_backfill'").fetchone()
+        if not done:
+            c.execute("""
+                UPDATE tracks SET release_title = (
+                    SELECT platform_title FROM track_platforms
+                    WHERE track_id = tracks.id AND IFNULL(platform_title,'') != ''
+                    LIMIT 1
+                ) WHERE IFNULL(release_title,'') = ''
+            """)
+            c.execute("""
+                UPDATE tracks SET release_platform = (
+                    SELECT platform FROM track_platforms
+                    WHERE track_id = tracks.id LIMIT 1
+                ) WHERE IFNULL(release_platform,'') = ''
+                  AND EXISTS (SELECT 1 FROM track_platforms WHERE track_id = tracks.id)
+            """)
+            c.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('release_backfill', '1')")
 
 
 def _j(v: Any, default: Any = None) -> Any:

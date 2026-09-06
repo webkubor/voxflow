@@ -75,6 +75,10 @@ export interface Track {
   listings: TrackPlatform[];
   /** 有 Suno clip 或本地音频 = 原曲；否则是平台回填出来的孤儿。 */
   is_source: boolean;
+  /** 发出去的歌名。生成名可以重复，这个必须唯一。 */
+  release_title: string;
+  /** 独家授权投向的那一个平台。 */
+  release_platform: string;
   cloud_backup: CloudBackup;
   updated_at: string;
   note: string;

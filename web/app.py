@@ -1565,6 +1565,24 @@ def pipeline_upsert(req: PipelineTrackRequest):
     )}
 
 
+class PipelineReleaseRequest(BaseModel):
+    track_id: str
+    platform: str
+    release_title: str
+
+
+@app.post("/api/pipeline/release")
+def pipeline_release(req: PipelineReleaseRequest):
+    """确认发版：独家授权只能投一个平台，发行歌名必须唯一。"""
+    from core import pipeline
+    try:
+        track = pipeline.submit_release(req.track_id, req.platform, req.release_title)
+        pipeline.set_stage(req.track_id, "publishing")
+        return {"ok": True, "track": pipeline.get_track(req.track_id) or track}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 class PipelinePlatformRequest(BaseModel):
     track_id: str
     platform: str

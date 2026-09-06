@@ -119,6 +119,8 @@ export const api = {
   upsertTrack: (track: Partial<Track> & { track_id: string }) => post('pipeline/track', track),
   setPlatformStatus: (p: { track_id: string; platform: PlatformKey; status: string }) =>
     post('pipeline/platform', p),
+  submitRelease: (p: { track_id: string; platform: PlatformKey; release_title: string }) =>
+    post<{ ok: boolean; track: Track }>('pipeline/release', p),
   linkListing: (p: { listing_id: number; track_id: string }) =>
     post<{ ok: boolean; track: Track }>('pipeline/link', p),
   sourceCandidates: () => get<{ tracks: Array<{

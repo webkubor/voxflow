@@ -94,6 +94,14 @@
               <span class="track-title">{{ t.title }}</span>
               <span class="stage-pill" :class="`stage-${t.stage}`">{{ t.stage_label }}</span>
             </div>
+            <p v-if="t.clip_id || t.release_title" class="track-id-row">
+              <span v-if="t.clip_id" class="meta-pill">Suno {{ t.clip_id.slice(0, 8) }}</span>
+              <span v-if="t.release_title" class="meta-pill">发行 {{ t.release_title }}</span>
+              <span v-if="t.release_platform" class="meta-pill">
+                <PlatformMark :platform="t.release_platform" size="sm" />
+                {{ platformLabel(t.release_platform) }} · 独家
+              </span>
+            </p>
             <p v-if="t.album_desc" class="track-desc">{{ t.album_desc }}</p>
 
             <!-- n-steps 进度：圆点 + 文字 label，比纯圆点好懂 -->
@@ -191,20 +199,32 @@
       </article>
     </div>
 
-    <!-- 确认发版弹窗 -->
-    <n-modal v-model:show="showPublish" preset="card" title="确认发版" style="max-width: 460px">
+    <!-- 确认发版弹窗。独家授权只能选一个平台；发行歌名必须唯一。 -->
+    <n-modal v-model:show="showPublish" preset="card" title="确认发版" style="max-width: 480px">
       <p class="modal-lead">
-        <strong>{{ publishTrack?.title }}</strong> 要发到哪些平台？
+        <strong>{{ publishTrack?.title }}</strong>
+        <span v-if="publishTrack?.clip_id" class="modal-clip">Suno {{ publishTrack.clip_id.slice(0, 8) }}</span>
       </p>
-      <p class="modal-hint">各平台要求不同，选定后才能按对应 SOP 生成封面和文案。</p>
+      <p class="modal-hint">独家授权，只能投一个平台。汽水分发到网易云/QQ 不算再投。发出去的歌名必须唯一——Suno 生成名可以重复。</p>
+
+      <label class="release-label">发行歌名</label>
+      <input v-model="releaseTitle" class="release-input" maxlength="80" placeholder="发出去的名字，不能跟已发行的重复" />
 
       <div class="platform-picks">
-        <label v-for="(p, pk) in platforms" :key="pk" class="platform-pick">
-          <input type="checkbox" :value="pk" v-model="pickedPlatforms" />
+        <label
+          v-for="(p, pk) in platforms"
+          :key="pk"
+          class="platform-pick"
+          :class="{ picked: pickedPlatform === pk }"
+        >
+          <input type="radio" :value="pk" v-model="pickedPlatform" />
           <PlatformMark :platform="pk" size="md" />
           <span class="pick-copy">
             <span class="pick-label">{{ p.label }}</span>
-            <span class="pick-meta">封面 {{ p.cover }} · {{ p.ai_field }}</span>
+            <span class="pick-meta">
+              {{ publishAccounts[pk]?.artist_name ? `账号 ${publishAccounts[pk].artist_name}` : '账号未同步' }}
+              · 封面 {{ p.cover }}
+            </span>
           </span>
         </label>
       </div>
@@ -370,7 +390,9 @@ const waitTask = async (taskId) => {
 
 const showPublish = ref(false);
 const publishTrack = ref(null);
-const pickedPlatforms = ref([]);
+const pickedPlatform = ref('');
+const releaseTitle = ref('');
+const publishAccounts = ref({});
 
 const load = async () => {
   try {
@@ -459,8 +481,10 @@ const advance = async (track) => {
   if (!action) return;
   if (action.needsPlatform) {
     publishTrack.value = track;
-    pickedPlatforms.value = [];
+    pickedPlatform.value = track.release_platform || '';
+    releaseTitle.value = track.release_title || track.title || '';
     showPublish.value = true;
+    api.platformAccounts().then((d) => { publishAccounts.value = d.accounts || {}; }).catch(() => {});
     return;
   }
   busyId.value = track.id;
@@ -476,24 +500,30 @@ const advance = async (track) => {
 };
 
 const confirmPublish = async () => {
-  if (!pickedPlatforms.value.length) {
-    tasksStore.showToast('先选一个要发的平台', 'warning');
+  if (!pickedPlatform.value) {
+    tasksStore.showToast('独家授权，先选一个平台', 'warning');
+    return;
+  }
+  const title = (releaseTitle.value || '').trim();
+  if (!title) {
+    tasksStore.showToast('发行歌名不能空', 'warning');
     return;
   }
   const track = publishTrack.value;
   busyId.value = track.id;
   try {
-    for (const p of pickedPlatforms.value) {
-      await pipelineStore.setPlatformStatus({ track_id: track.id, platform: p, status: 'preparing' });
-    }
-    await pipelineStore.setStage(track.id, 'publishing');
+    await pipelineStore.submitRelease({
+      track_id: track.id,
+      platform: pickedPlatform.value,
+      release_title: title,
+    });
     await load();
     showPublish.value = false;
-    tasksStore.showToast(`「${track.title}」进入发版流程`, 'success');
+    tasksStore.showToast(`「${title}」独家发往 ${platformLabel(pickedPlatform.value)}`, 'success');
   } catch (cause) {
     await tasksStore.reportError(cause, {
       action: 'pipeline.publish',
-      tags: { trackId: track.id, platforms: pickedPlatforms.value.join(',') },
+      tags: { trackId: track.id, platform: pickedPlatform.value },
     });
   } finally {
     busyId.value = '';
@@ -706,6 +736,10 @@ const statusLabel = (s) => PLATFORM_STATUS[s] || s;
   color: var(--vf-text-1);
   font-size: 14px;
 }
+.track-id-row {
+  display: flex; flex-wrap: wrap; gap: var(--vf-space-2);
+  margin: 0 0 var(--vf-space-2);
+}
 .stage-pill {
   font-size: 10px;
   font-weight: 600;
@@ -906,7 +940,15 @@ const statusLabel = (s) => PLATFORM_STATUS[s] || s;
 
 /* modals */
 .modal-lead { margin: 0 0 var(--vf-space-2); color: var(--vf-text-1); }
+.modal-clip { margin-left: var(--vf-space-2); font-size: 12px; color: var(--vf-text-3); }
 .modal-hint { margin: 0 0 var(--vf-space-4); font-size: 12px; color: var(--vf-text-3); }
+.release-label { display: block; font-size: 12px; color: var(--vf-text-3); margin-bottom: 4px; }
+.release-input {
+  width: 100%; margin-bottom: var(--vf-space-4);
+  padding: 8px 10px; border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-sm); background: var(--vf-bg-3);
+  color: var(--vf-text-1); font-size: 13px;
+}
 
 .platform-picks { display: flex; flex-direction: column; gap: var(--vf-space-2); }
 .platform-pick {
@@ -920,6 +962,7 @@ const statusLabel = (s) => PLATFORM_STATUS[s] || s;
   transition: background 0.15s;
 }
 .platform-pick:hover { background: var(--vf-bg-3); }
+.platform-pick.picked { border-color: var(--vf-primary); background: var(--vf-primary-soft); }
 .pick-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .pick-label { color: var(--vf-text-1); }
 .pick-meta { font-size: 11px; color: var(--vf-text-3); }

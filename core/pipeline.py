@@ -216,6 +216,9 @@ def _row_to_track(row, platforms: dict[str, Any],
         # 发行页拿它决定要不要显示「关联原曲」。
         "is_source": bool(row["clip_id"] or row["audio_file"]),
         "listings": listings,
+        # 发出去的身份。title 是生成名，可以重复；release_title 必须唯一。
+        "release_title": (row["release_title"] if "release_title" in row.keys() else "") or "",
+        "release_platform": (row["release_platform"] if "release_platform" in row.keys() else "") or "",
         "cloud_backup": {
             "status": b_status,
             "label": BACKUP_STATUS_LABELS.get(b_status, b_status),
@@ -316,7 +319,8 @@ def upsert(track_id: str, **fields: Any) -> dict[str, Any]:
             fields[k] = json.dumps(fields[k], ensure_ascii=False)
 
     cols = ("title", "stage", "lyrics", "tags", "prompt", "album_desc", "voice",
-            "clip_id", "clip_ids", "audio_file", "cover_file", "note", "cloud_backup")
+            "clip_id", "clip_ids", "audio_file", "cover_file", "note", "cloud_backup",
+            "release_title", "release_platform")
     given = {k: v for k, v in fields.items() if k in cols and v is not None}
 
     with db.connect() as c:
@@ -332,6 +336,74 @@ def upsert(track_id: str, **fields: Any) -> dict[str, Any]:
             c.execute("UPDATE tracks SET updated_at = ? WHERE id = ?", (now, track_id))
 
     return get_track(track_id) or {}
+
+
+ACTIVE_RELEASE = ("preparing", "uploaded", "reviewing", "online", "published")
+
+
+def _plat_label(platform: str) -> str:
+    return (PLATFORMS.get(platform) or {}).get("label", platform)
+
+
+def find_title_owner(title: str, except_id: str = "") -> dict[str, str] | None:
+    """谁占用了这个发行歌名。空串不算占用。"""
+    title = (title or "").strip()
+    if not title:
+        return None
+    db.init()
+    with db.connect() as c:
+        r = c.execute(
+            "SELECT id, title FROM tracks WHERE release_title=? AND id!=?",
+            (title, except_id)).fetchone()
+        if r:
+            return {"id": r["id"], "title": r["title"] or title}
+        r = c.execute(
+            """
+            SELECT t.id, t.title FROM track_platforms p
+            JOIN tracks t ON t.id = p.track_id
+            WHERE p.platform_title=? AND p.status IN ({})
+              AND t.id!=?
+            LIMIT 1
+            """.format(",".join("?" * len(ACTIVE_RELEASE))),
+            (title, *ACTIVE_RELEASE, except_id),
+        ).fetchone()
+        if r:
+            return {"id": r["id"], "title": r["title"] or title}
+    return None
+
+
+def submit_release(track_id: str, platform: str, release_title: str) -> dict[str, Any]:
+    """
+    人点「确认发版」。独家授权 + 发行歌名唯一。
+
+    - 一首只能投一个平台（再投是违约）
+    - 发出去的歌名全局唯一（Suno 生成名可以重复）
+    - 发行歌名一旦定下就必须统一
+    """
+    if platform not in PLATFORMS:
+        raise ValueError(f"未知平台: {platform}")
+    title = (release_title or "").strip()
+    if not title:
+        raise ValueError("发行歌名不能空。Suno 生成名可以重复，发出去的必须唯一。")
+
+    track = get_track(track_id)
+    if not track:
+        raise ValueError(f"没有这首作品: {track_id}")
+
+    already_plat = track.get("release_platform") or ""
+    already_title = track.get("release_title") or ""
+    if already_plat and already_plat != platform:
+        raise ValueError(
+            f"独家授权：已发往{_plat_label(already_plat)}，不能再发到{_plat_label(platform)}")
+    if already_title and already_title != title:
+        raise ValueError(f"发行歌名已定为「{already_title}」，必须统一，不能改成「{title}」")
+
+    owner = find_title_owner(title, except_id=track_id)
+    if owner:
+        raise ValueError(f"发行歌名「{title}」已被「{owner['title']}」占用，发出去的歌名必须唯一")
+
+    upsert(track_id, release_title=title, release_platform=platform)
+    return set_platform_status(track_id, platform, "preparing", platform_title=title)
 
 
 def set_stage(track_id: str, stage: str) -> dict[str, Any]:
@@ -417,21 +489,48 @@ def link_listing(listing_id: int, track_id: str) -> dict[str, Any]:
     """
     把一条平台上架记录挂到某首本地/Suno 作品上。
 
-    改名、拆分都走这条：平台那边的 song_id 不变，只改它属于哪首原曲。
-    原来那条孤儿作品如果只是回填出来的空壳，挂走之后删掉。
+    发行歌名必须跟原曲统一；同一平台不能挂第二条（独家不能重复发）。
+    汽水分发到别的平台、歌名相同，可以挂。
     """
     db.init()
     now = _now()
+    dest = get_track(track_id)
+    if not dest:
+        raise ValueError(f"没有这首作品: {track_id}")
     with db.connect() as c:
         listing = c.execute("SELECT * FROM track_platforms WHERE id=?", (listing_id,)).fetchone()
         if not listing:
             raise ValueError(f"没有这条上架记录: {listing_id}")
-        dest = c.execute("SELECT id, clip_id, audio_file FROM tracks WHERE id=?", (track_id,)).fetchone()
-        if not dest:
-            raise ValueError(f"没有这首作品: {track_id}")
+
+        listing_title = (listing["platform_title"] or "").strip()
+        dest_rt = (dest.get("release_title") or "").strip()
+        dest_rp = dest.get("release_platform") or ""
+
+        same_plat = [l for l in (dest.get("listings") or [])
+                     if l.get("platform") == listing["platform"] and l.get("id") != listing_id]
+        if same_plat:
+            raise ValueError(
+                f"独家授权：这首在{_plat_label(listing['platform'])}已经有一条发行记录，不能再挂")
+
+        if dest_rt and listing_title and dest_rt != listing_title:
+            raise ValueError(
+                f"发行歌名必须统一：原曲是「{dest_rt}」，这条是「{listing_title}」")
+
+        check_title = dest_rt or listing_title
+        if check_title:
+            owner = find_title_owner(check_title, except_id=track_id)
+            if owner and owner["id"] != listing["track_id"]:
+                raise ValueError(
+                    f"发行歌名「{check_title}」已被「{owner['title']}」占用")
+
         old_tid = listing["track_id"]
         c.execute("UPDATE track_platforms SET track_id=?, updated_at=? WHERE id=?",
                   (track_id, now, listing_id))
+        if not dest_rt and listing_title:
+            c.execute("UPDATE tracks SET release_title=? WHERE id=?", (listing_title, track_id))
+        if not dest_rp:
+            c.execute("UPDATE tracks SET release_platform=? WHERE id=?",
+                      (listing["platform"], track_id))
         c.execute("UPDATE tracks SET updated_at=? WHERE id=?", (now, track_id))
         if old_tid != track_id:
             leftover = c.execute(
@@ -467,11 +566,21 @@ def resolve_track_for_listing(platform: str, song_id: str, title: str) -> str | 
                 (platform, str(song_id))).fetchone()
             if hit:
                 return hit["track_id"]
-        rows = list(c.execute(
-            "SELECT id, clip_id, audio_file FROM tracks WHERE title=?", (title,))) if title else []
+        if title:
+            hit = c.execute(
+                "SELECT id FROM tracks WHERE release_title=?", (title,)).fetchone()
+            if hit:
+                return hit["id"]
+            rows = list(c.execute(
+                "SELECT id, clip_id, audio_file FROM tracks WHERE title=?", (title,)))
+        else:
+            rows = []
     if not rows:
         return None
     sourced = [r for r in rows if r["clip_id"] or r["audio_file"]]
+    # 生成名可以重复：同名原曲超过一首就不敢自动挂，留给人手点。
+    if len(sourced) > 1:
+        return None
     return (sourced[0] if sourced else rows[0])["id"]
 
 
@@ -480,12 +589,15 @@ def source_candidates() -> list[dict[str, Any]]:
     db.init()
     with db.connect() as c:
         rows = c.execute(
-            "SELECT id, title, clip_id, audio_file, stage FROM tracks "
+            "SELECT id, title, clip_id, audio_file, stage, "
+            "release_title, release_platform FROM tracks "
             "WHERE IFNULL(clip_id,'') != '' OR IFNULL(audio_file,'') != '' "
             "ORDER BY updated_at DESC"
         ).fetchall()
     return [{"id": r["id"], "title": r["title"], "clip_id": r["clip_id"] or "",
-             "stage": r["stage"], "suno": bool(r["clip_id"])} for r in rows]
+             "stage": r["stage"], "suno": bool(r["clip_id"]),
+             "release_title": r["release_title"] or "",
+             "release_platform": r["release_platform"] or ""} for r in rows]
 
 
 def summary() -> dict[str, int]:
