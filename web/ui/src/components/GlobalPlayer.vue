@@ -155,7 +155,18 @@ const { player, closePlayer } = useLibraryStore();
 const { showToast } = useTasksStore();
 const audioPlayer = ref(null);
 
-const visible = computed(() => !!player.value?.url);
+/*
+ * ⚠️ `player` 是 store 里的 **reactive 对象**（`reactive({url, filename, visible})`），
+ * 不是 ref —— 所以取值是 `player.url`，**不能写 `player.value?.url`**。
+ *
+ * 写成 `.value` 的后果：那是 undefined，`visible` 恒为 false，
+ * **整个播放器永远不渲染** —— 资产库点播放没反应、没有报错、
+ * 连 audio 元素都不存在。而模板里其它地方（player.filename / player.url）
+ * 用法都是对的，只有这一行错，所以格外难发现。
+ *
+ * 旁证：同文件 304 行的 watch 用的就是 `() => player.url`。
+ */
+const visible = computed(() => !!player.url);
 
 const isPlaying = ref(false);
 const currentTime = ref(0);

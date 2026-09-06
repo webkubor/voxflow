@@ -386,8 +386,21 @@ const showAddPersona = ref(false);
 const showEditPersona = ref(false);
 const editingKey = ref('');
 
-// 试听
-const previewPlayer = ref(null);
+/*
+ * 试听。
+ *
+ * ⚠️ `previewPlayer` 必须**直接用 store 里的那个 ref**，不能在这里
+ * 另起一个 `ref(null)`。
+ *
+ * 模板上的 `ref="previewPlayer"` 只会填充 setup 作用域里的同名 ref ——
+ * 本地再声明一个，DOM 元素就填进本地那个，而 store 里的永远是 null。
+ * 于是 `togglePreview` 的第一行 `if (!audio) return` 每次都命中：
+ * **点试听没反应、没有任何报错**，音色和资产库全都放不了。
+ *
+ * 这个 bug 存在很久了（不是这轮改出来的），但一直没人发现 —— 因为它
+ * 不报错、不留日志，只是「点了没动静」，很容易被当成「还没加载好」。
+ */
+const { previewPlayer } = storeToRefs(voicesStore);
 const previewKey = computed(() => voicesStore.previewKey);
 const previewProgress = computed(() => voicesStore.previewProgress);
 const onPreviewProgress = (e) => voicesStore.onPreviewProgress(e);
