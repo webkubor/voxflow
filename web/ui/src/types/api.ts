@@ -291,6 +291,12 @@ export interface TrackEconomics {
   track_id: string;
   title: string;
   stage: string;
+  /** 发出去的歌名。空 = 还没发。 */
+  release_title: string;
+  /** 独家投向的平台。空 = 还没发。 */
+  release_platform: string;
+  /** 这首实际出现在哪些平台（含汽水分发）。 */
+  platforms: Array<{ platform: string; status: string; title: string }>;
   cost_cny: number;
   by_provider: Record<string, { credits: number; cost_cny: number; n: number }>;
   /** 近 30 日播放量（音乐人后台）。null = 还没抓过，不是 0 —— 两者含义完全不同 */

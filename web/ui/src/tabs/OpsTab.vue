@@ -155,6 +155,7 @@
                 <thead>
                   <tr>
                     <th>作品</th>
+                    <th>发布平台</th>
                     <th class="num">成本</th>
                     <th class="num">近 30 日播放</th>
                     <th class="num">折算收益</th>
@@ -164,7 +165,24 @@
                 </thead>
                 <tbody>
                   <tr v-for="t in eco.tracks" :key="t.track_id">
-                    <td class="ttl" :title="t.track_id">{{ t.title }}</td>
+                    <td class="ttl" :title="t.track_id">
+                      {{ t.release_title || t.title }}
+                    </td>
+                    <td>
+                      <span v-if="!(t.platforms || []).length" class="plat-none">未发行</span>
+                      <span v-else class="plat-cell">
+                        <span
+                          v-for="p in t.platforms"
+                          :key="p.platform + p.status"
+                          class="plat-chip"
+                          :title="p.title || t.title"
+                        >
+                          <PlatformMark :platform="p.platform" size="sm" />
+                          {{ platLabel(p.platform) }}
+                          <em v-if="t.release_platform === p.platform">独家</em>
+                        </span>
+                      </span>
+                    </td>
                     <td class="num strong">{{ t.cost_cny ? `¥${fmt(t.cost_cny)}` : '—' }}</td>
                     <!-- null 和 0 要分开显示：null 是「还没抓数据」，
                          0 是「真的一次没播」，两者该采取的行动完全不同。 -->
@@ -335,9 +353,15 @@ const roiClass = (roi: number | null) =>
   (roi === null ? '' : roi >= 1 ? 'ok-text' : roi > 0 ? 'warn-text' : 'err-text');
 
 /** 还差多少次播放回本。已回本显示「已回本」，没成本数据的不算。 */
+const PLAT_LABEL: Record<string, string> = {
+  qishui: '汽水', netease: '网易云', tencent: 'QQ音乐',
+};
+const platLabel = (k: string) => PLAT_LABEL[k] || k;
+
 const gapText = (t: TrackEconomics) => {
   if (!t.cost_cny) return '—';
-  const need = t.breakeven_plays.netease;
+  const plat = t.release_platform || 'netease';
+  const need = t.breakeven_plays[plat] || t.breakeven_plays.netease;
   if (!need) return '—';
   if (t.plays === null) return `需 ${need.toLocaleString()} 次`;
   const left = need - t.plays;
@@ -560,7 +584,7 @@ onUnmounted(() => { clearInterval(fastTimer); clearInterval(slowTimer); });
 
 /* ── 表格 ── */
 .table-scroll { overflow-x: auto; }
-.cost-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.cost-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 12px; }
 .cost-table th {
   text-align: left;
   font-weight: 500;
@@ -578,7 +602,18 @@ onUnmounted(() => { clearInterval(fastTimer); clearInterval(slowTimer); });
 }
 .cost-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cost-table .strong { color: var(--vf-text-1); font-weight: 600; }
-.cost-table .ttl { color: var(--vf-text-1); max-width: 220px; }
+.cost-table .ttl { color: var(--vf-text-1); max-width: 140px; }
+.plat-none { color: var(--vf-text-3); font-size: 12px; }
+.plat-cell { display: flex; flex-wrap: wrap; gap: 6px; }
+.plat-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; color: var(--vf-text-2);
+  white-space: nowrap;
+}
+.plat-chip em {
+  font-style: normal; font-size: 10px;
+  color: var(--vf-primary); margin-left: 2px;
+}
 .cost-table .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
 .mix { display: flex; flex-wrap: wrap; gap: 4px; }
 .mix-chip {
