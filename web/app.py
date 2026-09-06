@@ -203,14 +203,19 @@ def _notify_music_task(task_id: str):
         if failed:
             return                      # 失败的不进台账，台账只记真作品
 
+        # 只填机器知道的：曲名、时间、模型这些。
+        # **发行歌名 / 资产归属 / 授权方式 / 负责账号是人填的** ——
+        # 机器猜一个默认值填进去，人扫一眼觉得「已经有了」就不会去改，
+        # 等到要结算才发现归属全是错的。空着反而看得见。
         notify.ledger_add({
             "曲名": title,
-            "状态": "已生成",
+            "状态": "未发行",
             "艺人署名": artist,
             "风格标签": params.get("tags", ""),
             "生成模型": params.get("model", ""),
             "生成时间": int(time.time() * 1000),   # 飞书日期字段收毫秒时间戳
-            "备注": f"voxflow task {task_id}",
+            "备注": f"voxflow task {task_id}"
+                    + ("" if files else " · 无音频文件"),
         })
     except Exception as e:                # noqa: BLE001 —— 旁路，绝不影响主流程
         obs.log("notify_hook_failed", level="warn", task_id=task_id, error=str(e)[:200])
