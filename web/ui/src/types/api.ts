@@ -182,6 +182,11 @@ export interface Capability {
   credits_total?: number;
   /** 下次续费日（ISO 字符串）—— 后端没返回时不显示「下次重置」 */
   renew_date?: string;
+  /**
+   * 这个主体受不受额度限制。自家租户不受限，此时**余额恒为 0 而功能完全正常** ——
+   * 顶栏挂个「0 分」只会让人以为没额度了。判据要用它，不能只看 credits。
+   */
+  unmetered?: boolean;
 }
 
 export type CapabilitiesResponse = Record<'tts' | 'suno' | 'studio' | 'llm', Capability>;

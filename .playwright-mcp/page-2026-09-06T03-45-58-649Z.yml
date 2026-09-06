@@ -1,0 +1,114 @@
+- generic [ref=f2e7]:
+  - generic [ref=f2e8]:
+    - generic [ref=f2e9]:
+      - button "折叠音色库" [ref=f2e10] [cursor=pointer]
+      - generic [ref=f2e13]:
+        - img "VoxFlow" [ref=f2e14]
+        - generic [ref=f2e15]:
+          - generic [ref=f2e16]: VoxFlow
+          - generic [ref=f2e17]: 声流
+    - generic [ref=f2e18]:
+      - generic [ref=f2e19]:
+        - generic [ref=f2e20]:
+          - generic [ref=f2e22]: 语音
+          - generic [ref=f2e23]: Qwen3-TTS
+        - generic [ref=f2e24]:
+          - generic [ref=f2e26]: 音乐
+          - generic [ref=f2e27]: Suno
+        - generic [ref=f2e28]:
+          - generic [ref=f2e30]: museav
+          - generic [ref=f2e31]: 未接
+        - generic [ref=f2e32]:
+          - generic [ref=f2e34]: 文案
+          - generic [ref=f2e35]: 未接
+      - button "错误日志（0 条）" [ref=f2e36] [cursor=pointer]
+      - button "任务队列（0 进行中）" [ref=f2e40] [cursor=pointer]
+  - generic [ref=f2e46]:
+    - complementary [ref=f2e47]:
+      - generic [ref=f2e48]:
+        - heading "音色库" [level=3] [ref=f2e54]
+        - button "注册新音色" [ref=f2e56] [cursor=pointer]
+      - generic [ref=f2e59]:
+        - button "老 老陈·人文旁白 ✓ 低沉稳重，尾音干净，适合历史与人文题材；语速偏慢" [pressed] [ref=f2e60] [cursor=pointer]:
+          - generic [ref=f2e61]:
+            - generic [ref=f2e62]: 老
+            - generic [ref=f2e64]:
+              - generic [ref=f2e65]:
+                - generic "老陈·人文旁白" [ref=f2e66]
+                - generic [ref=f2e67]: ✓
+              - paragraph [ref=f2e68]: 低沉稳重，尾音干净，适合历史与人文题材；语速偏慢
+          - generic [ref=f2e69]:
+            - button "试听" [ref=f2e70]
+            - button "编辑" [ref=f2e74]
+            - button "删除" [ref=f2e78]
+        - button "温 温柔旁白 ✓ 中性偏柔，语速平稳，适合纪录片和知识讲解" [ref=f2e82] [cursor=pointer]:
+          - generic [ref=f2e83]:
+            - generic [ref=f2e84]: 温
+            - generic [ref=f2e86]:
+              - generic [ref=f2e87]:
+                - generic "温柔旁白" [ref=f2e88]
+                - generic [ref=f2e89]: ✓
+              - paragraph [ref=f2e90]: 中性偏柔，语速平稳，适合纪录片和知识讲解
+          - generic [ref=f2e91]:
+            - button "试听" [ref=f2e92]
+            - button "编辑" [ref=f2e96]
+            - button "删除" [ref=f2e100]
+    - generic [ref=f2e105]:
+      - tablist [ref=f2e106]:
+        - tab "声音克隆" [ref=f2e107] [cursor=pointer]
+        - tab "音色设计" [ref=f2e113] [cursor=pointer]
+        - tab "剧本创作" [ref=f2e119] [cursor=pointer]
+        - tab "AI 音乐" [ref=f2e124] [cursor=pointer]
+        - tab "作品看板" [ref=f2e130] [cursor=pointer]
+        - tab "全网发行" [ref=f2e138] [cursor=pointer]
+        - tab "资产库" [ref=f2e144] [cursor=pointer]
+        - tab "运营台" [selected] [ref=f2e150] [cursor=pointer]
+      - generic [ref=f2e159]:
+        - generic [ref=f2e160]:
+          - generic [ref=f2e161]:
+            - generic [ref=f2e162]: 近 30 天开销
+            - generic [ref=f2e163]: ¥0.00
+            - generic [ref=f2e164]: 0 个上游 · 0 次调用
+          - generic [ref=f2e165]:
+            - generic [ref=f2e166]: 本地跑省下
+            - generic [ref=f2e167]: ¥0.00
+            - generic [ref=f2e168]: 同样的量走商业 API 要 ¥0.00
+          - generic [ref=f2e169]:
+            - generic [ref=f2e170]: 累计收益
+            - generic [ref=f2e171]: ¥0.00
+            - generic [ref=f2e172]: 0 次播放 · 实测 ¥0.00/千播
+          - generic [ref=f2e173]:
+            - generic [ref=f2e174]: 单曲均价
+            - generic [ref=f2e175]: ¥0.00
+            - generic [ref=f2e176]: 还没有计过量的作品
+          - generic [ref=f2e177]:
+            - generic [ref=f2e178]: 系统状态
+            - generic [ref=f2e179]: 检查中
+            - generic [ref=f2e181]: 已运行 0 秒
+        - generic [ref=f2e185]:
+          - generic [ref=f2e186]:
+            - generic [ref=f2e187]:
+              - generic [ref=f2e192]: 赚回来多少
+              - generic [ref=f2e193]: 数据来自各平台后台，由 scripts/sync_*.py 同步
+            - generic [ref=f2e194]:
+              - text: 还没有平台收益数据。跑一次
+              - code [ref=f2e195]: scripts/sync_netease.py
+              - text: 之类的同步脚本。
+            - paragraph [ref=f2e196]:
+              - text: 标「实测」的千播单价是后台可提现金额 ÷ 累计播放量反推出来的 —— 比公开资料的区间中位数准，因为它已经包含了这个账号的实际权益档位。 标「估算」的还没有收益数据，用的是
+              - code [ref=f2e197]: configs/pricing.json
+              - text: 里的公开值。
+          - generic [ref=f2e198]:
+            - generic [ref=f2e199]:
+              - generic [ref=f2e205]: 钱花在哪
+              - generic [ref=f2e206]: 近 30 天
+            - generic [ref=f2e207]: 还没有计量数据。生成一首歌或合成一段语音之后，这里就有数了。
+          - generic [ref=f2e208]:
+            - generic [ref=f2e209]: 每首歌：花了多少 · 赚回多少 · 回本没有
+            - generic [ref=f2e215]: 还没有作品的成本记录。
+            - paragraph [ref=f2e216]:
+              - text: 播放量是网易云音乐人后台的近 30 日数据（公开 API 给不了 ——
+              - code [ref=f2e217]: playedNum
+              - text: 恒为 0）。跑
+              - code [ref=f2e218]: scripts/ncm_track_stats.py
+              - text: 更新，需登录。 折算收益 = 播放量 × 实测千播单价（账号总收益 ÷ 账号总播放）。 后台没有单曲收益列，所以这是折算值不是平台实付 —— 网易云按播放计费、同账号各曲单价基本相同，折算站得住，但别当成对账依据。 「—」表示没有数据，不是 0。两者含义完全不同：前者是还没抓，后者是真的没播。

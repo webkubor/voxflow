@@ -753,7 +753,16 @@ const formatRenewDate = (iso) => {
 }
 
 /* 隐藏 n-tabs —— 只用它做路由同步，导航我们自己渲染 */
-.hidden-tabs {
+/*
+ * n-tabs 只当「路由 ↔ 当前 tab」的同步源用，它自带的导航条不显示
+ * （上面那排手搓的 .tab-nav 才是给人点的，因为 n-tabs 的 tab 只能放文字、
+ * 8 个挤一起分不出来）。
+ *
+ * ⚠️ 只能隐藏**导航条**，不能隐藏整个 .hidden-tabs —— 内容区（n-tab-pane）
+ * 就在它里面，一起 display:none 的话八个屏全看不见，页面只剩顶栏、
+ * 音色库和那排 tab 按钮，看起来就是「黑屏」「数据没了」。
+ */
+.hidden-tabs :deep(.n-tabs-nav) {
   display: none;
 }
 </style>

@@ -123,9 +123,13 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
    */
   const formatMuseavBadge = (m: typeof caps.value.museav): string => {
     if (!m?.ready) return '未接';
+    const who = m.identity || 'museav';
+    // 不受额度限制时**不能显示余额** —— 那种情况下余额恒为 0，顶栏挂个
+    // 「0 分」只会让人以为没额度了，而实际出图完全正常。
+    if (m.unmetered) return `${who} · 不限额`;
     const c = m.credits;
-    if (c === undefined || c === null) return m.identity || 'museav';
-    return `${m.identity || 'museav'} · ${c} 分`;
+    if (c === undefined || c === null) return who;
+    return `${who} · ${c} 分`;
   };
 
   /** 顶栏 Suno chip 的文案。优先「套餐 · 已用/总额」，降级到「套餐 · 剩余」。 */

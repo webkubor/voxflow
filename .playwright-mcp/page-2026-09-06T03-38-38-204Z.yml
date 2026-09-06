@@ -1,0 +1,75 @@
+- generic [ref=e7]:
+  - generic [ref=e8]:
+    - generic [ref=e9]:
+      - button "折叠音色库" [ref=e10] [cursor=pointer]
+      - generic [ref=e13]:
+        - img "VoxFlow" [ref=e14]
+        - generic [ref=e15]:
+          - generic [ref=e16]: VoxFlow
+          - generic [ref=e17]: 声流
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - generic [ref=e20]:
+          - generic [ref=e22]: 语音
+          - generic [ref=e23]: Qwen3-TTS
+        - generic [ref=e24]:
+          - generic [ref=e26]: 音乐
+          - generic [ref=e27]: Suno
+        - generic [ref=e28]:
+          - generic [ref=e30]: museav
+          - generic [ref=e31]: 未接
+        - generic [ref=e32]:
+          - generic [ref=e34]: 文案
+          - generic [ref=e35]: 未接
+      - button "错误日志（0 条）" [ref=e36] [cursor=pointer]
+      - button "任务队列（0 进行中）" [ref=e40] [cursor=pointer]
+  - generic [ref=e46]:
+    - complementary [ref=e47]:
+      - generic [ref=e48]:
+        - heading "音色库" [level=3] [ref=e54]
+        - button "注册新音色" [ref=e56] [cursor=pointer]
+      - generic [ref=e59]:
+        - button "老 老陈·人文旁白 ✓ 低沉稳重，尾音干净，适合历史与人文题材；语速偏慢" [pressed] [ref=e60] [cursor=pointer]:
+          - generic [ref=e61]:
+            - generic [ref=e62]: 老
+            - generic [ref=e64]:
+              - generic [ref=e65]:
+                - generic "老陈·人文旁白" [ref=e66]
+                - generic [ref=e67]: ✓
+              - paragraph [ref=e68]: 低沉稳重，尾音干净，适合历史与人文题材；语速偏慢
+          - generic [ref=e69]:
+            - button "试听" [ref=e70]
+            - button "编辑" [ref=e74]
+            - button "删除" [ref=e78]
+        - button "温 温柔旁白 ✓ 中性偏柔，语速平稳，适合纪录片和知识讲解" [ref=e82] [cursor=pointer]:
+          - generic [ref=e83]:
+            - generic [ref=e84]: 温
+            - generic [ref=e86]:
+              - generic [ref=e87]:
+                - generic "温柔旁白" [ref=e88]
+                - generic [ref=e89]: ✓
+              - paragraph [ref=e90]: 中性偏柔，语速平稳，适合纪录片和知识讲解
+          - generic [ref=e91]:
+            - button "试听" [ref=e92]
+            - button "编辑" [ref=e96]
+            - button "删除" [ref=e100]
+    - generic [ref=e105]:
+      - tablist [ref=e106]:
+        - tab "声音克隆" [selected] [ref=e107] [cursor=pointer]
+        - tab "音色设计" [ref=e113] [cursor=pointer]
+        - tab "剧本创作" [ref=e119] [cursor=pointer]
+        - tab "AI 音乐" [ref=e124] [cursor=pointer]
+        - tab "作品看板" [ref=e130] [cursor=pointer]
+        - tab "全网发行" [ref=e138] [cursor=pointer]
+        - tab "资产库" [ref=e144] [cursor=pointer]
+        - tab "运营台" [ref=e150] [cursor=pointer]
+      - generic [ref=e155]:
+        - generic [ref=e156]:
+          - generic [ref=e157]: 老
+          - generic [ref=e159]:
+            - generic [ref=e160]: 当前音色
+            - generic [ref=e161]: 老陈·人文旁白
+          - generic [ref=e162]: ✓ 样音已装载
+        - generic [ref=e163]:
+          - generic [ref=e164]: 模型
+          - generic [ref=e165]: Qwen3-TTS · 就绪

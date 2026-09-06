@@ -106,6 +106,26 @@ check("模型没下不算 down（degraded 才对）",
       health["checks"]["tts_models"].get("ok") is True,
       "「还没下模型」被判成故障，新用户打开就是红色报错")
 
+# 主内容区不能被整体隐藏。
+#
+# 2026-09-06 的事故：MainLayout 的 `.hidden-tabs { display: none }` 把整个
+# n-tabs 隐藏了 —— 而**八个屏的内容全在它里面**。页面上只剩顶栏、音色库和
+# 那排 tab 按钮，点什么都是一片空白，看起来就是「黑屏 / 数据全没了」。
+#
+# 那个 class 的本意只是隐藏 n-tabs **自带的导航条**（上面那排手搓的 .tab-nav
+# 才是给人点的），写成隐藏整个容器就把内容一起藏了。
+#
+# **为什么这个 bug 能溜过所有既有检查**：接口全 200、store 方法都在、
+# 控制台零报错，而 `document.querySelector('.kpi')` 照样能找到元素 ——
+# `display:none` 的节点在 DOM 里活得好好的。「在 DOM 里」≠「看得见」，
+# 而人看的是后者。
+_ml = (PROJECT / "web/ui/src/components/MainLayout.vue").read_text(encoding="utf-8")
+_bad_hide = re.search(r"^\.hidden-tabs\s*\{[^}]*display:\s*none", _ml, re.M)
+check("n-tabs 容器没有被整体隐藏（内容区在里面）",
+      not _bad_hide,
+      "`.hidden-tabs { display:none }` 会把八个屏的内容一起藏掉 —— "
+      "只能隐藏 :deep(.n-tabs-nav)")
+
 # UI 一致性：图标语言只能有一套。
 #
 # Icon.vue 的文件头写清了为什么不用 emoji（三套系统渲染完全不同、不能跟主题
