@@ -72,14 +72,30 @@ def main() -> int:
             "SELECT clip_id FROM tracks WHERE clip_id IS NOT NULL AND clip_id != ''")}
         titles = {r["title"] for r in c.execute("SELECT title FROM tracks")}
 
-    added, skipped = 0, 0
+    added, skipped, timed = 0, 0, 0
     for cl in clips:
         cid = cl.get("id") or ""
-        if not cid or cid in have:
+        if not cid:
+            continue
+        meta = cl.get("metadata") or {}
+        dur = meta.get("duration")
+        seconds = None
+        try:
+            if dur:
+                seconds = int(round(float(dur)))
+        except (TypeError, ValueError):
+            seconds = None
+        if cid in have:
+            # 已有曲目也回填时长 —— 匹配改名后的上架记录靠这个。
+            if seconds and not DRY:
+                with db.connect() as c:
+                    c.execute(
+                        "UPDATE tracks SET duration=? WHERE clip_id=? AND (duration IS NULL OR duration=0)",
+                        (seconds, cid))
+                    timed += c.rowcount
             skipped += 1
             continue
         title = (cl.get("title") or "").strip() or "未命名"
-        meta = cl.get("metadata") or {}
         created = (cl.get("created_at") or "")[:19].replace("Z", "") or datetime.now().isoformat(timespec="seconds")
         note = "从 Suno 云端补录"
         if title in titles:
@@ -87,18 +103,18 @@ def main() -> int:
             # 但人看列表时会懵，所以标一下，别让人以为是重复数据。
             note += " · 与已有曲目同名（Suno 一次出两首，正常）"
         if DRY:
-            print(f"  + {title}  {created}  {cl.get('model_name','')}")
+            print(f"  + {title}  {created}  {cl.get('model_name','')}  {seconds or '-'}s")
             added += 1
             continue
         with db.connect() as c:
             c.execute(
-                """INSERT INTO tracks (id, title, stage, tags, clip_id, note, created_at, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?)""",
-                (cid, title, "generated", meta.get("tags", ""), cid, note, created, created),
+                """INSERT INTO tracks (id, title, stage, tags, clip_id, duration, note, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                (cid, title, "generated", meta.get("tags", ""), cid, seconds, note, created, created),
             )
         added += 1
 
-    print(f"{'（预演）' if DRY else ''}新增 {added} 首，已有跳过 {skipped} 首")
+    print(f"{'（预演）' if DRY else ''}新增 {added} 首，已有跳过 {skipped} 首，回填时长 {timed} 首")
     if not DRY and added:
         print(f"库：{DATA_DIR / 'voxflow.db'}")
     return 0

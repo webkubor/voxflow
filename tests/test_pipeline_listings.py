@@ -72,6 +72,18 @@ def main() -> None:
     none = P.resolve_track_for_listing("netease", "888", "从未见过的歌")
     check("完全对不上返回 None，让调用方建孤儿", none is None)
 
+    P.upsert("clip-a", title="同名生成", stage="generated", clip_id="aaa", duration=121)
+    P.upsert("clip-b", title="同名生成", stage="generated", clip_id="bbb", duration=187)
+    check("同名两首原曲不敢按歌名自动挂",
+          P.resolve_track_for_listing("netease", "d1", "同名生成") is None)
+    check("同名两首用时长能认到原曲",
+          P.resolve_track_for_listing("netease", "d2", "平台改过的名字", duration=187) == "clip-b")
+    check("改名后按时长认原曲",
+          P.resolve_track_for_listing("qishui", "d3", "完全另一名字", duration=121) == "clip-a")
+    P.upsert("clip-c", title="另一生成名", stage="generated", clip_id="ccc", duration=121)
+    check("两首一样长不敢猜",
+          P.resolve_track_for_listing("netease", "d4", "又一改名", duration=121) is None)
+
     print(f"\n{len(PASSED)} 项通过")
 
 

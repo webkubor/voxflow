@@ -155,7 +155,8 @@ matched, added = [], []
 for s in songs:
     title = s["name"].strip()
     sid = str(s["id"])
-    tid = P.resolve_track_for_listing("netease", sid, title)
+    tid = P.resolve_track_for_listing(
+        "netease", sid, title, duration=round((s.get("duration") or 0) / 1000))
     if not tid:
         tid = re.sub(r"[^\w一-鿿]+", "-", title).strip("-").lower() or f"ncm-{sid}"
         P.upsert(tid, title=title, stage="published", note="从网易云回填")

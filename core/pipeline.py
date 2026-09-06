@@ -244,6 +244,7 @@ def _row_to_track(row, platforms: dict[str, Any],
         # 发出去的身份。title 是生成名，可以重复；release_title 必须唯一。
         "release_title": (row["release_title"] if "release_title" in row.keys() else "") or "",
         "release_platform": (row["release_platform"] if "release_platform" in row.keys() else "") or "",
+        "duration": (row["duration"] if "duration" in row.keys() else None),
         "cloud_backup": {
             "status": b_status,
             "label": BACKUP_STATUS_LABELS.get(b_status, b_status),
@@ -353,7 +354,7 @@ def upsert(track_id: str, **fields: Any) -> dict[str, Any]:
 
     cols = ("title", "stage", "lyrics", "tags", "prompt", "album_desc", "voice",
             "clip_id", "clip_ids", "audio_file", "cover_file", "note", "cloud_backup",
-            "release_title", "release_platform")
+            "release_title", "release_platform", "duration")
     given = {k: v for k, v in fields.items() if k in cols and v is not None}
 
     with db.connect() as c:
@@ -586,16 +587,50 @@ def link_listing(listing_id: int, track_id: str) -> dict[str, Any]:
     return get_track(track_id) or {}
 
 
-def resolve_track_for_listing(platform: str, song_id: str, title: str) -> str | None:
+def _seconds(value: Any) -> int | None:
+    """时长统一成整秒。0 / 空 / 坏值都当成「没有」，不能拿去匹配。"""
+    if value is None or value == "":
+        return None
+    try:
+        n = int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+def _match_by_duration(c, seconds: int) -> str | None:
+    """
+    歌名对不上（改过名）时，用时长认原曲。
+
+    人改歌名，几乎不改音频 —— 生成多长，发出去就是多长。
+    只在「带 Suno clip / 本地音频、且这个时长只对应一首」时才自动挂；
+    两首一样长就不敢猜。
+    """
+    rows = list(c.execute(
+        "SELECT id FROM tracks "
+        "WHERE duration IS NOT NULL "
+        "AND ABS(duration - ?) <= 1 "
+        "AND (IFNULL(clip_id,'') != '' OR IFNULL(audio_file,'') != '')",
+        (seconds,)))
+    if len(rows) == 1:
+        return rows[0]["id"]
+    return None
+
+
+def resolve_track_for_listing(platform: str, song_id: str, title: str,
+                              duration: Any = None) -> str | None:
     """
     给一条平台上架记录找本地作品。顺序：
 
     1. 这个 (platform, song_id) 已经挂过 → 沿用，避免重跑同步把人手关联冲掉
-    2. 本地有同名作品，优先带 Suno clip / 本地音频的那首（拆成多首同名时挂到原曲）
-    3. 找不到 → None，调用方再建孤儿
+    2. 发行歌名对得上
+    3. 生成歌名对得上，且只有一首原曲（同名超过一首就不敢自动挂）
+    4. 歌名对不上或同名多首 → 用时长（±1 秒）在原曲里唯一命中
+    5. 找不到 → None，调用方再建孤儿
     """
     db.init()
     title = (title or "").strip()
+    seconds = _seconds(duration)
     with db.connect() as c:
         if song_id:
             hit = c.execute(
@@ -609,16 +644,26 @@ def resolve_track_for_listing(platform: str, song_id: str, title: str) -> str | 
             if hit:
                 return hit["id"]
             rows = list(c.execute(
-                "SELECT id, clip_id, audio_file FROM tracks WHERE title=?", (title,)))
+                "SELECT id, clip_id, audio_file, duration FROM tracks WHERE title=?",
+                (title,)))
         else:
             rows = []
-    if not rows:
-        return None
-    sourced = [r for r in rows if r["clip_id"] or r["audio_file"]]
-    # 生成名可以重复：同名原曲超过一首就不敢自动挂，留给人手点。
-    if len(sourced) > 1:
-        return None
-    return (sourced[0] if sourced else rows[0])["id"]
+        sourced = [r for r in rows if r["clip_id"] or r["audio_file"]]
+        if len(sourced) == 1:
+            return sourced[0]["id"]
+        if len(sourced) > 1:
+            if seconds is not None:
+                by_dur = [r for r in sourced
+                          if _seconds(r["duration"]) is not None
+                          and abs(int(_seconds(r["duration"])) - seconds) <= 1]
+                if len(by_dur) == 1:
+                    return by_dur[0]["id"]
+            return None
+        if rows:
+            return rows[0]["id"]
+        if seconds is not None:
+            return _match_by_duration(c, seconds)
+    return None
 
 
 def source_candidates() -> list[dict[str, Any]]:

@@ -174,7 +174,8 @@ def main() -> None:
         if not title:
             continue
         sid = str(si.get("id") or "")
-        tid = P.resolve_track_for_listing("tencent", sid, title)
+        tid = P.resolve_track_for_listing(
+            "tencent", sid, title, duration=round((si.get("interval") or 0)))
         if not tid:
             tid = re.sub(r"[^\w一-鿿]+", "-", title).strip("-").lower() or f"qq-{sid}"
             P.upsert(tid, title=title, stage="published", note="从 QQ 音乐回填")
