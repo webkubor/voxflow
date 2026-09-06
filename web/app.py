@@ -1736,6 +1736,20 @@ class PipelineStageRequest(BaseModel):
     stage: str
 
 
+@app.get("/api/notify/owner")
+def notify_owner():
+    """「我是谁」—— 用于看板的「只看我负责的」。
+
+    读通知配置里的 assignees.owner：那份配置本来就是分配责任人用的真源，
+    不另存一份「当前用户」，省得两处不同步。没配就返回空，前端的筛选
+    自然筛不出东西 —— 比编一个默认用户强。
+    """
+    from core import notify  # noqa: PLC0415
+
+    owner = ((notify.account() or {}).get("assignees") or {}).get("owner") or {}
+    return {"name": owner.get("name", ""), "open_id": owner.get("open_id", "")}
+
+
 @app.get("/api/pipeline/readiness")
 def pipeline_readiness(track_id: str, platform: str):
     """这首歌发这个平台，备料齐了没有 —— 缺哪几项、每项怎么补。
@@ -1960,43 +1974,29 @@ async def capabilities():
             return {"ready": False, "credits": 0, "detail": "未登录或 CLI 不可用"}
 
     def _probe_museav():
-        base_url = os.environ.get("VOXFLOW_LLM_BASE_URL", "")
-        api_key = os.environ.get("VOXFLOW_LLM_API_KEY", "")
-        if not (base_url and api_key and "manager.museav" in base_url):
-            return {"ready": False, "identity": "", "detail": "未接中台（本地模式）"}
+        from core import cover as _cover                       # noqa: PLC0415
+        if not _cover.available():
+            return {"ready": False, "identity": "",
+                    "detail": "museav CLI 未登录（museav login）"}
         try:
-            # 必须带 User-Agent：默认的 Python-urllib/3.x 会被 CDN 当爬虫挡掉（403），
-            # 而 curl 同样的请求是通的 —— 这种差异很容易被误判成「网络不通」。
-            rq = _req.Request(f"{base_url}/me", headers={
-                "Authorization": f"Bearer {api_key}", "User-Agent": f"VoxFlow/{VERSION}"})
-            with _req.urlopen(rq, timeout=10) as resp:
-                me = _json.loads(resp.read().decode())
-            t = me.get("tenant") or {}
-            who = t.get("nickname") or t.get("name") or "未知"
-            # 顺手把积分带上。它是硬约束（没了就出不了图），和 Suno 的积分
-            # 完全同性质 —— 那边顶栏一直显示，这边一直没有，于是「为什么出不了图」
-            # 每次都要重新查一遍。
-            from core import cover as _cover                       # noqa: PLC0415
             bal = _cover.balance()
             credits = bal.get("credits", 0)
             unmetered = bal.get("unmetered", False)
+            who = bal.get("identity") or "museav"
             return {"ready": True, "identity": who, "model": who,
                     "credits": credits, "unmetered": unmetered,
-                    "credits_total": None,   # 中台是预付制，没有「总额」概念
-                    "detail": (f"museav 中台 · 租户 {who} · 自家租户，不限额"
+                    "credits_total": None,
+                    "detail": (f"museav CLI · {who} · 自家租户，不限额"
                                if unmetered else
-                               f"museav 中台 · 租户 {who} · 剩 {credits} 积分"
+                               f"museav CLI · {who} · 剩 {credits} 积分"
                                f"（够出 {credits // _cover.CREDITS_PER_COVER} 张封面）"
                                if credits else
-                               f"museav 中台 · 租户 {who} · 余额闸门拦住，出图会被拒")}
+                               f"museav CLI · {who} · 余额闸门拦住，出图会被拒")}
         except Exception as e:
-            # 把真实错误带出来，不要用「连不上」这种模糊话盖住 ——
-            # 那样人只能猜是网络、凭据还是超时，每种猜法都要花时间验证一遍。
-            # key 不会出现在异常里（它在 header 中），可以安全展示。
             kind = type(e).__name__
             msg = str(e)[:80]
             return {"ready": False, "identity": "",
-                    "detail": f"museav 中台连接失败：{kind} {msg}"}
+                    "detail": f"museav CLI 失败：{kind} {msg}"}
 
     def _probe_llm():
         try:
@@ -2536,7 +2536,7 @@ def cover_generate(req: CoverRequest):
     """
     from core import cover
     if not cover.available():
-        raise HTTPException(400, "未接 museav 中台。用 ./run.sh web 启动会自动注入凭据。")
+        raise HTTPException(400, "museav CLI 未登录。终端跑一次 `museav login` 即可。")
     if not (req.prompt.strip() or req.title.strip()):
         raise HTTPException(400, "至少要有标题或提示词")
     # 比例写错是用户输入问题，要在提交时就 400 挡掉 —— 丢进任务队列再失败的话，
@@ -2593,7 +2593,7 @@ def cover_status():
         "can_generate": bool(cover.available() and
                              (bal.get("unmetered") or bal["credits"] >= cover.CREDITS_PER_COVER)),
         "detail": (f"{bal['detail']}，一张约 ¥{est:.2f}"
-                   if cover.available() else "未接中台（本地模式）"),
+                   if cover.available() else "museav CLI 未登录"),
     }
 
 
@@ -2901,7 +2901,7 @@ def cover_generate(req: CoverRequest):
     """
     from core import cover
     if not cover.available():
-        raise HTTPException(400, "未接 museav 中台。用 ./run.sh web 启动会自动注入凭据。")
+        raise HTTPException(400, "museav CLI 未登录。终端跑一次 `museav login` 即可。")
     if not (req.prompt.strip() or req.title.strip()):
         raise HTTPException(400, "至少要有标题或提示词")
     # 比例写错是用户输入问题，要在提交时就 400 挡掉 —— 丢进任务队列再失败的话，
@@ -2958,7 +2958,7 @@ def cover_status():
         "can_generate": bool(cover.available() and
                              (bal.get("unmetered") or bal["credits"] >= cover.CREDITS_PER_COVER)),
         "detail": (f"{bal['detail']}，一张约 ¥{est:.2f}"
-                   if cover.available() else "未接中台（本地模式）"),
+                   if cover.available() else "museav CLI 未登录"),
     }
 
 

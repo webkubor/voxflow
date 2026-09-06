@@ -11,7 +11,7 @@
 |---|---|
 | `suno generate` / `describe` / `cover` / `extend` / `remaster` / `concat` / `stems` | Suno credits（月度上限，用完要等下个月） |
 | `POST /api/suno/generate`、`/api/suno/batch`、`/api/suno/cover` | 同上（它们就是在调上面那些） |
-| `POST /api/cover/generate`、中台 `/api/generate` | museav 积分 |
+| `POST /api/cover/generate`、`museav gen`、中台 `/api/generate` | museav 积分 |
 | `POST /api/llm/*`、`/api/trending` | LLM token |
 
 **免费的可以随便跑**：`suno list` / `credits` / `status` / `info`、
@@ -42,6 +42,9 @@
 - **数据在 `~/.voxflow`，代码在项目目录**（见 `core/paths.py`）。
   经营数据（收益、播放量）不写进 git —— 它们在 `voxflow.db` 和运营台里是实时的，
   写进文档就是必然过期的快照。
+- **封面自己出**：走 `museav gen`（业务中台 CLI），短边不够再本地 `museav upscale`。
+  不要拿 Suno 360 图交差，不要只超分一张别人的图当新封面。
+  `museav gen` 仍花积分，验证功能不许拿真出图当探测。
 - **中台的内部实现不抄到这里**。voxflow 是调用方，只记「接口怎么用、多少钱」。
   要查中台注意分两层：规则在 `museav-manager` 仓库，运行时状态（上游启用情况、
   租户额度）在数据库里、仓库中查不到。详见 `core/cover.py` 文件头。

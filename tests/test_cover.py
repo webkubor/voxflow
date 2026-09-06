@@ -30,7 +30,10 @@ _TMP = tempfile.mkdtemp(prefix="voxflow_cover_test_")
 os.environ["VOXFLOW_HOME"] = _TMP
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from core.cover import CoverError, _ratio_matches, normalize_ratio  # noqa: E402
+from core.cover import (  # noqa: E402
+    CoverError, _cli_json, _ratio_matches, cdn_url_from_gen_stdout,
+    normalize_ratio,
+)
 
 PASSED: list[str] = []
 
@@ -79,6 +82,26 @@ def test_ratio_match_catches_silent_squaring() -> None:
     check("1:2.1 出成方图算不符", _ratio_matches("1:2.1", (1680, 1680)) is False)
     check("16:9 出成方图算不符", _ratio_matches("16:9", (1024, 1024)) is False)
     check("3:4 出成 4:3 算不符", _ratio_matches("3:4", (1472, 1104)) is False)
+
+
+def test_gen_stdout_picks_last_url() -> None:
+    """museav gen 人话在 stderr/stdout 前段，URL 在最后一行。"""
+    out = "提交出图: 专辑封面...\n生成中...\nhttps://img.webkubor.online/a.png\n"
+    check("抽出成图 URL",
+          cdn_url_from_gen_stdout(out) == "https://img.webkubor.online/a.png")
+    try:
+        cdn_url_from_gen_stdout("失败了，没有地址")
+    except CoverError:
+        PASSED.append("没 URL 就报错")
+    else:
+        raise AssertionError("✗ 没 URL 居然没报错")
+
+
+def test_cli_json_skips_human_line() -> None:
+    raw = '余额: ¥?\n{"credits":9598,"identity":"account","unmetered":false}\n'
+    d = _cli_json(raw)
+    check("balance JSON 能从人话后面抠出来", d.get("credits") == 9598)
+    check("空输出不是崩", _cli_json("") == {})
 
 
 def test_unknown_is_not_mismatch() -> None:
