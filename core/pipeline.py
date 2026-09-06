@@ -515,6 +515,10 @@ def set_platform_status(track_id: str, platform: str, status: str, **extra: Any)
                       (*vals, lid))
         c.execute("UPDATE tracks SET updated_at = ? WHERE id = ?", (now, track_id))
 
+    # 写完平台状态就把阶段带上 —— 两套存储各写各的，正是它们此前
+    # 互相矛盾的原因（已上架的歌还在流水线里排队，反过来也有）。
+    # 收在这个唯一写入点，同步脚本和 UI 都自动受益。
+    _sync_stage_from_platforms(track_id)
     return get_track(track_id) or {}
 
 
@@ -890,3 +894,78 @@ def _cover_big_enough(track_id: str, min_size: str) -> bool:
             return min(im.size) >= need
     except Exception:      # noqa: BLE001 —— 读不出就不拦
         return True
+
+
+# ─────────────────── 阶段与平台状态的一致性 ───────────────────
+#
+# 流水线阶段（tracks.stage）和平台状态（track_platforms.status）是**两套
+# 独立的存储**，此前没有任何东西保证它们一致。结果两个方向都错过：
+#
+#   已上架却还在流水线里排队   4 首（网易云 online，阶段还停在 generated）
+#   阶段写着已上架、平台却没发  2 首（一首在备料、一首在审核）
+#
+# 看板因此回答不了「这歌到底发出去没有」—— 它给的两个答案互相矛盾。
+#
+# **平台实况是真源**：歌在不在平台上，只有平台说了算。阶段是它的展示，
+# 应该跟着走，不该反过来。所以：有平台记录的曲目，阶段由平台状态推导。
+#
+# 没有任何平台记录的曲目不动 —— draft / generated / selected 是「还没
+# 进入发行」的阶段，只有人能判断，推不出来。
+
+# 平台状态 → 流水线阶段。取所有平台里**最靠后**的那个：
+# 一首歌在 A 平台已上架、在 B 平台还在审，它整体就是「已发布」。
+_STATUS_TO_STAGE = {
+    "online": "published",
+    "reviewing": "publishing",
+    "uploaded": "publishing",
+    "preparing": "publishing",   # 备料是发版流程的一部分，不是「还没开始发」
+    "rejected": "publishing",    # 被驳回还在发行流程里，只是要返工
+}
+
+
+def derived_stage(platform_infos: dict[str, Any]) -> str:
+    """按平台实况推导阶段。没有平台记录返回空串（表示「推不出来，别动」）。"""
+    if not platform_infos:
+        return ""
+    stages = {_STATUS_TO_STAGE.get((i or {}).get("status", ""), "")
+              for i in platform_infos.values()}
+    if "published" in stages:
+        return "published"
+    if "publishing" in stages:
+        return "publishing"
+    return ""
+
+
+def reconcile_stages(dry_run: bool = False) -> dict[str, Any]:
+    """把阶段和平台实况对齐。返回改动明细。
+
+    幂等：对齐之后再跑一次是 0 改动。
+    """
+    db.init()
+    fixed = []
+    with db.connect() as c:
+        rows = c.execute("SELECT id, title, stage FROM tracks").fetchall()
+        plats = c.execute("SELECT track_id, platform, status FROM track_platforms").fetchall()
+    by_track: dict[str, dict[str, Any]] = {}
+    for r in plats:
+        by_track.setdefault(r["track_id"], {})[r["platform"]] = {"status": r["status"]}
+
+    for r in rows:
+        want = derived_stage(by_track.get(r["id"], {}))
+        if want and want != r["stage"]:
+            fixed.append({"曲名": r["title"], "原阶段": r["stage"], "改为": want})
+            if not dry_run:
+                set_stage(r["id"], want)
+    return {"对齐": len(fixed), "明细": fixed}
+
+
+def _sync_stage_from_platforms(track_id: str) -> None:
+    """某首歌的平台状态变了 → 阶段跟着走。推不出来就不动。"""
+    db.init()
+    with db.connect() as c:
+        rows = c.execute("SELECT platform, status FROM track_platforms WHERE track_id=?",
+                         (track_id,)).fetchall()
+        cur = c.execute("SELECT stage FROM tracks WHERE id=?", (track_id,)).fetchone()
+    want = derived_stage({r["platform"]: {"status": r["status"]} for r in rows})
+    if want and cur and want != cur["stage"]:
+        set_stage(track_id, want)
