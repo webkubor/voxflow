@@ -98,7 +98,12 @@
 
           <div class="track-main">
             <div class="track-title-row">
-              <span class="track-title">{{ t.title }}</span>
+              <!-- 显示**发行名**。一次生成出的两首曲名一模一样（都叫破晓），
+                   只有发行名不同 —— 显示曲名的话列表里就是两行「破晓」，
+                   人分不清该点哪个。曲名作为副标题跟在后面，保留溯源。 -->
+              <span class="track-title">{{ t.release_title || t.title }}</span>
+              <span v-if="t.release_title && t.release_title !== t.title"
+                    class="track-origin">原名 {{ t.title }}</span>
               <span class="stage-pill" :class="`stage-${t.stage}`">{{ t.stage_label }}</span>
             </div>
             <p v-if="t.clip_id || t.release_title" class="track-id-row">

@@ -93,6 +93,30 @@ def main() -> int:
                         "UPDATE tracks SET duration=? WHERE clip_id=? AND (duration IS NULL OR duration=0)",
                         (seconds, cid))
                     timed += cur.rowcount
+            # ── 同步标题改动 ──────────────────────────────────
+            #
+            # **标题的真源在 Suno**：人在网页端改了名，本地不跟着变的话，
+            # 看板上就还是旧名字。2026-09-06 因此闹过一次 —— 用户在 Suno
+            # 上把两首同名歌分别改成「长安月」和「灯火照关山」，本地却仍是
+            # 两个「长安月」，看起来像去重没做，实际是从没更新过。
+            #
+            # 发行名（release_title）**不覆盖**：那是人在台账里定的发行身份，
+            # 可能和 Suno 上不同（Suno 叫 demo_夜航、发行叫《夜航》）。
+            # 只有当它原本就等于旧标题（说明是自动带出来的、没人改过）才跟着更新。
+            title_now = (cl.get("title") or "").strip() or "未命名"
+            with db.connect() as c:
+                row = c.execute("SELECT title, release_title FROM tracks WHERE clip_id=? OR id=?",
+                                (cid, cid)).fetchone()
+                if row and (row["title"] or "") != title_now:
+                    if DRY:
+                        print(f"  ~ 改名 {row['title']} → {title_now}  ({cid[:8]})")
+                    elif (row["release_title"] or "") in ("", row["title"] or ""):
+                        c.execute("UPDATE tracks SET title=?, release_title=? WHERE clip_id=? OR id=?",
+                                  (title_now, title_now, cid, cid))
+                    else:
+                        c.execute("UPDATE tracks SET title=? WHERE clip_id=? OR id=?",
+                                  (title_now, cid, cid))
+                    renamed += 1
             skipped += 1
             continue
         title = (cl.get("title") or "").strip() or "未命名"
@@ -114,7 +138,7 @@ def main() -> int:
             )
         added += 1
 
-    print(f"{'（预演）' if DRY else ''}新增 {added} 首，已有跳过 {skipped} 首，回填时长 {timed} 首")
+    print(f"{'（预演）' if DRY else ''}新增 {added} 首，已有 {skipped} 首，回填时长 {timed} 首，同步改名 {renamed} 首")
     if not DRY and added:
         print(f"库：{DATA_DIR / 'voxflow.db'}")
     return 0

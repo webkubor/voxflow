@@ -483,18 +483,20 @@ def set_platform_status(track_id: str, platform: str, status: str, **extra: Any)
                 (platform, song_id)).fetchone()
         if listing is None:
             listing = c.execute(
-                "SELECT id, track_id FROM track_platforms "
+                "SELECT id, track_id, status FROM track_platforms "
                 "WHERE track_id=? AND platform=? AND IFNULL(song_id,'')=?",
                 (track_id, platform, song_id)).fetchone()
         if listing is None and song_id:
             # 提交时还没有平台 id，后来核对后台才拿到 —— 补到原记录上，
             # 不要再插一条，否则同一首歌在同一平台出现两条。
             listing = c.execute(
-                "SELECT id, track_id FROM track_platforms "
+                "SELECT id, track_id, status FROM track_platforms "
                 "WHERE track_id=? AND platform=? AND IFNULL(song_id,'')='' "
                 "ORDER BY id LIMIT 1",
                 (track_id, platform)).fetchone()
 
+        # 记下变更前的状态 —— 事件流要「从哪到哪」，只有「到哪」没意义
+        _before = listing["status"] if listing else ""
         if listing:
             lid = listing["id"]
             c.execute("UPDATE track_platforms SET status=?, updated_at=? WHERE id=?",
@@ -527,6 +529,12 @@ def set_platform_status(track_id: str, platform: str, status: str, **extra: Any)
             c.execute(f"UPDATE track_platforms SET {', '.join(sets)} WHERE id = ?",
                       (*vals, lid))
         c.execute("UPDATE tracks SET updated_at = ? WHERE id = ?", (now, track_id))
+
+    # 状态真变了才记事件、才推通知 —— 每次写都推的话，
+    # 一次同步几十首就是几十条通知，群里会被刷爆，之后没人再看。
+    if _before != status:
+        log_event(track_id, platform, status, from_status=_before)
+        _notify_status_change(track_id, platform, _before, status)
 
     # 写完平台状态就把阶段带上 —— 两套存储各写各的，正是它们此前
     # 互相矛盾的原因（已上架的歌还在流水线里排队，反过来也有）。
@@ -1180,3 +1188,83 @@ def prepare(track_id: str, platform: str, *, album: str = "",
             "缺": [i["名称"] for i in r["items"] if not i["就绪"]],
             "需要出封面": any("封面" in i["名称"] for i in r["items"] if not i["就绪"]),
             "发布命令": r.get("发布命令", ""), "控制台": r.get("控制台", "")}
+
+
+
+# ─────────────────── 发布事件流 ───────────────────
+
+def log_event(track_id: str, platform: str, to_status: str, *,
+              from_status: str = "", actor: str = "", note: str = "") -> None:
+    """记一条状态变更。**不抛异常** —— 记不上不该拦住业务。
+
+    为什么要有事件流：`status` 字段只说「现在在哪」，不说「怎么来的」。
+    「这首歌卡了几天」「上次谁推进的」「驳回过几次」——
+    这几个运营最常问的问题，单看 status 一个都答不了。
+    """
+    try:
+        db.init()
+        with db.connect() as c:
+            c.execute("INSERT INTO publish_events "
+                      "(track_id, platform, from_status, to_status, actor, note, ts) "
+                      "VALUES (?,?,?,?,?,?,?)",
+                      (track_id, platform, from_status, to_status, actor, note, _now()))
+    except Exception as e:  # noqa: BLE001
+        obs.log("publish_event_failed", level="warn", error=str(e)[:120])
+
+
+def events(track_id: str = "", limit: int = 50) -> list[dict[str, Any]]:
+    """事件流。不传 track_id 就是全局最近的。"""
+    db.init()
+    sql = ("SELECT e.*, t.title, t.release_title FROM publish_events e "
+           "LEFT JOIN tracks t ON t.id = e.track_id ")
+    args: list[Any] = []
+    if track_id:
+        sql += "WHERE e.track_id = ? "
+        args.append(track_id)
+    sql += "ORDER BY e.id DESC LIMIT ?"
+    args.append(limit)
+    with db.connect() as c:
+        rows = c.execute(sql, args).fetchall()
+    return [{
+        "曲目": r["release_title"] or r["title"] or r["track_id"][:8],
+        "平台": (PLATFORMS.get(r["platform"]) or {}).get("label", r["platform"]),
+        "从": PLATFORM_STATUS_LABELS.get(r["from_status"], r["from_status"] or "—"),
+        "到": PLATFORM_STATUS_LABELS.get(r["to_status"], r["to_status"]),
+        "谁": r["actor"] or "",
+        "备注": r["note"] or "",
+        "时间": r["ts"],
+    } for r in rows]
+
+
+def _notify_status_change(track_id: str, platform: str, before: str, after: str) -> None:
+    """状态变了推一条群通知。**吞掉所有异常** —— 通知挂了不能拦住业务。
+
+    只推**人需要行动或需要知道**的那几个状态：
+    进入审核（要开始等）、上架（可以看数据了）、驳回（要返工）。
+    「备料中」这种自己刚点出来的不推 —— 人刚点完就收到通知，纯噪音。
+    """
+    INTERESTING = {"reviewing": ("⏳ 已提交审核", "warn"),
+                   "online": ("🎉 已上架", "done"),
+                   "rejected": ("❌ 被驳回", "error")}
+    if after not in INTERESTING:
+        return
+    try:
+        from core import notify
+
+        t = get_track(track_id) or {}
+        info = (t.get("platforms") or {}).get(platform) or {}
+        d = int(t.get("duration") or info.get("duration") or 0)
+        title, level = INTERESTING[after]
+        notify.notify(
+            f"{title}：{t.get('release_title') or t.get('title') or track_id[:8]}",
+            {"平台": (PLATFORMS.get(platform) or {}).get("label", platform),
+             "负责人": info.get("publisher", ""),
+             "时长": f"{d // 60}:{d % 60:02d}" if d else "",
+             "专辑": info.get("album", ""),
+             "变更": f"{PLATFORM_STATUS_LABELS.get(before, before or '新建')} → "
+                     f"{PLATFORM_STATUS_LABELS.get(after, after)}"},
+            level=level, event=f"status_{after}",
+            dedupe_key=f"vf-st-{track_id}-{platform}-{after}",
+        )
+    except Exception as e:  # noqa: BLE001
+        obs.log("status_notify_failed", level="warn", error=str(e)[:120])

@@ -228,6 +228,28 @@ _ADD_COLUMNS = [
     ("track_platforms", "assigned_at", "TEXT DEFAULT ''"),
 ]
 
+# 发布事件流：每首歌走到哪一步、什么时候、谁干的。
+#
+# 此前只有一个 status 字段 —— 它只说「现在在哪」，不说「怎么来的」。
+# 于是「这首歌卡了几天」「上次是谁推进的」「驳回过几次」全答不了，
+# 而这几个问题恰好是运营最常问的。
+#
+# 单独一张表而不是往 track_platforms 加列：状态变更是**多条**，
+# 加列只能存最后一次，历史就没了。
+_EVENTS_DDL = """
+CREATE TABLE IF NOT EXISTS publish_events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    track_id   TEXT NOT NULL,
+    platform   TEXT NOT NULL,
+    from_status TEXT DEFAULT '',
+    to_status  TEXT NOT NULL,
+    actor      TEXT DEFAULT '',
+    note       TEXT DEFAULT '',
+    ts         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pe_track ON publish_events(track_id, ts DESC);
+"""
+
 
 def _migrate_listing_pk(c: sqlite3.Connection) -> None:
     """
@@ -293,6 +315,7 @@ def init() -> None:
     """建表 + 补列。幂等，每次启动跑一次。"""
     with connect() as c:
         c.executescript(SCHEMA)
+        c.executescript(_EVENTS_DDL)
         _migrate_listing_pk(c)
         for table, col, ddl in _ADD_COLUMNS:
             have = {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
