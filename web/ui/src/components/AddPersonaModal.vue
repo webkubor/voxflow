@@ -8,13 +8,6 @@
     @update:show="closeModal"
   >
     <n-form :model="addForm" label-placement="left" label-width="80">
-      <n-form-item label="音色 Key">
-        <n-input 
-          v-model:value="addForm.key" 
-          placeholder="例如：my_narrator（限小写字母和下划线）" 
-        />
-      </n-form-item>
-      
       <n-form-item label="显示名称">
         <n-input 
           v-model:value="addForm.name" 
@@ -32,6 +25,10 @@
       </n-form-item>
 
       <n-form-item label="参考音频">
+        <!-- ⚠️ n-form-item 的内容区是横向 flex：直接放两个兄弟节点，
+             它们会各自成为并排的 flex 子项、被挤成竖排。必须包一层。
+             （同一个坑今天在作品看板的详情区已经踩过一次） -->
+        <div class="ref-audio-col">
         <div 
           class="file-drop-zone"
           :class="{ 'is-dragover': dragOver }"
@@ -64,6 +61,23 @@
               清除
             </n-button>
           </div>
+        </div>
+        <!-- 直接录：克隆自己的声音本来不该先去别的软件录一段再回来传文件。
+             浏览器自带 MediaRecorder，localhost 就是安全上下文，够用。 -->
+        <div class="record-row">
+          <button
+            class="record-btn"
+            :class="{ recording }"
+            type="button"
+            @click="recording ? stopRecord() : startRecord()"
+          >
+            <Icon :name="recording ? 'pause' : 'voice'" size="sm" />
+            <span>{{ recording ? `停止录音 ${recSec}s` : '直接录一段' }}</span>
+          </button>
+          <span class="sub-tip">
+            {{ recording ? '正常语速念一段话，10 秒左右最好' : '不用先去别处录好再传文件' }}
+          </span>
+        </div>
         </div>
       </n-form-item>
     </n-form>
@@ -112,17 +126,70 @@ const addForm = reactive({
   audioFile: null
 });
 
-// 表单校验
+/**
+ * 音色 Key 自动生成，不再让人自己编。
+ *
+ * 后端要的是个文件名安全的标识（前端原本还卡 /^[a-z0-9_]+$/）——
+ * 而中文显示名转不出合法英文 ID，于是每个人都得停下来想一个
+ * 「my_narrator」这样的东西。那一步对使用者零价值：
+ * 界面上从头到尾显示的都是「显示名称」，Key 只有程序自己看。
+ *
+ * 用时间戳生成，天然唯一、天然合法。
+ */
+const autoKey = () => {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `voice_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+};
+
+// ── 直接录音 ────────────────────────────────────────────
+const recording = ref(false);
+const recSec = ref(0);
+let mediaRecorder = null;
+let recTimer = null;
+
+const startRecord = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const chunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    mediaRecorder.onstop = () => {
+      // 停掉轨道，否则浏览器标签页会一直挂着录音指示灯
+      stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      // 后端按扩展名判类型，webm 不在白名单里会被当 wav 存 —— 给个它认识的名字
+      const ext = (mediaRecorder.mimeType || '').includes('ogg') ? 'ogg' : 'm4a';
+      addForm.audioFile = new File([blob], `录音_${Date.now()}.${ext}`, { type: blob.type });
+    };
+    mediaRecorder.start();
+    recording.value = true;
+    recSec.value = 0;
+    recTimer = setInterval(() => { recSec.value += 1; if (recSec.value >= 30) stopRecord(); }, 1000);
+  } catch (e) {
+    // 拒绝授权、没有麦克风、或非安全上下文都会走到这里
+    showToast(`录音打不开：${e?.message || e}。也可以直接拖一个音频文件进来`, 'warning');
+  }
+};
+
+const stopRecord = () => {
+  clearInterval(recTimer);
+  recording.value = false;
+  if (mediaRecorder?.state === 'recording') mediaRecorder.stop();
+};
+
+// 表单校验 —— Key 已自动生成，不再是用户要填的东西
 const isFormValid = computed(() => {
   return (
-    addForm.key.trim() &&
-    /^[a-z0-9_]+$/.test(addForm.key.trim()) &&
     addForm.name.trim() &&
     addForm.audioFile
   );
 });
 
 const closeModal = () => {
+  // 关弹窗必须停录音 —— 不停的话麦克风轨道还开着，
+  // 浏览器标签页上的录音指示灯会一直亮，人以为被偷录。
+  stopRecord();
   addForm.key = '';
   addForm.name = '';
   addForm.instruction = '';
@@ -163,7 +230,7 @@ const formatBytes = (bytes) => {
 const submitAdd = async () => {
   if (!isFormValid.value) return;
 
-  const keyVal = addForm.key.trim();
+  const keyVal = addForm.key.trim() || autoKey();   // 没手填就自动生成
   const nameVal = addForm.name.trim();
   const instVal = addForm.instruction.trim();
 
@@ -187,6 +254,18 @@ const submitAdd = async () => {
 </script>
 
 <style scoped>
+.ref-audio-col { flex: 1; min-width: 0; }
+.record-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.record-btn {
+  flex: none;
+  white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--vf-border, #333);
+  background: transparent; color: inherit; font-size: 13px;
+}
+.record-btn.recording { border-color: #ff5c5c; color: #ff5c5c; }
+
 .file-drop-zone {
   width: 100%;
   border: 1px dashed #444;
