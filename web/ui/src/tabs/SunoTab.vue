@@ -543,7 +543,7 @@
           <Icon :name="mode === 'bgm' ? 'library' : mode === 'cover' ? 'layers' : 'suno'" size="sm" />
           <span>{{ SUBMIT_LABELS[mode] }}</span>
         </button>
-        <span class="cost-tip">{{ COST_TIPS[mode] }} · 产物进「资产库」</span>
+        <span class="cost-tip">{{ COST_TIPS[mode] }} · 产物进「音频文件」</span>
       </div>
       <p v-if="suno.error" class="suno-error">{{ suno.error }}</p>
     </section>
@@ -1054,7 +1054,7 @@ const batchStart = async () => {
   } else if (failed > 0) {
     tasksStore.showToast(`完成 · 成功 ${submitted} 首，失败 ${failed} 首`, 'warning');
   } else {
-    tasksStore.showToast(`批量完成 · ${submitted} 首已提交，等任务完成即可在资产库听`, 'success');
+    tasksStore.showToast(`批量完成 · ${submitted} 首已提交，等任务完成即可在「音频文件」里听`, 'success');
   }
 };
 

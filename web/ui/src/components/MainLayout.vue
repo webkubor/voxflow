@@ -150,13 +150,15 @@
             animated
             class="hidden-tabs"
           >
+            <!-- 顺序与 tab 名跟上面的 TABS 保持一致。导航条被 .hidden-tabs
+                 藏起来了、这些 tab 文案看不见，但留着旧名会误导下一个人。 -->
             <n-tab-pane name="clone" tab="克隆"><CloneTab /></n-tab-pane>
             <n-tab-pane name="design" tab="设计"><DesignTab /></n-tab-pane>
             <n-tab-pane name="dialogue" tab="剧本"><DialogueTab /></n-tab-pane>
+            <n-tab-pane name="library" tab="音频"><LibraryTab /></n-tab-pane>
             <n-tab-pane name="suno" tab="音乐"><SunoTab /></n-tab-pane>
-            <n-tab-pane name="works" tab="看板"><PipelineBoard /></n-tab-pane>
+            <n-tab-pane name="works" tab="发歌"><PipelineBoard /></n-tab-pane>
             <n-tab-pane name="publish" tab="发行"><PublishTab /></n-tab-pane>
-            <n-tab-pane name="library" tab="资产"><LibraryTab /></n-tab-pane>
             <n-tab-pane name="ops" tab="运营"><OpsTab /></n-tab-pane>
           </n-tabs>
         </n-layout-content>
@@ -258,9 +260,9 @@ const CloneTab = lazyTab(() => import('../tabs/CloneTab.vue'), '声音克隆');
 const DesignTab = lazyTab(() => import('../tabs/DesignTab.vue'), '音色设计');
 const DialogueTab = lazyTab(() => import('../tabs/DialogueTab.vue'), '剧本创作');
 const SunoTab = lazyTab(() => import('../tabs/SunoTab.vue'), 'AI 音乐');
-const PipelineBoard = lazyTab(() => import('./PipelineBoard.vue'), '作品看板');
+const PipelineBoard = lazyTab(() => import('./PipelineBoard.vue'), '发歌记录');
 const PublishTab = lazyTab(() => import('../tabs/PublishTab.vue'), '全网发行');
-const LibraryTab = lazyTab(() => import('../tabs/LibraryTab.vue'), '资产库');
+const LibraryTab = lazyTab(() => import('../tabs/LibraryTab.vue'), '音频文件');
 const OpsTab = lazyTab(() => import('../tabs/OpsTab.vue'), '运营台');
 import GlobalPlayer from './GlobalPlayer.vue';
 import TaskPanel from './TaskPanel.vue';
@@ -320,13 +322,33 @@ watch(
 );
 
 const tabs = [
+  // 菜单按「先做，再看，最后经营」排，名字必须说清各自回答什么问题。
+  //
+  // 2026-09-06 之前叫「资产库」和「作品看板」，两个名字什么都能装，
+  // 于是没人分得清它俩和左栏「音色库」的关系 —— 三样东西其实回答三个
+  // 完全不同的问题，重叠的只有名字：
+  //
+  //   音色库（左栏）  我有哪些**嗓子**可用          输入
+  //   音频文件        我生成过哪些音频**文件**      输出，能听能下载
+  //   发歌记录        我的**歌**走到哪一步了        发行流水线
+  //
+  // 「资产库」→「音频文件」：它就是磁盘上那些 wav/mp3，说清楚就不歧义了。
+  // 「作品看板」→「发歌记录」：这才是「哪些发过、哪些没发」的那张表。
+  //
+  // 顺序也改了。原本「音频文件」夹在发歌记录和全网发行中间 —— 等于在歌曲
+  // 链条里插了个不相干的东西。**音乐作品才是这个工具的最终产物**，
+  // 音频文件只是做声音那三步的产物、是中间素材。
+  //
+  // 现在分成前后两段，各自一条完整链路：
+  //   前四个  做声音 → 声音产物：克隆 / 设计 / 剧本 → 音频文件
+  //   后四个  做歌 → 发歌 → 发行 → 经营：AI 音乐 → 发歌记录 → 全网发行 → 运营台
   { name: 'clone', label: '声音克隆', icon: 'clone' },
   { name: 'design', label: '音色设计', icon: 'design' },
   { name: 'dialogue', label: '剧本创作', icon: 'dialogue' },
+  { name: 'library', label: '音频文件', icon: 'library' },
   { name: 'suno', label: 'AI 音乐', icon: 'suno' },
-  { name: 'works', label: '作品看板', icon: 'board' },
+  { name: 'works', label: '发歌记录', icon: 'board' },
   { name: 'publish', label: '全网发行', icon: 'publish' },
-  { name: 'library', label: '资产库', icon: 'library' },
   { name: 'ops', label: '运营台', icon: 'pulse' },
 ];
 

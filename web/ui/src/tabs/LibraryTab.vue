@@ -4,7 +4,7 @@
       <div class="lib-title-row">
         <h3 class="tab-title">
           <Icon name="library" size="md" />
-          <span>已生成音频资产</span>
+          <span>已生成的音频文件</span>
         </h3>
         <span class="count-pill">{{ audioFiles.length }} 条</span>
       </div>
@@ -118,14 +118,25 @@ const TYPE_LABEL = {
   other: '其他',
 };
 
-/** 从文件名猜类型 —— 后端 audio-list 不带 type，按命名约定推断 */
+/**
+ * 从文件名猜类型 —— 后端 audio-list 不带 type，按命名约定推断。
+ *
+ * ⚠️ 认的是**中文前缀**：`[克隆]`、`[设计]`、`[对话]`、`[Suno]`。
+ *
+ * 这里原本只匹配英文（clone / design / dialogue），而生成侧从来写的是
+ * 中文方括号 —— 于是每个文件都落进「其他」，那个类型筛选框**从来没生效过**，
+ * 列表里每一行的类型都显示「其他」。
+ *
+ * 是个静默失败：不报错、筛选框也照常能点，只是永远筛不出东西。
+ * 英文分支保留着，兼容早期文件名。
+ */
 const guessType = (filename) => {
   const lower = filename.toLowerCase();
-  if (lower.includes('cover') || lower.includes('(cover)')) return 'cover';
-  if (lower.includes('suno') || lower.includes('song_')) return 'suno';
-  if (lower.includes('dialogue') || lower.includes('scene')) return 'dialogue';
-  if (lower.includes('design')) return 'design';
-  if (lower.includes('clone')) return 'clone';
+  if (filename.includes('[翻唱]') || lower.includes('cover')) return 'cover';
+  if (filename.includes('[Suno]') || lower.includes('suno') || lower.includes('song_')) return 'suno';
+  if (filename.includes('[对话]') || lower.includes('dialogue') || lower.includes('scene')) return 'dialogue';
+  if (filename.includes('[设计]') || lower.includes('design')) return 'design';
+  if (filename.includes('[克隆]') || lower.includes('clone')) return 'clone';
   return 'other';
 };
 

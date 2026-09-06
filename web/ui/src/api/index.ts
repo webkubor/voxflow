@@ -115,6 +115,8 @@ const del = <T>(path: string) => http.delete(path).json<T>();
 export const api = {
   // ── 作品流水线 ──
   pipeline: () => get<PipelineResponse>('pipeline'),
+  /** 「我是谁」—— 从通知配置的 assignees.owner 读，不另存一份当前用户 */
+  notifyOwner: () => get<{ name: string; open_id: string }>('notify/owner'),
   setStage: (track_id: string, stage: Stage) => post('pipeline/stage', { track_id, stage }),
   /** 这首歌发这个平台还缺什么 —— 「备料中」到底算不算完，全靠它回答 */
   readiness: (track_id: string, platform: string) => get<{

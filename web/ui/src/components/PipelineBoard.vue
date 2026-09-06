@@ -31,6 +31,13 @@
           <Icon name="upload" size="sm" />
           <span>从下载导入</span>
         </button>
+        <!-- 曲库有两百多首（Suno 云端全量同步进来的），而一个人通常只负责
+             其中两三首。不筛的话得在两百行里找自己那几首，找错就是替别人
+             发了歌 —— 这个筛选不是方便，是防错。 -->
+        <label class="mine-toggle" :class="{ on: onlyMine }">
+          <input v-model="onlyMine" type="checkbox" />
+          <span>只看我负责的{{ mineCount ? `（${mineCount}）` : '' }}</span>
+        </label>
         <button class="ghost-btn" @click="load">
           <Icon name="refresh" size="sm" />
           <span>刷新</span>
@@ -73,7 +80,7 @@
         <span class="batch-hint">发版那步（selected → publishing）需单独选平台</span>
       </div>
 
-      <article v-for="t in tracks" :key="t.id" class="track">
+      <article v-for="t in visibleTracks" :key="t.id" class="track">
         <div class="track-head">
           <!-- 批量勾选 -->
           <label v-if="canBatchAdvance(t)" class="track-check" :title="`勾选「${t.title}」`">
@@ -516,7 +523,13 @@ const load = async () => {
     await tasksStore.reportError(cause, { action: 'pipeline.load' });
   }
 };
-onMounted(() => { load(); loadCoverCaps(); });
+onMounted(async () => {
+  load();
+  loadCoverCaps();
+  try {
+    meName.value = (await api.notifyOwner()).name || '';
+  } catch { /* 没配通知就没有「我」，筛选按钮自然筛不出东西 */ }
+});
 defineExpose({ load });
 
 // 下载目录导入
@@ -697,6 +710,23 @@ const batchAdvance = async () => {
     tasksStore.showToast(`已批量推进 ${okCount} 首`, 'success');
   }
 };
+
+/**
+ * 「只看我负责的」。
+ *
+ * 「我」是谁：读通知配置里的 assignees.owner —— 那份配置本来就是
+ * 分配责任人用的真源，不再另存一份「当前用户」，省得两处不同步。
+ */
+const onlyMine = ref(false);
+const meName = ref('');
+
+const isMine = (t) => Object.values(t.platforms || {})
+  .some((p) => p?.publisher && p.publisher === meName.value);
+
+const mineCount = computed(() => tracks.value.filter(isMine).length);
+
+const visibleTracks = computed(() =>
+  onlyMine.value ? tracks.value.filter(isMine) : tracks.value);
 
 const platformLabel = (key) => platforms.value?.[key]?.label || key;
 

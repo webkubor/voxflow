@@ -45,13 +45,15 @@ const groups = [
   {
     title: '导航',
     shortcuts: [
+      // ⚠️ 顺序必须和 MainLayout 的 TABS 一字不差 —— 数字键按位置跳转，
+      // 这里排错了不会报错，只会让人按 5 跳到别的地方去。
       { keys: ['1'], desc: '声音克隆' },
       { keys: ['2'], desc: '音色设计' },
       { keys: ['3'], desc: '剧本创作' },
-      { keys: ['4'], desc: 'AI 音乐' },
-      { keys: ['5'], desc: '作品看板' },
-      { keys: ['6'], desc: '全网发行' },
-      { keys: ['7'], desc: '资产库' },
+      { keys: ['4'], desc: '音频文件' },
+      { keys: ['5'], desc: 'AI 音乐' },
+      { keys: ['6'], desc: '发歌记录' },
+      { keys: ['7'], desc: '全网发行' },
     ],
   },
   {

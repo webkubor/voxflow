@@ -299,6 +299,10 @@ def _platform_row(r) -> dict[str, Any]:
         "note": r["note"] or "",
         "submitted_at": r["submitted_at"] or "",
         "updated_at": r["updated_at"] or "",
+        # 谁负责发这首 —— 看板要靠它做「只看我负责的」筛选。
+        # 曲库有两百多首（Suno 云端全量同步进来的），不筛的话人得在里面
+        # 找自己那两首，找错了就是替别人发了歌。
+        "publisher": (r["publisher"] if "publisher" in keys else "") or "",
     }
     cfg = db._j(r["config"], {}) or {}
     if cfg:
@@ -1127,3 +1131,52 @@ PLATFORM_STATUS_LABELS = {
     "preparing": "备料中", "uploaded": "已上传", "reviewing": "审核中",
     "online": "已上架", "rejected": "被驳回",
 }
+
+
+def prepare(track_id: str, platform: str, *, album: str = "",
+            publisher: str = "", publisher_id: str = "",
+            instrumental: bool = False) -> dict[str, Any]:
+    """把一首歌推进「备料中」，能自动补的字段一次补齐。
+
+    ## 为什么要有这一步
+
+    导入/生成完之后，人还得手动点「确认发版」、挑平台、填专辑名、
+    标歌词 —— 这些**机器全都知道**：平台是配置里定的，专辑名可以承继，
+    纯音乐的歌词就是 `[Instrumental]`。让人点五下再开始干活，
+    等于把自动化省下的时间又还回去。
+
+    ## 什么不自动做
+
+    **出封面不在这里** —— 它花钱（museav 1 积分/张 ≈ ¥0.83）。
+    自动化可以省事，但不能替人做花钱的决定：一次导入 20 首就是 20 块，
+    而人可能只想先试一首。所以这里只把「缺封面」报出来，
+    出不出由调用方显式决定。
+    """
+    track = get_track(track_id)
+    if not track:
+        return {"ok": False, "错误": "曲目不存在"}
+    if platform not in PLATFORMS:
+        return {"ok": False, "错误": f"未知平台 {platform}"}
+
+    fields: dict[str, Any] = {}
+    if album and not (track.get("album_desc") or "").strip():
+        fields["album_desc"] = album
+    # 纯音乐的歌词不是「没填」，是「就是没有」—— 平台必填这一栏，
+    # 空着会被打回，标准写法是 [Instrumental]。
+    if instrumental and not (track.get("lyrics") or "").strip():
+        fields["lyrics"] = "[Instrumental]"
+    if fields:
+        upsert(track_id, **fields)
+
+    set_platform_status(track_id, platform, "preparing",
+                        album_name=album or track.get("album_desc", ""))
+    if publisher:
+        set_publisher(track_id, platform, publisher, publisher_id)
+
+    r = readiness(track_id, platform)
+    # 把「还缺什么」直接回给调用方 —— 备料的意义就在于**知道还差哪几步**，
+    # 只说一句「已进入备料」等于什么都没说。
+    return {"ok": True, "备料齐了": r["ok"], "缺口数": r["缺口数"],
+            "缺": [i["名称"] for i in r["items"] if not i["就绪"]],
+            "需要出封面": any("封面" in i["名称"] for i in r["items"] if not i["就绪"]),
+            "发布命令": r.get("发布命令", ""), "控制台": r.get("控制台", "")}

@@ -170,7 +170,20 @@ check("作品台账非空", len(tracks) > 0, f"{len(tracks)} 首")
 for pk, acc in accounts["accounts"].items():
     reported = acc.get("song_count", 0)
     local = acc.get("local_online_count", 0)
-    check(f"{acc.get('label') or pk}：平台自报 vs 台账在线",
+    label = acc.get("label") or pk
+    # ⚠️ **「没同步过」不是「平台说 0」。**
+    #
+    # 汽水没有同步脚本（netease / qq 都有 sync_*.py），platform_accounts
+    # 里压根没有它那一行，song_count 就是默认值 0。而这里原本直接拿 0 去
+    # 比对，报出来是「平台自报 0 vs 台账在线 1」—— 读起来像汽水在反驳我们，
+    # 人会跑去后台查「为什么歌没了」，其实歌好好的，是我们从没问过它。
+    #
+    # 没同步过就说没同步过，不要拿缺失当数据。
+    if not acc.get("synced_at"):
+        check(f"{label}：平台数据", True,
+              f"没同步过（台账记 {local} 首在线）—— 缺 scripts/sync_{pk}.py，无法核对")
+        continue
+    check(f"{label}：平台自报 vs 台账在线",
           reported == local, f"{reported} vs {local}")
 
 alb = albums["albums"]
