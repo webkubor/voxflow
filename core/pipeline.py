@@ -942,8 +942,13 @@ def _cover_big_enough(track_id: str, min_size: str) -> bool:
     if not row or not row["cover_file"]:
         return False
     try:
+        from pathlib import Path as _P
+        from core.paths import DATA_DIR
         from PIL import Image
-        with Image.open(row["cover_file"]) as im:
+        p = _P(row["cover_file"])
+        if not p.is_absolute():
+            p = DATA_DIR / p
+        with Image.open(p) as im:
             return min(im.size) >= need
     except Exception:      # noqa: BLE001 —— 读不出就不拦
         return True

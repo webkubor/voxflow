@@ -32,21 +32,30 @@ from pathlib import Path
 # 所以项目根必须从外面传进来，不能靠 __file__ 推。
 BASE = Path(os.environ.get("VF_BASE") or Path.cwd()).resolve()
 TRACK_ID = os.environ.get("VF_TRACK", "")
+sys.path.insert(0, str(BASE))
 
-ledger = json.loads((BASE / "configs" / "pipeline.json").read_text(encoding="utf-8"))
-track = ledger.get("tracks", {}).get(TRACK_ID)
+from core.paths import DATA_DIR                      # noqa: E402
+from core import pipeline as P                       # noqa: E402
+
+track = P.get_track(TRACK_ID) if TRACK_ID else None
 if not track:
-    print(f"✗ 台账里没有 {TRACK_ID}；有的是：{list(ledger.get('tracks', {}))}")
+    print(f"✗ 台账里没有 {TRACK_ID}")
     sys.exit(1)
 
-title = track.get("title", "")
+title = track.get("release_title") or track.get("title") or ""
 lyrics_raw = track.get("lyrics", "")
 # [Verse] 这类结构标记是给 Suno 的，不是给听众看的 —— 平台歌词要纯文本
 lyrics = "\n".join(l for l in lyrics_raw.splitlines() if not l.strip().startswith("["))
 lyrics = "\n".join(l for l in lyrics.splitlines()).strip()
 
-audio = (BASE / track.get("audio_file", "")).resolve()
-cover = (BASE / track.get("cover_file", "")).resolve()
+def _resolve(p: str) -> Path:
+    path = Path(p)
+    if not path.is_absolute():
+        path = DATA_DIR / path
+    return path
+
+audio = _resolve(track.get("audio_file") or "")
+cover = _resolve(track.get("cover_file") or "")
 
 print(f"作品：{title}")
 print(f"  音频 {audio.name}  {'✓' if audio.is_file() else '✗ 缺失'}")
