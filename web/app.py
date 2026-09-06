@@ -178,6 +178,7 @@ def _notify_music_task(task_id: str):
             pass
 
         files = result.get("files") or []
+        clips = result.get("clips") or []
         warning = result.get("warning") or ""
         acc = notify.account()
         buttons = []
@@ -217,7 +218,11 @@ def _notify_music_task(task_id: str):
                 "类型": "翻唱" if task["type"] == "suno_cover" else "AI 音乐",
                 "风格": params.get("tags", ""),
                 "模型": params.get("model", ""),
-                "文件": str(len(files)) + " 个" if files else "",
+                "文件": (str(len(files)) + " 个") if files
+                        else (f"{len(clips)} 首在 Suno 上 · 音频需手动下载" if clips else ""),
+                "源链接": ("\n" + "\n".join(
+                    f"· [{c.get('title') or c['id'][:8]}](https://suno.com/song/{c['id']})"
+                    for c in clips if c.get("id"))) if clips else "",
                 "说明": warning,
                 "失败原因": (task.get("error") or "")[:200] if failed else "",
             },
