@@ -981,6 +981,47 @@ _STATUS_TO_STAGE = {
 }
 
 
+def release_status_for_title(title: str) -> dict[str, Any] | None:
+    """这首歌现在发到哪了。给通知用：任务失败 ≠ 歌没了。
+
+    生成任务的 CLI 常在「下载音频」那步挂（Suno 403），群里就会喊失败。
+    可歌早就在库里，甚至已经交到汽水审核。通知必须先问台账。
+    """
+    title = (title or "").strip()
+    if not title:
+        return None
+    db.init()
+    with db.connect() as c:
+        rows = c.execute(
+            "SELECT t.id, t.title, t.stage, t.release_title, t.release_platform, "
+            "p.platform, p.status, p.song_id "
+            "FROM tracks t LEFT JOIN track_platforms p ON p.track_id = t.id "
+            "WHERE t.title = ? OR IFNULL(t.release_title,'') = ?",
+            (title, title),
+        ).fetchall()
+    if not rows:
+        return None
+    rank = {"online": 4, "published": 4, "reviewing": 3,
+            "uploaded": 2, "preparing": 1, "rejected": 1}
+    best = max(rows, key=lambda r: rank.get(r["status"] or "", 0))
+    plat = (best["platform"] or best["release_platform"] or "")
+    st = best["status"] or ""
+    stage = best["stage"] or ""
+    label = _plat_label(plat) if plat else ""
+    if st in ("online", "published") or stage == "published":
+        return {"kind": "online", "label": f"已上架" + (f"（{label}）" if label else ""),
+                "platform": plat, "status": st or "online"}
+    if st == "reviewing":
+        return {"kind": "reviewing",
+                "label": f"{label}审核中" if label else "平台审核中",
+                "platform": plat, "status": st}
+    if st in ("preparing", "uploaded") or stage == "publishing":
+        return {"kind": "publishing",
+                "label": f"{label}发版中" if label else "发版中（签署/备料）",
+                "platform": plat, "status": st or "preparing"}
+    return None
+
+
 def derived_stage(platform_infos: dict[str, Any]) -> str:
     """按平台实况推导阶段。没有平台记录返回空串（表示「推不出来，别动」）。"""
     if not platform_infos:

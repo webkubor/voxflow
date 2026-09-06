@@ -93,6 +93,16 @@ def main() -> None:
           len(qs) == 1 and qs[0]["song_id"] == "qs-fill" and qs[0]["status"] == "online",
           str(qs))
 
+    st = P.release_status_for_title("填id")
+    check("已上架的歌通知不该喊生成失败",
+          st is not None and st["kind"] == "online", str(st))
+    P.set_platform_status("clip-fill", "qishui", "reviewing",
+                          song_id="qs-fill", platform_title="填id")
+    st2 = P.release_status_for_title("填id")
+    check("审核中的歌通知应报审核中",
+          st2 is not None and st2["kind"] == "reviewing", str(st2))
+    check("对不上的歌名没有发行状态", P.release_status_for_title("根本没有这首") is None)
+
     print(f"\n{len(PASSED)} 项通过")
 
 
