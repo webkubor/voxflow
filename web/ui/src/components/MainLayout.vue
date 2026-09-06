@@ -212,20 +212,56 @@
  * 难分辨。换成自定义按钮 + 路由切换，n-tabs 留在下面当「路由 ↔ tab」的
  * 同步源（它绑了 v-model 到 currentTab）。视觉上不显示，但行为仍在。
  */
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { BOARD_POLL_MS } from '../config/constants';
 import { TAB_NAMES } from '../router';
 import { storeToRefs } from 'pinia';
-// 异步组件：路由切到哪一屏才加载哪一屏，首屏不打包这 6 个 chunk
-const CloneTab = defineAsyncComponent(() => import('../tabs/CloneTab.vue'));
-const DesignTab = defineAsyncComponent(() => import('../tabs/DesignTab.vue'));
-const DialogueTab = defineAsyncComponent(() => import('../tabs/DialogueTab.vue'));
-const SunoTab = defineAsyncComponent(() => import('../tabs/SunoTab.vue'));
-const PipelineBoard = defineAsyncComponent(() => import('./PipelineBoard.vue'));
-const PublishTab = defineAsyncComponent(() => import('../tabs/PublishTab.vue'));
-const LibraryTab = defineAsyncComponent(() => import('../tabs/LibraryTab.vue'));
-const OpsTab = defineAsyncComponent(() => import('../tabs/OpsTab.vue'));
+/**
+ * 异步组件：路由切到哪一屏才加载哪一屏，首屏不打包这几个 chunk。
+ *
+ * ⚠️ **加载失败必须说出来**。`defineAsyncComponent` 默认在失败时什么都不渲染
+ * 也不报错 —— 那一屏就是纯空白，人会以为「数据没了」。而最常见的失败原因
+ * 恰恰不是数据问题：前端重新构建后 chunk 文件名变了，已经开着的老页面
+ * 手里那个名字在服务器上已经不存在（`vite build` 会清空 assets 目录）。
+ *
+ * `lazyTab` 给每个都挂上错误兜底：失败时显示一句人话 + 一个刷新按钮，
+ * 而不是让人对着空白屏猜。真正的自动救援在 main.js 的 vite:preloadError，
+ * 这里是它没兜住时的最后一道。
+ *
+ * ⚠️ 兜底组件必须用 `render()` + `h()`，**不能用 `template:` 字符串** ——
+ * 生产构建的 Vue 不含运行时模板编译器，字符串模板在 dev 下好好的，
+ * 打包后静默不渲染。而这个组件恰恰只在生产、只在出问题时才出现，
+ * 是最不容易被发现写错的地方（第一版就栽在这儿）。
+ */
+const lazyTab = (loader, label) => defineAsyncComponent({
+  loader,
+  delay: 120,          // 120ms 内加载完就不闪 loading，避免本地秒开时的闪烁
+  timeout: 20000,
+  errorComponent: {
+    name: 'TabLoadError',
+    render: () => h('div', { class: 'tab-load-error' }, [
+      h('p', { class: 'tle-title' }, `「${label}」这一屏没加载出来`),
+      h('p', { class: 'tle-hint' }, [
+        '多半是前端更新过、而这个页面还是旧的 —— 刷新一下就好。',
+        h('b', ' 你的数据没有丢。'),
+      ]),
+      h('button', {
+        class: 'tle-btn',
+        onClick: () => window.location.reload(),
+      }, '刷新页面'),
+    ]),
+  },
+});
+
+const CloneTab = lazyTab(() => import('../tabs/CloneTab.vue'), '声音克隆');
+const DesignTab = lazyTab(() => import('../tabs/DesignTab.vue'), '音色设计');
+const DialogueTab = lazyTab(() => import('../tabs/DialogueTab.vue'), '剧本创作');
+const SunoTab = lazyTab(() => import('../tabs/SunoTab.vue'), 'AI 音乐');
+const PipelineBoard = lazyTab(() => import('./PipelineBoard.vue'), '作品看板');
+const PublishTab = lazyTab(() => import('../tabs/PublishTab.vue'), '全网发行');
+const LibraryTab = lazyTab(() => import('../tabs/LibraryTab.vue'), '资产库');
+const OpsTab = lazyTab(() => import('../tabs/OpsTab.vue'), '运营台');
 import GlobalPlayer from './GlobalPlayer.vue';
 import TaskPanel from './TaskPanel.vue';
 import AddPersonaModal from './AddPersonaModal.vue';
@@ -435,6 +471,34 @@ const formatRenewDate = (iso) => {
 </script>
 
 <style scoped>
+/* 异步组件加载失败的兜底屏。用 :deep 是因为它渲染在 errorComponent 里，
+   不在本组件的模板作用域内。 */
+:deep(.tab-load-error) {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--vf-space-3);
+  margin: var(--vf-space-6) 0;
+  padding: var(--vf-space-5);
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-warn-soft);
+  border-left: 3px solid var(--vf-warn);
+  border-radius: var(--vf-radius-md);
+}
+:deep(.tle-title) { margin: 0; font-size: 14px; font-weight: 600; color: var(--vf-text-1); }
+:deep(.tle-hint) { margin: 0; font-size: 12px; color: var(--vf-text-2); line-height: 1.7; }
+:deep(.tle-btn) {
+  background: white;
+  border: 1px solid white;
+  color: black;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border-radius: var(--vf-radius-sm);
+  cursor: pointer;
+}
+:deep(.tle-btn:hover) { background: #e4e4e7; border-color: #e4e4e7; }
+
 .app-shell {
   height: 100vh;
   display: flex;
