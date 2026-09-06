@@ -138,16 +138,12 @@ def fill_by_label(label, value, multiline=False):
     if not ok:
         print(f"  ✗ 没找到「{label}」")
         return False
-    if multiline:
-        # fill_input 是逐字符键入，换行会被当成「提交」或者直接吞掉，
-        # 结果歌词挤成一整段 —— 而平台要求「行数大于 1」。
-        # Input.insertText 是整段插入，保留换行。
-        js("""(() => { const el=document.querySelector("[data-vf-fill='1']"); el.focus(); el.select?.() })()""")
-        time.sleep(0.3)
-        cdp("Input.insertText", text=value)
-        time.sleep(0.5)
-    else:
-        fill_input("[data-vf-fill='1']", value)
+    # fill_input 逐字符键入中文经常只落下第一个字（实测歌曲名变成「竹」），
+    # 专辑名和歌名对不上，页面红字报错。一律用 insertText 整段插入。
+    js("""(() => { const el=document.querySelector("[data-vf-fill='1']"); el.focus(); el.select?.() })()""")
+    time.sleep(0.2)
+    cdp("Input.insertText", text=value)
+    time.sleep(0.4)
     js("""document.querySelector("[data-vf-fill='1']")?.removeAttribute('data-vf-fill')""")
     return True
 
@@ -211,6 +207,50 @@ r = js("""(() => {
   return out
 })()""")
 print(" ", r)
+
+# AI 工具下拉。不选的话页面过不了校验。
+ai = js("""(() => {
+  const lab = [...document.querySelectorAll('*')].find(e => (e.textContent||'').trim() === '使用的AI工具')
+  let root = lab
+  for (let i = 0; i < 8 && root; i++) {
+    const box = [...root.querySelectorAll('*')].find(e => (e.textContent||'').trim() === '请选择')
+    if (box) { box.click(); return 'opened' }
+    root = root.parentElement
+  }
+  return 'no-box'
+})()""")
+time.sleep(0.6)
+picked = js("""(() => {
+  const el = [...document.querySelectorAll('*')].find(e => {
+    const t = (e.textContent||'').trim()
+    const r = e.getBoundingClientRect()
+    return t === 'Suno' && r.height > 12 && r.height < 60 && r.width > 30
+  })
+  if (!el) return 'not-found'
+  el.click(); return 'Suno'
+})()""")
+print("  AI工具:", ai, picked)
+
+# 填完必须看红字。fill_input 吞字这种错，不截图会当成成功。
+reds = js("""(() => {
+  const reds = []
+  for (const e of document.querySelectorAll('*')) {
+    if (e.children.length > 3) continue
+    const t = (e.textContent||'').trim()
+    if (!t || t.length > 80) continue
+    const c = getComputedStyle(e).color
+    const m = c.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/)
+    if (!m) continue
+    if (+m[1] > 180 && +m[2] < 130 && +m[3] < 130) reds.push(t)
+  }
+  return [...new Set(reds)]
+})()""")
+print("  红字:", reds or "无")
+try:
+    shot = capture_screenshot()
+    print("  截图:", shot)
+except Exception as e:
+    print("  截图失败:", e)
 
 print("\n表已填好，停在提交前。请你看一眼再点「下一步 / 提交」。")
 print("点完告诉我，我把台账改成 reviewing。")
