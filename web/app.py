@@ -203,20 +203,39 @@ def _notify_music_task(task_id: str):
         if failed:
             return                      # 失败的不进台账，台账只记真作品
 
-        # 只填机器知道的：曲名、时间、模型这些。
-        # **发行歌名 / 资产归属 / 授权方式 / 负责账号是人填的** ——
-        # 机器猜一个默认值填进去，人扫一眼觉得「已经有了」就不会去改，
-        # 等到要结算才发现归属全是错的。空着反而看得见。
-        notify.ledger_add({
-            "曲名": title,
-            "状态": "未发行",
-            "艺人署名": artist,
-            "风格标签": params.get("tags", ""),
-            "生成模型": params.get("model", ""),
-            "生成时间": int(time.time() * 1000),   # 飞书日期字段收毫秒时间戳
-            "备注": f"voxflow task {task_id}"
-                    + ("" if files else " · 无音频文件"),
-        })
+        # ── 一个文件 = 一条 R2 链接 = 一行台账 ──────────────────────
+        #
+        # Suno 一次出两首，**必须拆成两行**：它们会各自定名、各自上架、
+        # 各自归属，塞进一行就再也分不开了。
+        #
+        # 对应关系靠**文件名**锚定，不靠额外的映射表：
+        # 文件名自带时间戳（[Suno]标题_20260906_143012.mp3），
+        # R2 的 key 就是 prefix + 文件名，所以链接可以从文件名重算出来 ——
+        # 存一张映射表反而多一个会和现实脱节的地方。
+        #
+        # 上传失败不拦台账：先把行记下来（人能看到有这首歌），
+        # 「音乐地址」空着，比整条丢掉强。
+        from core import r2
+
+        now_ms = int(time.time() * 1000)
+        for f in files or [""]:
+            url = r2.upload(f) if f else ""
+            notify.ledger_add({
+                "曲名": title,
+                "状态": "未发行",
+                "音乐地址": url,
+                "艺人署名": artist,
+                "风格标签": params.get("tags", ""),
+                "生成模型": params.get("model", ""),
+                "生成时间": now_ms,          # 飞书日期字段收毫秒时间戳
+                # 文件名是这一行和那个文件之间唯一的锚。**别删这一栏。**
+                # 只填机器知道的：发行歌名 / 资产归属 / 授权方式 / 负责账号
+                # 都留空等人填 —— 机器猜个默认值填进去，人扫一眼觉得
+                # 「已经有了」就不会去改，等到结算才发现归属全是错的。
+                "备注": (os.path.basename(f) if f else "无音频文件")
+                        + f" · task {task_id}"
+                        + ("" if url or not f else " · R2 上传失败"),
+            })
     except Exception as e:                # noqa: BLE001 —— 旁路，绝不影响主流程
         obs.log("notify_hook_failed", level="warn", task_id=task_id, error=str(e)[:200])
 
