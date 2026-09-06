@@ -1268,3 +1268,44 @@ def _notify_status_change(track_id: str, platform: str, before: str, after: str)
         )
     except Exception as e:  # noqa: BLE001
         obs.log("status_notify_failed", level="warn", error=str(e)[:120])
+
+
+def record_login(platform: str, ok: bool, *, detail: str = "", account: str = "") -> None:
+    """记下某个平台的登录核验结果。
+
+    ## 为什么要存
+
+    登录态本身在浏览器里，存不下来 —— 存的是**「最后一次核验的结果和时间」**。
+    有了它，界面上才能说「3 分钟前验过，已登录」，而不是每次进页面都重跑一次
+    （跑一次要开浏览器、几秒钟，还可能弹 Chrome 的调试授权框）。
+
+    `account` 是账号名。平台后台的 DOM 里不一定抓得到（藏在下拉菜单里，
+    而且平台改版就失效），所以**抓不到就让人填一次**，之后复用 ——
+    比每次靠选择器去猜可靠得多。
+    """
+    db.init()
+    now = _now()
+    with db.connect() as c:
+        c.execute("INSERT OR IGNORE INTO platform_accounts (platform, label, synced_at) "
+                  "VALUES (?,?,?)",
+                  (platform, (PLATFORMS.get(platform) or {}).get("label", platform), ""))
+        sets = ["login_status = ?", "login_detail = ?", "login_checked_at = ?"]
+        vals = ["connected" if ok else "expired", detail[:200], now]
+        if account:
+            sets.append("artist_name = ?"); vals.append(account)
+        c.execute(f"UPDATE platform_accounts SET {', '.join(sets)} WHERE platform = ?",
+                  (*vals, platform))
+
+
+def login_state(platform: str) -> dict[str, Any]:
+    """上次核验的登录结果。没验过就返回 unknown —— 不猜。"""
+    db.init()
+    with db.connect() as c:
+        r = c.execute("SELECT login_status, login_detail, login_checked_at, artist_name "
+                      "FROM platform_accounts WHERE platform=?", (platform,)).fetchone()
+    if not r or not (r["login_checked_at"] if "login_checked_at" in r.keys() else ""):
+        return {"status": "unknown", "label": "没验过", "checked_at": "", "account": ""}
+    st = r["login_status"] or "unknown"
+    return {"status": st, "label": LOGIN_STATUS_LABELS.get(st, st),
+            "detail": r["login_detail"] or "", "checked_at": r["login_checked_at"],
+            "account": r["artist_name"] or ""}

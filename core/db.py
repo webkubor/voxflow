@@ -226,6 +226,12 @@ _ADD_COLUMNS = [
     ("track_platforms", "publisher", "TEXT DEFAULT ''"),
     ("track_platforms", "publisher_id", "TEXT DEFAULT ''"),
     ("track_platforms", "assigned_at", "TEXT DEFAULT ''"),
+    # 登录核验结果。**登录态本身存不下来**（在浏览器 cookie 里），
+    # 存的是「最后一次验的结论和时间」—— 有它才能说「3 分钟前验过」，
+    # 而不是每次进页面都重跑一遍（要开浏览器、几秒钟、还可能弹授权框）。
+    ("platform_accounts", "login_status", "TEXT DEFAULT ''"),
+    ("platform_accounts", "login_detail", "TEXT DEFAULT ''"),
+    ("platform_accounts", "login_checked_at", "TEXT DEFAULT ''"),
 ]
 
 # 发布事件流：每首歌走到哪一步、什么时候、谁干的。

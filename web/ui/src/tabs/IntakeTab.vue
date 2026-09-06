@@ -25,7 +25,31 @@
         </div>
       </header>
 
-      <!-- 选完平台第一件事是确认能不能发，不是先填表单。
+      <!-- ① 平台 + 登录：第一屏就是它，不藏在深处。
+           没登录就把后面的表单挡住 —— 让人填完一整张表才发现要重登，
+           是最典型的「本可以早点告诉他」。 -->
+      <div class="login-bar" :class="loginClass">
+        <span class="lb">平台</span>
+        <select v-model="form.platform" class="in narrow">
+          <option v-for="(p, k) in platforms" :key="k" :value="k">{{ p.label }}</option>
+        </select>
+        <span class="login-state">
+          <template v-if="login === null">登录状态未知 —— 点右边检查</template>
+          <template v-else-if="login.status === 'unknown'">还没验过登录</template>
+          <template v-else-if="login.已登录 || login.status === 'connected'">
+            ✓ 已登录{{ login.账号 || login.account ? ' · ' + (login.账号 || login.account) : '' }}
+            <small v-if="login.验于 || login.checked_at">（{{ (login.验于 || login.checked_at).slice(5, 16).replace('T', ' ') }} 验过）</small>
+          </template>
+          <template v-else-if="login.可验证">✗ 未登录 —— 先去登录再继续</template>
+          <template v-else>? {{ login.说明 }}</template>
+        </span>
+        <button class="ghost-btn small" :disabled="loginBusy" @click="checkLogin">
+          {{ loginBusy ? '检查中…' : '检查登录' }}
+        </button>
+        <a v-if="consoleUrl" class="ghost-btn small" :href="consoleUrl" target="_blank" rel="noopener">去登录</a>
+      </div>
+
+      <!-- ② 这台机器的其它前置条件（毫秒级，页面加载就查）
            物料齐了也可能发不出去：没登录、museav 没积分、harness 没装。 -->
       <div v-if="pre" class="pre" :class="{ blocked: !pre.可以发布 }">
         <div class="pre-head">
@@ -54,12 +78,6 @@
           <input v-model="form.album" class="in" placeholder="例如：破晓时分 · 纯音乐 BGM" />
         </label>
         <label class="row">
-          <span class="lb">发布平台</span>
-          <select v-model="form.platform" class="in">
-            <option v-for="(p, k) in platforms" :key="k" :value="k">{{ p.label }}</option>
-          </select>
-        </label>
-        <label class="row">
           <span class="lb">你的名字</span>
           <input v-model="form.publisher" class="in" placeholder="谁负责发这首（会记进发布记录）" />
         </label>
@@ -79,7 +97,7 @@
 
         <div class="row">
           <span class="lb"></span>
-          <button class="primary-btn" :disabled="busy || !form.url.trim()" @click="submit">
+          <button class="primary-btn" :disabled="busy || !form.url.trim() || loginBlocked" @click="submit">
             {{ busy ? '处理中…' : '导入并备料' }}
           </button>
         </div>
@@ -122,7 +140,7 @@
  * 刻意不放在「AI 音乐」里：那一屏要 Suno 会员和模型，而这类用户两样都没有，
  * 混在一起只会让他们以为自己用不了。
  */
-import { reactive, ref, onMounted, watch } from 'vue';
+import { reactive, ref, computed, onMounted, watch } from 'vue';
 import { api } from '../api';
 import { useTasksStore } from '../stores/tasks';
 
@@ -131,6 +149,32 @@ const busy = ref(false);
 const result = ref(null);
 const platforms = ref({});
 const pre = ref(null);
+const login = ref(null);
+const loginBusy = ref(false);
+
+const consoleUrl = computed(() => login.value?.控制台
+  || pre.value?.items?.find((i) => i.项.includes('登录'))?.链接 || '');
+
+/** 未登录时整条变红，已登录变绿 —— 状态要一眼看得见，不能藏在文字里 */
+/** 明确验过是「没登录」才挡；没验过不挡（可能是没装 harness 的机器） */
+const loginBlocked = computed(() =>
+  login.value?.已登录 === false || login.value?.status === 'expired');
+
+const loginClass = computed(() => ({
+  ok: login.value?.已登录 === true,
+  bad: login.value?.已登录 === false,
+}));
+
+const checkLogin = async () => {
+  loginBusy.value = true;
+  try {
+    login.value = await api.loginCheck(form.platform);
+  } catch (cause) {
+    login.value = { 可验证: false, 已登录: null, 说明: String(cause?.message || cause).slice(0, 80) };
+  } finally {
+    loginBusy.value = false;
+  }
+};
 
 /** 前置条件。换平台就重查 —— 每个平台的登录和脚本都是独立的。 */
 const loadPre = async () => {
@@ -149,9 +193,17 @@ onMounted(async () => {
     form.publisher = (await api.notifyOwner()).name || '';
   } catch { /* 拿不到就让人自己填，不拦流程 */ }
   loadPre();
+  // 先读上次的结论（毫秒级），别让页面等浏览器探测
+  try { login.value = await api.loginState(form.platform); } catch { /* 没验过就空着 */ }
 });
 
-watch(() => form.platform, loadPre);
+// 换平台：前置条件重查，登录状态清空（每个平台的登录是独立的，
+// 留着上一个平台的绿灯会让人以为这个也登了）
+watch(() => form.platform, async () => {
+  login.value = null;
+  loadPre();
+  try { login.value = await api.loginState(form.platform); } catch { /* 同上 */ }
+});
 
 const submit = async () => {
   busy.value = true;
@@ -177,6 +229,18 @@ const copy = async (text) => {
 </script>
 
 <style scoped>
+.login-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; margin-bottom: var(--vf-space-3);
+  border: 1px solid var(--vf-border, #333); border-radius: 8px; font-size: 13px;
+}
+.login-bar.ok { border-color: #4caf80; }
+.login-bar.bad { border-color: #ff7a5c; }
+.login-state { flex: 1; min-width: 0; color: var(--vf-text-2, #bbb); }
+.login-bar.bad .login-state { color: #ff7a5c; }
+.login-bar.ok .login-state { color: #4caf80; }
+.in.narrow { flex: none; width: 140px; }
+
 .pre {
   margin-bottom: var(--vf-space-4); padding: 10px 12px; border-radius: 8px;
   border: 1px solid var(--vf-border, #333); font-size: 12.5px;

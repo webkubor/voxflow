@@ -1845,6 +1845,133 @@ def _run_publish_task(task_id: str, params: dict, update_fn):
     )
 
 
+@app.get("/api/publish/login-state")
+def publish_login_state(platform: str = "qishui"):
+    """上次核验的登录结果（毫秒级，读库）。
+
+    和 `login-check` 分开：那个要真开浏览器、几秒钟、还可能弹 Chrome 的
+    调试授权框，不能放在页面加载路径上。这个只读上次的结论 ——
+    页面先显示「3 分钟前验过：已登录」，人觉得不对再点「重新检查」。
+    """
+    from core import pipeline  # noqa: PLC0415
+
+    st = pipeline.login_state(platform)
+    st["控制台"] = (pipeline.PLATFORMS.get(platform) or {}).get("console", "")
+    return st
+
+
+@app.post("/api/publish/login-check")
+def publish_login_check(platform: str = "qishui"):
+    """实际探一次平台登录态。**由用户点按钮触发，不放在页面加载路径上。**
+
+    ## 逻辑说明（这一条被问过：普通用户从哪知道自己登没登）
+
+    1. 「自动化发布」页最上面就是平台 + 登录状态，不是藏在深处
+    2. 状态未知时显示「检查登录」按钮 —— 点了才真跑，页面不会因此卡住
+    3. 没登录 → 红色 + 「去登录」按钮直接打开该平台后台
+    4. 登录了 → 绿色 + 显示后台页面标题（确认是对的那个账号，
+       而不是笼统的「已登录」—— 多账号的人最容易在这里搞错）
+
+    探测靠 browser-harness 附着用户日常那个浏览器。**没装它就诚实说验不了**，
+    不猜一个「大概登录了」——猜错的代价是人填完一整张表才发现要重来。
+    """
+    import subprocess  # noqa: PLC0415
+
+    from core import pipeline  # noqa: PLC0415
+    from core.paths import PROJECT_DIR as PD  # noqa: PLC0415
+
+
+    spec = pipeline.PLATFORMS.get(platform) or {}
+    if not shutil.which("browser-harness"):
+        return {"可验证": False, "已登录": None, "说明": "没装 browser-harness",
+                "控制台": spec.get("console", "")}
+    probe = PD / "scripts/check_login.py"
+    if not probe.exists():
+        return {"可验证": False, "已登录": None, "说明": "缺 scripts/check_login.py",
+                "控制台": spec.get("console", "")}
+    try:
+        with open(probe, encoding="utf-8") as f:
+            r = subprocess.run(["browser-harness"], stdin=f, timeout=120,
+                               env={**os.environ, "VF_BASE": str(PD), "VF_PLATFORM": platform},
+                               capture_output=True, text=True)
+        lines = [ln for ln in (r.stdout or "").splitlines() if ln.strip().startswith("{")]
+        d = json.loads(lines[-1]) if lines else {}
+    except Exception as e:  # noqa: BLE001
+        return {"可验证": False, "已登录": None,
+                "说明": f"探测失败：{str(e)[:120]}", "控制台": spec.get("console", "")}
+    ok = bool(d.get("logged_in"))
+    # 落库：下次进页面直接读「上次验的结果」，不用每次都开浏览器
+    pipeline.record_login(platform, ok,
+                          detail=(d.get("hint", "") + " · " + d.get("title", ""))[:200])
+    st = pipeline.login_state(platform)
+    return {"可验证": True, "已登录": ok,
+            "说明": d.get("hint", ""), "页面": d.get("title", ""),
+            "账号": st.get("account", ""), "验于": st.get("checked_at", ""),
+            "控制台": spec.get("console", "")}
+
+
+@app.get("/api/publish/sheet")
+def publish_sheet(track_id: str, platform: str = "qishui"):
+    """把平台表单要填的每一栏都算好，人直接照着抄。
+
+    ## 为什么必须有这个
+
+    自动填表依赖 `browser-harness` —— 那是个本机工具，**Windows 上不一定装得了**，
+    而且它要能连上浏览器（本机实测会超时）。把它当成唯一路径，
+    等于让一部分人根本用不了这个功能。
+
+    自动化是**加速**，不是前提。所以永远保留一条不依赖任何工具的路：
+    这个端点把每一栏的值都算好，复制粘贴十分钟能填完，
+    和自动填表的产出**完全一致**（同一份数据来源，不会两边不一样）。
+    """
+    from core import pipeline  # noqa: PLC0415
+    from core.paths import ARTIST_FILE  # noqa: PLC0415
+
+    t = pipeline.get_track(track_id)
+    if not t:
+        raise HTTPException(404, "曲目不存在")
+    spec = pipeline.PLATFORMS.get(platform) or {}
+    info = (t.get("platforms") or {}).get(platform) or {}
+    try:
+        artist = json.loads(ARTIST_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        artist = {}
+    roles = artist.get("roles") or {}
+    dur = int(t.get("duration") or info.get("duration") or 0)
+
+    fields = [
+        ("歌曲标题", t.get("release_title") or t.get("title", "")),
+        ("表演者", roles.get("performer") or artist.get("stage_name", "")),
+        ("词作者", roles.get("lyricist") or artist.get("stage_name", "")),
+        ("曲作者", roles.get("composer") or artist.get("stage_name", "")),
+        ("制作人", roles.get("producer") or artist.get("stage_name", "")),
+        ("专辑名称", info.get("album") or t.get("album_desc", "")),
+        ("专辑歌手", roles.get("album_artist") or artist.get("stage_name", "")),
+        ("歌词", t.get("lyrics") or "[Instrumental]"),
+        # 这一栏必须如实勾。漏了或填错是**合规问题**，不是格式问题 ——
+        # 平台事后核查发现瞒报，处理起来比当场多点一下严重得多。
+        ("AI 创作声明", "是（工具：Suno）"),
+        ("音乐类型", t.get("tags", "") or "纯音乐 BGM"),
+        ("时长", f"{dur // 60}:{dur % 60:02d}" if dur else ""),
+    ]
+    # 第二步的授权信息：真实姓名，不是艺名
+    step2 = [
+        ("词作者真实姓名", artist.get("real_name", "")),
+        ("曲作者真实姓名", artist.get("real_name", "")),
+        ("授权比例", "100%"),
+    ]
+    return {
+        "曲目": t.get("release_title") or t.get("title"),
+        "平台": spec.get("label", platform),
+        "控制台": spec.get("console", ""),
+        "第一步_上传作品": [{"字段": k, "值": v} for k, v in fields],
+        "第二步_授权作品": [{"字段": k, "值": v} for k, v in step2],
+        "音频": t.get("audio_url", ""),
+        "封面": t.get("cover_url", ""),
+        "提示": "真实姓名用于版权登记和收益结算，不能填艺名",
+    }
+
+
 @app.post("/api/publish/run")
 def publish_run(req: PublishRunRequest):
     """开始自动填表。异步任务，前端轮询 /api/tasks 看进度。"""
@@ -1877,6 +2004,7 @@ def publish_preflight(platform: str = "qishui"):
     假装检查过比不检查更危险：人会信它。
     """
     import shutil as _sh  # noqa: PLC0415
+    import subprocess  # noqa: PLC0415
 
     from core import cover, notify, pipeline, r2  # noqa: PLC0415
     from core.paths import ARTIST_FILE  # noqa: PLC0415
@@ -1907,8 +2035,8 @@ def publish_preflight(platform: str = "qishui"):
 
     # 3) 平台脚本
     script = PROJECT_DIR / f"scripts/publish_{platform}.py" if "PROJECT_DIR" in dir() else None
-    from core.paths import PROJECT_DIR as _PD  # noqa: PLC0415
-    script = _PD / f"scripts/publish_{platform}.py"
+    from core.paths import PROJECT_DIR as PROJECT_DIR_  # noqa: PLC0415
+    script = PROJECT_DIR_ / f"scripts/publish_{platform}.py"
     add(f"{spec.get('label', platform)} 填表脚本", script.exists(),
         f"scripts/publish_{platform}.py" if script.exists()
         else f"没有 publish_{platform}.py —— 这个平台还没做自动填表")
@@ -1932,10 +2060,16 @@ def publish_preflight(platform: str = "qishui"):
     add("飞书台账", bool((acc.get("base") or {}).get("app_token")),
         f"{acc.get('company','')} · {acc.get('chat_name','')}" if acc else "没配通知账户")
 
-    # 7) 平台登录 —— **服务端验不了**，登录态在用户浏览器里
+    # 7) 平台登录 —— **这里不真探**。
+    #
+    # 探一次要跑 browser-harness、开页面，本机实测 5 秒、服务端更久。
+    # 放在页面加载的同步路径上，整页就得等它 —— 而前面六项都是毫秒级的。
+    # 所以这里只说「能不能探」，真探由用户点「检查登录」触发（见 login_check）。
     console = spec.get("console") or ""
-    add(f"{spec.get('label', platform)} 登录", None,
-        "登录态在你的浏览器里，这个进程看不到 —— 点右边链接确认能进后台",
+    add(f"{spec.get('label', platform)} 登录",
+        None,
+        "点「检查登录」实际验一次" if harness
+        else "没装 browser-harness —— 只能自己点右边确认能进后台",
         verifiable=False, link=console)
 
     blocking = [i for i in items if i["可自动验证"] and not i["就绪"]]

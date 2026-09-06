@@ -130,6 +130,15 @@ export const api = {
     可以发布: boolean; 阻塞项: string[];
     items: { 项: string; 就绪: boolean | null; 说明: string; 可自动验证: boolean; 链接: string }[];
   }>('publish/preflight', { platform }),
+  /** 实际探一次平台登录（跑 browser-harness，慢，由按钮触发） */
+  loginCheck: (platform: string) => post<{
+    可验证: boolean; 已登录: boolean | null; 说明: string; 页面?: string; 控制台: string;
+  }>(`publish/login-check?platform=${encodeURIComponent(platform)}`),
+  /** 上次核验的登录结果（读库，毫秒级） */
+  loginState: (platform: string) => get<{
+    status: string; label: string; detail?: string; checked_at: string;
+    account: string; 控制台: string;
+  }>('publish/login-state', { platform }),
   setStage: (track_id: string, stage: Stage) => post('pipeline/stage', { track_id, stage }),
   /** 这首歌发这个平台还缺什么 —— 「备料中」到底算不算完，全靠它回答 */
   readiness: (track_id: string, platform: string) => get<{

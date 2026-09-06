@@ -34,13 +34,24 @@ if not console:
     print(json.dumps({"ok": False, "error": f"{platform} 没有配置控制台地址"}, ensure_ascii=False))
     raise SystemExit(1)
 
-# harness 的辅助函数是 goto_url + wait_for_load，没有 goto_and_wait
-# （那是 ego-browser 的叫法）—— 两套 API 名字很像，容易记混。
+# ⚠️ 不要用 wait_for_load()：平台后台是重页面（大量异步请求），
+# 它会一直等到网络空闲，实测直接超时。而判断登录只需要看**最终 URL**，
+# 页面渲染完没完根本不影响。所以只 goto + 短等，然后读 page_info。
 ensure_real_tab()                     # noqa: F821 —— harness 预置
-goto_url(console)                     # noqa: F821
-wait_for_load()                       # noqa: F821
-wait(3)                               # noqa: F821
 info = page_info()                    # noqa: F821
+# 已经在目标站上就不折腾了 —— 重新导航会打断用户正在填的表
+host = console.split("//")[-1].split("/")[0]
+if host not in (info or {}).get("url", ""):
+    # ⚠️ 导航 + 长等会撑爆 harness 的 socket 超时（平台后台是重页面）。
+    # 拆开：先发导航（不等它加载完），短等，再读 URL。
+    # 判断登录只看**最终 URL**，页面渲染完没完不影响结论。
+    goto_url(console)                 # noqa: F821
+    wait(2)                           # noqa: F821
+    info = page_info()                # noqa: F821
+    # 还在跳转中就再等一轮 —— SSO 会连跳两次
+    if host not in (info or {}).get("url", ""):
+        wait(3)                       # noqa: F821
+        info = page_info()            # noqa: F821
 url = (info or {}).get("url", "")
 
 LOGIN_MARKS = ("/login", "/passport", "/sign", "accounts.", "sso.")
