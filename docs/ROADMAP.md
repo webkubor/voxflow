@@ -137,6 +137,27 @@ MELO / 天工 / 妙响这类平台声称能一键分发到三大平台。**没�
 
 ---
 
+## 5. 桌面应用（Mac + Windows）
+
+**已拍板**：拆成两个构建，外壳用 Tauri + Python sidecar。
+发布版 ~60 MB（不含 torch 和模型），完整版 ~2.2 GB。
+
+拆得动的依据是实测出来的：整条发行链路对 torch / transformers / librosa /
+soundfile 的引用数是 **0**，而 `web/app.py` 里的 `import torch` 已经在函数内部
+—— 不装 torch 服务照样起得来。
+
+**同时拍板**：`lark-cli` 和 `museav` 改成直连 HTTP。两个都已经有接口，
+改完发布版就不再要求用户装 Node 和额外 CLI，外部依赖只剩 ffmpeg（随包）
+和 Chrome（本来就有）。
+
+完整计划、平台耦合点清单、风险与接手顺序见 **`docs/DESKTOP_APP_PLAN.md`**。
+
+⚠️ 最该先验的一件事：**browser-harness 在 Windows 上能不能附着 Chrome**。
+这是自动化发布的地基，不行的话产品承诺要从「自动发布」退回
+「备料 + 人工填表」—— 越早知道越好。
+
+---
+
 ## 不做的事
 
 - **不做全流程无人值守发布**。审核是人工的（3 个工作日起），
