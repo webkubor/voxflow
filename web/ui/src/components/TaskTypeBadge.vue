@@ -20,6 +20,8 @@ const TYPE_LABEL = {
   design: '设计',
   dialogue: '剧本',
   suno: '音乐',
+  cover: '封面',
+  cover_upscale: '超分',
   publish: '发行',
   inbox: '入库',
 };
@@ -40,10 +42,12 @@ const label = computed(() => TYPE_LABEL[props.type] || props.type);
 .design { background: rgba(95, 125, 149, 0.15); color: var(--vf-info); }
 .dialogue { background: var(--vf-warn-soft); color: var(--vf-warn); }
 .suno { background: var(--vf-primary-soft); color: var(--vf-primary); }
+.cover { background: var(--vf-primary-soft); color: var(--vf-primary); }
+.cover_upscale { background: var(--vf-ok-soft); color: var(--vf-ok); }
 .publish { background: rgba(234, 179, 8, 0.10); color: var(--vf-warn); }
 .inbox { background: var(--vf-bg-3); color: var(--vf-text-2); }
 /* 兜底色 */
-.task-type-badge:not(.clone):not(.design):not(.dialogue):not(.suno):not(.publish):not(.inbox) {
+.task-type-badge:not(.clone):not(.design):not(.dialogue):not(.suno):not(.cover):not(.cover_upscale):not(.publish):not(.inbox) {
   background: var(--vf-bg-3);
   color: var(--vf-text-2);
 }

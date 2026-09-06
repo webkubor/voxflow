@@ -31,11 +31,11 @@
           </button>
         </div>
 
-        <div v-if="t.status === 'running' && t.stage" class="task-progress">
+        <div v-if="t.status === 'running'" class="task-progress">
           <div class="task-progress-bar">
-            <div class="task-progress-fill" :style="{ width: stagePercent(t.stage) + '%' }"></div>
+            <div class="task-progress-fill" :style="{ width: barPercent(t) + '%' }"></div>
           </div>
-          <span class="task-progress-label">{{ t.stage }}</span>
+          <span class="task-progress-label">{{ t.stage || '处理中' }} {{ barPercent(t) }}%</span>
         </div>
 
         <div class="task-meta">
@@ -103,6 +103,8 @@ const getTaskTargetName = (t) => {
   if (t.type === 'design') return t.params?.voice_name || '音色设计';
   if (t.type === 'suno') return t.params?.title || 'Suno 任务';
   if (t.type === 'dialogue') return t.params?.title || '剧本任务';
+  if (t.type === 'cover') return t.params?.title || '出封面';
+  if (t.type === 'cover_upscale') return '本地超分封面';
   return t.type;
 };
 
@@ -124,6 +126,11 @@ const STAGE_PROGRESS = {
   encoding: 95,
 };
 const stagePercent = (stage) => STAGE_PROGRESS[stage] ?? 50;
+const barPercent = (t) => {
+  const n = Number(t.progress);
+  if (Number.isFinite(n) && n >= 0) return Math.min(100, Math.round(n));
+  return stagePercent(t.stage);
+};
 
 const formatTime = (timeStr) => {
   if (!timeStr) return '';

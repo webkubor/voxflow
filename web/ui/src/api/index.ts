@@ -261,6 +261,9 @@ export const api = {
     /** 显式尺寸 'WxH'。留空则按 ratio 自动算一个短边 ≥1440 的 */
     size?: string;
   }) => post<{ task_id: string }>('cover/generate', p),
+  /** 本地 GPU 超分现有封面到 1440，不花积分。 */
+  upscaleCover: (p: { track_id: string }) =>
+    post<{ task_id: string }>('cover/upscale', p),
 
   // ── 可观测性与成本 ──
   // 四个分开而不是合成一个 /debug：想看一眼健康状态时，不该等日志和

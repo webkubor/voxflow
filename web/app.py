@@ -269,6 +269,8 @@ def _task_worker():
                 _run_dialogue_task(task_id, task["params"], _update_task)
             elif task["type"] == "cover":
                 _run_cover_task(task_id, task["params"], _update_task)
+            elif task["type"] == "cover_upscale":
+                _run_cover_upscale_task(task_id, task["params"], _update_task)
             elif task["type"] == "suno_cover":
                 _run_suno_cover_task(task_id, task["params"], _update_task)
         except Exception as e:
@@ -279,7 +281,7 @@ def _task_worker():
                     task_id=task_id, label=task.get("label", ""), error=_err[:300])
         finally:
             _notify_music_task(task_id)
-            if task["type"] not in ("suno", "suno_cover", "cover"):
+            if task["type"] not in ("suno", "suno_cover", "cover", "cover_upscale"):
                 # 本地 TTS 单价是 0，但**量**要记 —— 「本月本地合成了多少秒」
                 # 乘上对标商业 API 的单价，就是本地方案实际省下的钱。
                 # 不记量的话，这个工具最大的价值恰好是唯一看不见的那个。
@@ -1146,6 +1148,55 @@ def list_personas():
     return {"personas": registered, "presets": presets, "total": len(registered)}
 
 
+class DesignCommitRequest(BaseModel):
+    filename: str                 # 设计任务产出的 [设计]xxx.wav
+    voice_name: str
+    instruction: str = ""
+
+
+@app.post("/api/design/commit")
+def design_commit(req: DesignCommitRequest):
+    """把**已经生成好的**设计音色存进音色库。
+
+    ## 为什么需要这个端点
+
+    设计任务原本只有一条入库路径：提交时把 `commit` 开关打开。
+    可那个开关上写的是「满意后存入」—— 而它必须在**生成之前**拨，
+    人根本没法先听再决定。于是要么盲开、要么听完发现不错却存不了，
+    只能改改参数重生成一遍碰运气。
+
+    实测后果：15 个设计产物，音色库里只有 2 个。
+
+    这个端点让「满意后存入」名副其实：生成完、听过、觉得行，再点一下。
+    """
+    from core.utils import (  # noqa: PLC0415
+        resolve_design_voice_key, sanitize_path_component,
+        upsert_persona_mapping, write_generation_json,
+    )
+
+    name = (req.voice_name or "").strip()
+    if not name:
+        raise HTTPException(400, "voice_name 不能为空")
+    src = OUT_DIR / os.path.basename(req.filename)
+    if not src.is_file():
+        raise HTTPException(404, f"找不到音频：{req.filename}")
+
+    voice_key = resolve_design_voice_key({"voice_name": name})
+    safe_name = sanitize_path_component(name, fallback="未命名音色")
+    seed = _get_processor().extract_voice_seed(str(src), name, max_sec=10, skip_start_ms=0)
+    upsert_persona_mapping(
+        str(BASE_DIR),
+        persona_key=voice_key,
+        persona_name=name,
+        ref_rel=os.path.relpath(str(seed), str(BASE_DIR)).replace("\\", "/"),
+        design_rel=f"voice_designs/{safe_name}.json",
+        instruction=req.instruction or "",
+    )
+    write_generation_json(str(BASE_DIR), voice_key, source="voice_design")
+    obs.log("design_committed", persona_key=voice_key, name=name)
+    return {"ok": True, "persona_key": voice_key, "name": name}
+
+
 @app.post("/api/personas/add")
 async def add_persona(
     key: str = Form(...),
@@ -1945,6 +1996,67 @@ def trending():
 SUNO_BIN = os.path.expanduser("~/.cargo/bin/suno")
 if not os.path.exists(SUNO_BIN):
     SUNO_BIN = "suno"  # 回退到 PATH
+
+
+def _clear_stale_solver(port: int = 9233) -> None:
+    """清掉 suno 遗留的验证码 Chrome。
+
+    Suno 生成时会拉一个 headless Chrome 去解 hCaptcha，正常退出时自己清理。
+    但**上一次失败/超时就会留下孤儿**，它一直占着 9233 端口，
+    于是**之后每一次生成都失败** —— 而报错文案说的是
+    「Chrome not found，或设置 SUNO_CHROME_PATH」，把人往完全错误的方向带
+    （实测 Chrome 一直找得到，`suno doctor` 也一直是 pass）。
+
+    2026-09-06 三首 BGM 就这么全挂了：任务失败、队列清空、额度一分没扣，
+    界面上只看到「没反应」。真凶要跑 `suno doctor` 才看得见：
+    `solver_chrome: warn — something is still listening on solver port 9233`。
+
+    只杀**它自己那个 profile** 的进程 —— 用户日常的 Chrome、
+    ego-browser 的 Chrome 都是别的 user-data-dir，绝不能误伤。
+    """
+    try:
+        r = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
+                           capture_output=True, text=True, timeout=5)
+        for pid in [x for x in r.stdout.split() if x.isdigit()]:
+            cmd = subprocess.run(["ps", "-o", "command=", "-p", pid],
+                                 capture_output=True, text=True, timeout=5).stdout
+            # 认 suno 自己的 profile 路径，认不出来就不动
+            if "suno-cli" in cmd and "--headless" in cmd:
+                os.kill(int(pid), 15)
+                obs.log("suno_stale_solver_killed", level="warn", pid=pid, port=port)
+    except Exception:      # noqa: BLE001 —— 清理失败不该拦住生成
+        pass
+
+
+def _suno_env() -> dict[str, str]:
+    """调 suno CLI 时的环境。
+
+    ## 为什么要显式传 Chrome 路径
+
+    Suno 的验证码环节要拉起一个 Chrome。CLI 自己会去几个常见位置找，
+    **在交互 shell 里找得到**（`suno doctor` 显示 chrome: pass），
+    但 web 服务是后台进程、环境不一样，同一台机器上就找不到了，
+    报 `Configuration error: Chrome ... or set SUNO_CHROME_PATH`。
+
+    2026-09-06 三首 BGM 就这么全军覆没：任务失败、队列清空、
+    额度一分没扣，而人在界面上只看到「没反应」。
+
+    与其猜两个环境差在哪，不如显式钉死路径 —— 找得到就传，
+    找不到也不拦（让 CLI 自己去找，它可能有别的办法）。
+    """
+    _clear_stale_solver()
+    env = dict(os.environ)
+    if env.get("SUNO_CHROME_PATH"):
+        return env
+    for cand in (
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    ):
+        if os.path.exists(cand):
+            env["SUNO_CHROME_PATH"] = cand
+            break
+    return env
 SUNO_STATE = os.path.expanduser("~/.voxsuno/personas.json")
 MUSIC_SUBDIR = "music"  # Suno 音乐单独放 out/music，跟 TTS wav 分开
 
@@ -2203,7 +2315,7 @@ def suno_clips(limit: int = 40):
     if not os.path.exists(SUNO_BIN):
         raise HTTPException(400, f"suno CLI 不存在：{SUNO_BIN}")
     try:
-        r = subprocess.run([SUNO_BIN, "list", "--json"],
+        r = subprocess.run([SUNO_BIN, "list", "--json"], env=_suno_env(),
                            capture_output=True, text=True, timeout=30)
         clips = (json.loads(r.stdout or "{}").get("data") or {}).get("clips") or []
     except Exception as e:
@@ -2254,7 +2366,8 @@ def _run_suno_cover_task(task_id: str, params: dict, update_fn):
 
     update_fn(task_id, progress=25, stage="Suno 翻唱中（约 1-3 分钟）...")
     _t0 = time.perf_counter()
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=420)
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=420,
+                       env=_suno_env())
     _ms = int((time.perf_counter() - _t0) * 1000)
     _cr = float((obs.pricing().get("providers", {}).get("suno") or {}).get("credits_per_call", 10))
 
@@ -2338,6 +2451,22 @@ def cover_generate(req: CoverRequest):
     return {"task_id": _submit_task("cover", label, req.model_dump()), "status": "queued"}
 
 
+class CoverUpscaleRequest(BaseModel):
+    track_id: str
+
+
+@app.post("/api/cover/upscale")
+def cover_upscale(req: CoverUpscaleRequest):
+    """本地 GPU 超分现有封面到 1440，不花中台积分。"""
+    from core import pipeline
+    t = pipeline.get_track(req.track_id)
+    if not t or not t.get("cover_file"):
+        raise HTTPException(400, "这首还没有封面可超分")
+    label = f"🖼 超分：{t.get('title') or req.track_id}"
+    return {"task_id": _submit_task("cover_upscale", label, req.model_dump()),
+            "status": "queued"}
+
+
 @app.get("/api/cover/status")
 def cover_status():
     """中台能不能出图、一张多少积分。界面用它决定按钮是可点还是灰掉。"""
@@ -2405,6 +2534,32 @@ def _run_cover_task(task_id: str, params: dict, update_fn):
 
     update_fn(task_id, status="done", progress=100, stage="完成",
               result={"ok": True, "prompt": prompt, "note": note, **result},
+              completed_at=datetime.now().strftime("%H:%M:%S"))
+
+
+def _run_cover_upscale_task(task_id: str, params: dict, update_fn):
+    """本地 GPU 超分现有封面到 1440，回填台账。不花中台积分。"""
+    from pathlib import Path
+    from core import cover, pipeline
+    from core.paths import DATA_DIR, PUBLISH_DIR
+
+    tid = (params.get("track_id") or "").strip()
+    t = pipeline.get_track(tid)
+    if not t or not t.get("cover_file"):
+        raise ValueError("这首还没有封面可超分")
+    src = Path(t["cover_file"])
+    if not src.is_absolute():
+        src = DATA_DIR / src
+    title = t.get("release_title") or t.get("title") or tid
+    dest = PUBLISH_DIR / "covers" / f"{title}_1440.jpg"
+    result = cover.upscale_local(
+        src, dest,
+        on_progress=lambda pct, stage: update_fn(task_id, progress=pct, stage=stage),
+    )
+    rel = str(result.relative_to(DATA_DIR)) if str(result).startswith(str(DATA_DIR)) else str(result)
+    pipeline.upsert(tid, cover_file=rel)
+    update_fn(task_id, status="done", progress=100, stage="完成",
+              result={"ok": True, "path": rel},
               completed_at=datetime.now().strftime("%H:%M:%S"))
 
 

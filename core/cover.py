@@ -367,6 +367,53 @@ def generate(
     }
 
 
+def upscale_local(
+    src: Path,
+    dest: Path,
+    *,
+    scale: int = 2,
+    on_progress: Callable[[int, str], None] | None = None,
+) -> Path:
+    """
+    本地 Real-ESRGAN 超分（museav upscale），再落到 1440 方图。
+
+    **不花中台积分、不走网络**。有一张够意思但短边不到 1440 的图时走这条，
+    不要 PIL 硬拉（糊）也不要再烧一张新图。
+    """
+    import shutil
+    import subprocess
+
+    bin_path = shutil.which("museav")
+    if not bin_path:
+        raise CoverError("找不到 museav CLI。本地超分靠它，装好后 `museav upscale --help` 能跑即可")
+    src = Path(src)
+    dest = Path(dest)
+    if not src.is_file():
+        raise CoverError(f"没有这张图：{src}")
+    if on_progress:
+        on_progress(15, "本地 GPU 超分中…")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.stem + f".{scale}x.png")
+    r = subprocess.run(
+        [bin_path, "upscale", str(src), "--out", str(tmp),
+         "--scale", str(scale), "--overwrite"],
+        capture_output=True, text=True, timeout=300,
+    )
+    if r.returncode != 0:
+        raise CoverError((r.stderr or r.stdout or "超分失败")[-400:])
+    if on_progress:
+        on_progress(75, f"裁到 {COVER_SIDE}×{COVER_SIDE}…")
+    from PIL import Image
+    with Image.open(tmp) as im:
+        out = im.convert("RGB").resize((COVER_SIDE, COVER_SIDE), Image.Resampling.LANCZOS)
+        out.save(dest, quality=92)
+    if tmp != dest and tmp.exists():
+        tmp.unlink(missing_ok=True)
+    if on_progress:
+        on_progress(100, "完成")
+    return dest
+
+
 def _size_for(ratio: str, min_side: int = COVER_SIDE) -> str:
     """
     按比例算一个「短边不小于 min_side、两边都是 16 的倍数」的尺寸。

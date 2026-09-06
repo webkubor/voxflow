@@ -3,7 +3,7 @@
     <header class="board-head">
       <h3 class="board-title">
         <Icon name="board" size="md" />
-        <span>作品流水线</span>
+        <span>发歌记录</span>
       </h3>
       <div class="board-tools">
         <!-- 出封面的比例。放在顶栏而不是每一行：封面绝大多数是方图，
@@ -121,6 +121,19 @@
           </div>
         </div>
 
+        <div v-if="coverJob(t.id)" class="track-progress">
+          <div class="track-progress-bar">
+            <div
+              class="track-progress-fill"
+              :style="{ width: (Number(coverJob(t.id).progress) || 8) + '%' }"
+            />
+          </div>
+          <span class="track-progress-label">
+            {{ coverJob(t.id).stage || '处理中' }}
+            {{ Number.isFinite(Number(coverJob(t.id).progress)) ? `${Math.round(coverJob(t.id).progress)}%` : '' }}
+          </span>
+        </div>
+
         <div class="track-foot">
           <div class="track-tags">
             <span v-if="t.voice" class="meta-pill"><Icon name="voice" size="sm" />{{ t.voice }}</span>
@@ -143,12 +156,22 @@
             <button
               v-if="!t.cover_url"
               class="ghost-btn small"
-              :disabled="!coverCaps.can_generate || coverBusyId === t.id"
+              :disabled="!coverCaps.can_generate || !!coverJob(t.id)"
               :title="coverCaps.detail"
               @click="genCover(t)"
             >
               <Icon name="sparkles" size="sm" />
-              <span>{{ coverBusyId === t.id ? '出图中…' : coverBtnLabel }}</span>
+              <span>{{ coverJob(t.id) ? '出图中…' : coverBtnLabel }}</span>
+            </button>
+            <button
+              v-else
+              class="ghost-btn small"
+              :disabled="!!coverJob(t.id)"
+              title="本地 GPU 超分到 1440，不花中台积分"
+              @click="upscaleCover(t)"
+            >
+              <Icon name="sparkles" size="sm" />
+              <span>{{ coverJob(t.id)?.type === 'cover_upscale' ? '超分中…' : '超分封面' }}</span>
             </button>
             <button
               v-if="t.lyrics || Object.keys(t.platforms || {}).length"
@@ -368,6 +391,15 @@ import PlatformMark from './PlatformMark.vue';
 const pipelineStore = usePipelineStore();
 const tasksStore = useTasksStore();
 const { stages, stageLabels, platforms, summary, tracks, error } = storeToRefs(pipelineStore);
+const { tasks } = storeToRefs(tasksStore);
+
+const coverJob = (trackId) =>
+  (tasks.value || []).find(
+    (x) =>
+      ['queued', 'running'].includes(x.status)
+      && ['cover', 'cover_upscale'].includes(x.type)
+      && x.params?.track_id === trackId,
+  );
 
 const busyId = ref('');
 const expanded = ref(new Set());
@@ -424,7 +456,6 @@ const genCover = async (t) => {
       ratio: coverRatio.value || '1:1',
     });
     tasksStore.showToast(`封面出图已提交（约 ¥${(coverCaps.value.est_cny || 0).toFixed(2)}）`, 'info');
-    // 轮到任务终态再刷看板 —— 出图要几十秒，立刻刷新只会看到没变化。
     const done = await waitTask(task_id);
     if (done?.status === 'done') {
       tasksStore.showToast('封面已生成并回填台账', 'success');
@@ -436,14 +467,33 @@ const genCover = async (t) => {
     await tasksStore.reportError(cause, { action: 'cover.generate' });
   } finally {
     coverBusyId.value = '';
-    loadCoverCaps();      // 出完图余额变了，顺手刷一次
+    loadCoverCaps();
   }
 };
 
-/** 轮询到任务终态。5 秒一次、最多 5 分钟 —— 与后端出图超时对齐。 */
+const upscaleCover = async (t) => {
+  coverBusyId.value = t.id;
+  try {
+    const { task_id } = await api.upscaleCover({ track_id: t.id });
+    tasksStore.showToast('本地超分已提交（不花积分）', 'info');
+    const done = await waitTask(task_id);
+    if (done?.status === 'done') {
+      tasksStore.showToast('封面已超分到 1440 并回填台账', 'success');
+      await load();
+    } else {
+      await tasksStore.reportError(new Error(done?.error || '超分失败'), { action: 'cover.upscale' });
+    }
+  } catch (cause) {
+    await tasksStore.reportError(cause, { action: 'cover.upscale' });
+  } finally {
+    coverBusyId.value = '';
+  }
+};
+
+/** 轮询到任务终态。1 秒一次、最多 5 分钟 —— 进度条要跟得上。 */
 const waitTask = async (taskId) => {
-  for (let i = 0; i < 60; i++) {
-    await new Promise((r) => setTimeout(r, 5000));
+  for (let i = 0; i < 300; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
     try {
       const { tasks } = await api.tasks();
       const t = tasks.find((x) => x.id === taskId);
@@ -979,6 +1029,26 @@ const waitedDays = (info) => {
   margin: 0 4px;
 }
 .step-line.done { background: var(--vf-primary); opacity: 0.6; }
+
+.track-progress { margin-top: var(--vf-space-2); }
+.track-progress-bar {
+  height: 4px;
+  background: var(--vf-bg-3);
+  border-radius: var(--vf-radius-full);
+  overflow: hidden;
+}
+.track-progress-fill {
+  height: 100%;
+  background: var(--vf-primary);
+  border-radius: var(--vf-radius-full);
+  transition: width 0.3s var(--vf-ease);
+}
+.track-progress-label {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--vf-text-3);
+}
 
 /* track foot */
 .track-foot {

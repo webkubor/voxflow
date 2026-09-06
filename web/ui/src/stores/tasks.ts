@@ -36,6 +36,8 @@ export interface TaskItem {
   status: string;
   params?: Record<string, unknown>;
   stage?: string;
+  /** 0–100。封面出图/超分会持续更新；没有就按 stage 估。 */
+  progress?: number;
   created_at?: string;
   error?: string;
   result?: {
