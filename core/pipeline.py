@@ -482,6 +482,14 @@ def set_platform_status(track_id: str, platform: str, status: str, **extra: Any)
                 "SELECT id, track_id FROM track_platforms "
                 "WHERE track_id=? AND platform=? AND IFNULL(song_id,'')=?",
                 (track_id, platform, song_id)).fetchone()
+        if listing is None and song_id:
+            # 提交时还没有平台 id，后来核对后台才拿到 —— 补到原记录上，
+            # 不要再插一条，否则同一首歌在同一平台出现两条。
+            listing = c.execute(
+                "SELECT id, track_id FROM track_platforms "
+                "WHERE track_id=? AND platform=? AND IFNULL(song_id,'')='' "
+                "ORDER BY id LIMIT 1",
+                (track_id, platform)).fetchone()
 
         if listing:
             lid = listing["id"]

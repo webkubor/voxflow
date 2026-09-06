@@ -84,6 +84,15 @@ def main() -> None:
     check("两首一样长不敢猜",
           P.resolve_track_for_listing("netease", "d4", "又一改名", duration=121) is None)
 
+    P.upsert("clip-fill", title="填id", stage="selected", clip_id="fill")
+    P.submit_release("clip-fill", "qishui", "填id")
+    P.set_platform_status("clip-fill", "qishui", "online",
+                          song_id="qs-fill", platform_title="填id")
+    qs = [l for l in P.get_track("clip-fill")["listings"] if l["platform"] == "qishui"]
+    check("补平台 id 不另插一条",
+          len(qs) == 1 and qs[0]["song_id"] == "qs-fill" and qs[0]["status"] == "online",
+          str(qs))
+
     print(f"\n{len(PASSED)} 项通过")
 
 

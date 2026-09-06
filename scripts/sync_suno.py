@@ -89,10 +89,10 @@ def main() -> int:
             # 已有曲目也回填时长 —— 匹配改名后的上架记录靠这个。
             if seconds and not DRY:
                 with db.connect() as c:
-                    c.execute(
+                    cur = c.execute(
                         "UPDATE tracks SET duration=? WHERE clip_id=? AND (duration IS NULL OR duration=0)",
                         (seconds, cid))
-                    timed += c.rowcount
+                    timed += cur.rowcount
             skipped += 1
             continue
         title = (cl.get("title") or "").strip() or "未命名"
