@@ -68,10 +68,18 @@ class FakeResp:
     def __exit__(self, *a): return False
 
 
-_orig = notify.urllib.request.urlopen
-notify.urllib.request.urlopen = lambda *a, **k: FakeResp()
-ok, err = notify._post("https://x", {})
-notify.urllib.request.urlopen = _orig
+class FakeOpener:
+    def open(self, *a, **k): return FakeResp()
+
+
+# 打桩的是 `net.opener` 而不是 `urllib.request.urlopen` —— 证书与代理这两个坑
+# 收在 core/net.py 之后，_post 就是从那里拿 opener 的。
+_orig = notify.net.opener
+notify.net.opener = lambda *a, **k: FakeOpener()
+try:
+    ok, err = notify._post("https://x", {})
+finally:
+    notify.net.opener = _orig
 check(ok is False and "19024" in err, "200 但 code 非 0 → 判为失败")
 
 print("多公司账户切换")

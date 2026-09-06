@@ -33,59 +33,19 @@ import hmac
 import json
 import mimetypes
 import os
-import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-from core import obs
+from core import net, obs
 from core.paths import CONFIG_DIR
 
 CONFIG_FILE = CONFIG_DIR / "r2.json"
 TIMEOUT_S = 120          # 音频文件可能几十 MB，别用默认的短超时
 REGION = "auto"          # R2 固定 auto
 SERVICE = "s3"
-
-
-def _ssl_context() -> ssl.SSLContext:
-    """带根证书的 SSL context。
-
-    ⚠️ 不能只用 `ssl.create_default_context()`。macOS 上的 Python
-    （python.org 安装包、homebrew、pyenv 都可能）**默认找不到根证书** ——
-    `ssl.get_default_verify_paths()` 指向一个不存在的 openssl 目录，
-    于是每个 https 请求都是 `CERTIFICATE_VERIFY_FAILED: unable to get
-    local issuer certificate`。
-
-    这个错看起来像「对方证书有问题」，实际是本机根本没有信任库，
-    换个机器又好了 —— 最难查的那类环境问题。
-
-    certifi 在依赖树里本来就有（transformers 带的），直接用它兜底。
-    **绝不能改成 `verify=False` 那种绕法** ——那是把中间人攻击的门打开，
-    而这里传的是要公开分发的资产、用的是能写整个桶的密钥。
-
-    ## 抓包代理（Reqable / Charles / mitmproxy）
-
-    本机开着 HTTPS 抓包代理时，**certifi 也救不了** —— 代理做的就是中间人，
-    它出示的是自己签的证书，本来就不在任何公共信任库里。
-    症状一模一样（`CERTIFICATE_VERIFY_FAILED`），但根因完全不同，
-    很容易顺着「证书」这个词一路查到 CA 去，其实是代理的问题。
-
-    识别方法：`scutil --proxy | grep HTTPSProxy` 有值就是它。
-
-    解法是在 `r2.json` 里配 `ca_bundle` 指向一份**合并了代理根证书**的
-    pem（代理的 CA 通常在系统钥匙串里，可以导出来和 certifi 的拼在一起）。
-    关掉代理也行。**不要改成不验证证书** —— 这里用的密钥能写整个桶。
-    """
-    cfg = config()
-    if (bundle := cfg.get("ca_bundle")) and Path(bundle).expanduser().is_file():
-        return ssl.create_default_context(cafile=str(Path(bundle).expanduser()))
-    try:
-        import certifi
-        return ssl.create_default_context(cafile=certifi.where())
-    except ImportError:
-        return ssl.create_default_context()
 
 
 def config() -> dict:
@@ -170,23 +130,9 @@ def _auth_headers(cfg: dict, method: str, host: str, path: str,
 
 
 def _opener() -> urllib.request.OpenerDirector:
-    """构造 opener，**默认绕过系统代理**。
-
-    音频动辄几 MB 到几十 MB，走本机抓包代理（Reqable / Charles）会
-    `Broken pipe` —— 代理为了能展示请求体会先整个缓存下来，大文件直接把它撑爆。
-    而且资产上传本来也没有抓包的价值：内容就是那个文件本身。
-
-    所以默认不走代理。真需要经过代理（比如公司网络只允许代理出网），
-    在 `r2.json` 里设 `"use_proxy": true`。
-
-    ⚠️ 这条和上面的 `ca_bundle` 是**同一个问题的两半**：代理先让证书验不过
-    （CERTIFICATE_VERIFY_FAILED），信任了它之后再让大文件传不上去
-    （Broken pipe）。只解决前一半会以为快好了，其实还差一半。
-    """
-    handlers: list = [urllib.request.HTTPSHandler(context=_ssl_context())]
-    if not config().get("use_proxy"):
-        handlers.append(urllib.request.ProxyHandler({}))   # 空 dict = 不走任何代理
-    return urllib.request.build_opener(*handlers)
+    """见 `core/net.py` —— 证书与代理这两个坑收在那里，这里只负责传配置。"""
+    cfg = config()
+    return net.opener(cfg.get("ca_bundle", ""), bool(cfg.get("use_proxy")))
 
 
 def upload(path: str | Path, key: str = "") -> str:

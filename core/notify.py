@@ -42,7 +42,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from core import obs
+from core import net, obs
 from core.paths import CONFIG_DIR
 
 TIMEOUT_S = 10
@@ -86,7 +86,12 @@ def _post(webhook: str, payload: dict) -> tuple[bool, str]:
         headers={"Content-Type": "application/json"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
+        # 走共享 opener：webhook 同样会被抓包代理挡住（实测
+        # CERTIFICATE_VERIFY_FAILED），而 lark-cli 那条通道不受影响，
+        # 因为它是独立二进制、有自己的信任库 —— 两条通道表现不一致过。
+        cfg = config()
+        with net.opener(cfg.get("ca_bundle", ""), bool(cfg.get("use_proxy"))).open(
+                req, timeout=TIMEOUT_S) as resp:
             body = json.loads(resp.read().decode("utf-8") or "{}")
     except urllib.error.HTTPError as e:
         return False, f"HTTP {e.code}"
@@ -176,7 +181,10 @@ def notify(title: str, fields: dict[str, Any], *, level: str = "done",
     except Exception as e:                 # noqa: BLE001 —— 旁路，绝不影响主流程
         ok, err = False, str(e)[:120]
     if not ok:
-        obs.log("notify_failed", level="warn", event=event or level,
+        # ⚠️ 字段名不能叫 `event` —— obs.log 的第一个位置参数就是 event，
+        # 传 event= 会 TypeError。而这行在**失败路径**上，撞了就等于
+        # 「通知失败」变成往调用方抛异常，正好破坏本模块「永不抛」的承诺。
+        obs.log("notify_failed", level="warn", kind=event or level,
                 account=acc.get("_key", ""), error=err)
     return ok
 
@@ -259,9 +267,25 @@ def ledger_add(fields: dict[str, Any], *, account_name: str = "") -> str:
 # 数据库 → 飞书，不反向。人在飞书上填的东西（负责账号、发行歌名）
 # 不会被这个函数覆盖。
 
-PLATFORM_NAMES = {"netease": "网易云音乐", "qishui": "汽水音乐",
-                  "tencent": "QQ音乐", "kugou": "酷狗", "kuwo": "酷我",
-                  "bilibili": "B站"}
+def _platform_label(key: str) -> str:
+    """平台中文名。**真源是 `configs/platforms.json`，这里不另立一份。**
+
+    2026-09-06 这里一度写死过一份自己的清单，还顺手多编了酷狗/酷我/B站
+    —— 那三家在 configs/platforms.json 和 platform_accounts 里都不存在，
+    等于凭空造出三个永远不会有数据的平台。
+
+    要加平台就改 `configs/platforms.json` —— 那份是实际探页面得到的，
+    有表单字段、封面尺寸、AI 声明方式，`pipeline.PLATFORMS` 也是从它派生的。
+    """
+    from core import pipeline
+    spec = pipeline.PLATFORMS.get(key)
+    if not spec:
+        # 不认识的平台**不能原样回显**。写进多维表格会让单选框自动新增一个
+        # 选项，等于凭空造出一个平台、把枚举悄悄撑大 —— 正是 SSOT 要防的事。
+        # 空串会让调用方跳过「发布平台」这一栏，人一眼就看得出这行有问题。
+        obs.log("unknown_platform", level="warn", platform=key)
+        return ""
+    return spec.get("label") or key
 # 本地状态 → 台账状态。本地只记 online/reviewing，台账的粒度更细，
 # 所以是「多对一的反向」：本地没有的中间态由人在表里推进。
 STATUS_MAP = {"online": "已发行", "reviewing": "等待中",
@@ -334,7 +358,7 @@ def ledger_sync(*, account_name: str = "", dry_run: bool = False) -> dict:
     plan = []
     for r in rows:
         plat_key = r["platform"] or ""
-        plat = PLATFORM_NAMES.get(plat_key, plat_key)
+        plat = _platform_label(plat_key) if plat_key else ""
         title = (r["title"] or "").strip()
         if (title, plat) in have:
             skipped += 1
@@ -410,3 +434,23 @@ def _date_ms(s: str) -> int:
         except ValueError:
             continue
     return 0
+
+
+def release(version: str, title: str, changes: list[str], *,
+            highlight: str = "", link: str = "") -> bool:
+    """推一条版本更新日志。
+
+    和音乐通知**分在不同的群**：那边是作品流水（每天几条、只有做歌的人关心），
+    这边是产品变更（几天一条、所有用这个工具的人都要看到）。
+    混在一起的结果是两边都被对方刷掉。
+
+    `changes` 一条一行，写**用户能感知的变化**，不写内部重构 ——
+    「修了 XX 的空指针」对看的人没有任何意义，「点了没反应的播放按钮好了」才有。
+    """
+    fields = {"版本": version}
+    if highlight:
+        fields["重点"] = highlight
+    fields["更新内容"] = "\n" + "\n".join(f"· {c}" for c in changes)
+    return notify(f"🚀 {title}", fields, level="start", event="release",
+                  account_name="changelog", dedupe_key=f"vf-release-{version}",
+                  buttons=[{"text": "查看详情", "url": link, "type": "primary"}] if link else None)

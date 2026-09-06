@@ -59,16 +59,50 @@ STAGE_LABELS = {
 
 # 目标平台。SOP 差异（封面尺寸、AI 声明方式、上传方式）见 docs/ROADMAP.md，
 # 这里只登记「支持发到哪」。
-PLATFORMS = {
-    "qishui": {"label": "汽水音乐", "cover": "1440x1440", "ai_field": "创作方式=AI"},
-    "netease": {"label": "网易云", "cover": "1400x1400", "ai_field": "AI 音乐人身份"},
-    "tencent": {"label": "腾讯系", "cover": "待确认", "ai_field": "待确认"},
-}
+def _load_platforms() -> dict[str, dict[str, Any]]:
+    """平台清单 —— **唯一真源是 `configs/platforms.json`**。
 
+    这里曾经是一份写死的 dict，和那份 JSON 重复。重复的代价不是「不好看」，
+    是**没人能回答「到底支持几个平台」** —— 2026-09-06 就因此在第四处
+    又编出了酷狗/酷我/B站三个根本不存在的平台，还写进了飞书表的选项里。
+
+    JSON 那份才配当真源：它有表单字段、封面尺寸、AI 声明方式、控制台地址，
+    是实际探过页面得到的。代码这边只需要 label 和封面尺寸，从它派生即可。
+
+    加平台 = 改那份 JSON，不动代码。
+    """
+    from core.paths import CONFIG_DIR, PLATFORMS_FILE
+    out: dict[str, dict[str, Any]] = {}
+    for f in (CONFIG_DIR / "platforms.json", PLATFORMS_FILE):
+        if not f.exists():
+            continue
+        try:
+            raw = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        for key, spec in raw.items():
+            if key.startswith("_") or not isinstance(spec, dict):
+                continue        # `_说明` 这类注释键不是平台
+            out[key] = {
+                "label": spec.get("label", key),
+                "cover": (spec.get("cover") or {}).get("min_size", "待确认"),
+                "ai_field": (spec.get("ai_declaration") or {}).get("field", "待确认")
+                            if isinstance(spec.get("ai_declaration"), dict)
+                            else (spec.get("ai_declaration") or "待确认"),
+                "console": (spec.get("entries", {}).get("single", {}) or {}).get("url")
+                           or spec.get("console", ""),
+            }
+        if out:
+            break               # 用户目录那份优先，找到就不再看项目内置的
+    return out
+
+
+PLATFORMS = _load_platforms()
+
+# 账号占位由平台清单派生 —— 不再手抄一遍平台名
 DEFAULT_PUBLISH_ACCOUNTS = [
-    {"id": "qishui-main", "platform": "qishui", "label": "汽水音乐账号"},
-    {"id": "netease-main", "platform": "netease", "label": "网易云音乐人账号"},
-    {"id": "tencent-main", "platform": "tencent", "label": "腾讯音乐人账号"},
+    {"id": f"{k}-main", "platform": k, "label": f"{v['label']}账号"}
+    for k, v in PLATFORMS.items()
 ]
 
 LOGIN_STATUS_LABELS = {
