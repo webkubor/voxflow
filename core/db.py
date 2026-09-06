@@ -66,6 +66,8 @@ CREATE TABLE IF NOT EXISTS tracks (
     -- 发出去的歌名必须唯一。独家授权：一首只能投一个平台。
     release_title    TEXT DEFAULT '',
     release_platform TEXT DEFAULT '',
+    -- 音频时长（秒）。歌名会改，时长几乎不变，对不上名字时靠它认原曲。
+    duration    INTEGER,
     created_at  TEXT,
     updated_at  TEXT
 );
@@ -216,6 +218,7 @@ _ADD_COLUMNS = [
     ("track_platforms", "platform_title", "TEXT DEFAULT ''"),
     ("tracks", "release_title", "TEXT DEFAULT ''"),
     ("tracks", "release_platform", "TEXT DEFAULT ''"),
+    ("tracks", "duration", "INTEGER"),
 ]
 
 
