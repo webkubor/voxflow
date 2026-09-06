@@ -15,7 +15,7 @@ import threading
 import time
 import queue as queue_mod
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -278,7 +278,7 @@ def _task_worker():
             _update_task(task_id, status="error", error=_err,
                          completed_at=datetime.now().strftime("%H:%M:%S"))
             obs.log("task_failed", level="error", task_type=task["type"],
-                    task_id=task_id, label=task.get("label", ""), error=_err[:300])
+                    task_id=task_id, label=task.get("label", ""), error=_err[:2000])   # 别再截到 300：真正的错因常在后半段
         finally:
             _notify_music_task(task_id)
             if task["type"] not in ("suno", "suno_cover", "cover", "cover_upscale"):
@@ -2314,6 +2314,8 @@ def suno_clips(limit: int = 40):
     import subprocess  # noqa: PLC0415
     if not os.path.exists(SUNO_BIN):
         raise HTTPException(400, f"suno CLI 不存在：{SUNO_BIN}")
+    import subprocess  # noqa: PLC0415 —— 与本文件其余 suno 调用一致，延迟导入
+
     try:
         r = subprocess.run([SUNO_BIN, "list", "--json"], env=_suno_env(),
                            capture_output=True, text=True, timeout=30)
@@ -2563,6 +2565,37 @@ def _run_cover_upscale_task(task_id: str, params: dict, update_fn):
               completed_at=datetime.now().strftime("%H:%M:%S"))
 
 
+def _recent_clips_titled(title: str, since_ts) -> list[dict]:
+    """去 Suno 问：这个标题、这个时间点之后，有没有新出的 clip。
+
+    用来在 CLI 报错时判断「到底生成没生成」。`suno list` 是免费命令，
+    问一次不花钱，而问错的代价是：积分照扣、歌明明在、人以为白花了。
+
+    按**标题 + 时间**匹配，不按标题单独匹配 —— 同名歌很常见
+    （Suno 一次就出两首同名的），只看标题会把上次的旧歌错认成这次的。
+    """
+    import subprocess  # noqa: PLC0415 —— 与本文件其余 suno 调用一致，延迟导入
+
+    try:
+        r = subprocess.run([SUNO_BIN, "list", "--json"], env=_suno_env(),
+                           capture_output=True, text=True, timeout=60)
+        clips = (json.loads(r.stdout or "{}").get("data") or {}).get("clips") or []
+    except (subprocess.SubprocessError, OSError, json.JSONDecodeError, ValueError):
+        return []
+    out = []
+    for c in clips:
+        if (c.get("title") or "").strip() != (title or "").strip():
+            continue
+        try:
+            made = datetime.fromisoformat((c.get("created_at") or "").replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if made >= since_ts:
+            out.append({"id": c.get("id"), "title": c.get("title"),
+                        "status": c.get("status"), "created_at": c.get("created_at")})
+    return out
+
+
 def _run_suno_task(task_id: str, params: dict, update_fn):
     """执行 Suno 音乐生成：调 suno CLI → 产物拷回 out/music"""
     import subprocess, shutil, glob
@@ -2603,6 +2636,7 @@ def _run_suno_task(task_id: str, params: dict, update_fn):
     update_fn(task_id, progress=30, stage="Suno 生成中（约 1-3 分钟）...")
 
     _t0 = time.perf_counter()
+    _started_at = datetime.now(timezone.utc)
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=360)
     _ms = int((time.perf_counter() - _t0) * 1000)
     # 每次调用扣的 credits 从 pricing.json 读，不写死在这里 ——
@@ -2610,6 +2644,28 @@ def _run_suno_task(task_id: str, params: dict, update_fn):
     _cr = float((obs.pricing().get("providers", {}).get("suno") or {}).get("credits_per_call", 10))
     if r.returncode != 0:
         err = (r.stderr or r.stdout or "")[-500:]
+        # ⚠️ **CLI 退出码不等于「没生成出来」。**
+        #
+        # 2026-09-06：三首 BGM 的 CLI 全部报错（challenge-expired / 下载 403），
+        # voxflow 于是标成失败、任务从队列消失。可去 Suno 一看，歌**好好地在那儿**
+        # ——积分照扣，人以为白花了。
+        #
+        # 生成是在 Suno 服务端完成的，CLI 只是发起和取回。取回那一段坏了
+        # （Suno 现在不给音频直链，见 _pull_suno_clips 的注释），
+        # 不代表生成失败。所以报错之后必须**去问一次 Suno**，
+        # 有对得上的新 clip 就按成功记，只是音频要另外拿。
+        found = _recent_clips_titled(req.title, since_ts=_started_at)
+        if found:
+            obs.meter("suno", "generate", credits=_cr, track_id=req.title[:40],
+                      duration_ms=_ms, ok=True, model=req.model,
+                      note="CLI 报错但 Suno 已生成")
+            update_fn(task_id, status="done", progress=100,
+                      stage=f"已生成 {len(found)} 首（音频需手动下载）",
+                      result={"ok": True, "files": [], "clips": found,
+                              "warning": "CLI 取回失败，歌在 Suno 上，音频要去网页端下载"})
+            obs.log("suno_cli_failed_but_generated", level="warn",
+                    title=req.title[:40], clips=len(found), error=err[-200:])
+            return
         # 失败也计量：Suno 生成失败照样扣积分，只记成功的话账对不上，
         # 而「失败率 × 单价」正是最该被看见的那笔浪费。
         obs.meter("suno", "generate", credits=_cr, track_id=req.title[:40],
