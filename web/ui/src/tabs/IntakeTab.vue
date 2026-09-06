@@ -25,6 +25,21 @@
         </div>
       </header>
 
+      <!-- 选完平台第一件事是确认能不能发，不是先填表单。
+           物料齐了也可能发不出去：没登录、museav 没积分、harness 没装。 -->
+      <div v-if="pre" class="pre" :class="{ blocked: !pre.可以发布 }">
+        <div class="pre-head">
+          <b>{{ pre.可以发布 ? '这台机器可以发布' : '还发不了：' + pre.阻塞项.join('、') }}</b>
+          <button class="ghost-btn small" @click="loadPre">重新检查</button>
+        </div>
+        <div v-for="i in pre.items" :key="i.项" class="pre-row" :class="{ bad: i.可自动验证 && !i.就绪 }">
+          <span class="pre-mark">{{ i.就绪 ? '✓' : (i.可自动验证 ? '✗' : '?') }}</span>
+          <span class="pre-name">{{ i.项 }}</span>
+          <span class="pre-detail">{{ i.说明 }}</span>
+          <a v-if="i.链接" :href="i.链接" target="_blank" rel="noopener" class="pre-link">去登录 →</a>
+        </div>
+      </div>
+
       <div class="form">
         <label class="row">
           <span class="lb">音频链接</span>
@@ -107,7 +122,7 @@
  * 刻意不放在「AI 音乐」里：那一屏要 Suno 会员和模型，而这类用户两样都没有，
  * 混在一起只会让他们以为自己用不了。
  */
-import { reactive, ref, onMounted } from 'vue';
+import { reactive, ref, onMounted, watch } from 'vue';
 import { api } from '../api';
 import { useTasksStore } from '../stores/tasks';
 
@@ -115,6 +130,13 @@ const tasksStore = useTasksStore();
 const busy = ref(false);
 const result = ref(null);
 const platforms = ref({});
+const pre = ref(null);
+
+/** 前置条件。换平台就重查 —— 每个平台的登录和脚本都是独立的。 */
+const loadPre = async () => {
+  try { pre.value = await api.preflight(form.platform); }
+  catch { pre.value = null; }
+};
 
 const form = reactive({
   url: '', title: '', album: '', platform: 'qishui',
@@ -126,7 +148,10 @@ onMounted(async () => {
     platforms.value = (await api.pipeline()).platforms || {};
     form.publisher = (await api.notifyOwner()).name || '';
   } catch { /* 拿不到就让人自己填，不拦流程 */ }
+  loadPre();
 });
+
+watch(() => form.platform, loadPre);
 
 const submit = async () => {
   busy.value = true;
@@ -152,6 +177,19 @@ const copy = async (text) => {
 </script>
 
 <style scoped>
+.pre {
+  margin-bottom: var(--vf-space-4); padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--vf-border, #333); font-size: 12.5px;
+}
+.pre.blocked { border-color: #ff7a5c; }
+.pre-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.pre-row { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; }
+.pre-row.bad { color: #ff7a5c; }
+.pre-mark { width: 12px; }
+.pre-name { min-width: 9em; }
+.pre-detail { color: var(--vf-text-3, #888); flex: 1; min-width: 0; }
+.pre-link { flex: none; color: var(--vf-accent, #7c9cff); text-decoration: none; }
+
 .paths { display: flex; flex-direction: column; gap: 10px; margin: 0 0 var(--vf-space-4); }
 .path {
   display: flex; gap: 10px; padding: 10px 12px; border-radius: 8px;

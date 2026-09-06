@@ -239,9 +239,18 @@
                   <span v-if="!it.就绪" class="ready-hint">{{ it.说明 }}</span>
                 </div>
                 <div class="ready-foot">
+                  <!-- 备料齐了就直接开跑，不再只给一句命令让人自己去终端粘贴。
+                       「发布中」此前是个死状态：点了什么都不会发生，人只能干等。 -->
+                  <button v-if="readiness[`${t.id}|${pk}`].ok"
+                          class="primary-btn small"
+                          :disabled="publishBusy === t.id"
+                          @click="runPublish(t.id, pk)">
+                    <Icon name="upload" size="sm" />
+                    <span>{{ publishBusy === t.id ? '填表中…' : '开始自动填表' }}</span>
+                  </button>
                   <button v-if="readiness[`${t.id}|${pk}`].ok && readiness[`${t.id}|${pk}`].发布命令"
-                          class="primary-btn small" @click="copyPublish(t.id, pk)">
-                    <Icon name="save" size="sm" /><span>复制发布命令</span>
+                          class="ghost-btn small" @click="copyPublish(t.id, pk)">
+                    <Icon name="save" size="sm" /><span>复制命令</span>
                   </button>
                   <span v-else-if="!readiness[`${t.id}|${pk}`].ok" class="ready-hint">
                     还缺 {{ readiness[`${t.id}|${pk}`].缺口数 }} 项，补齐了才能发
@@ -754,6 +763,30 @@ const checkReady = async (trackId, platform) => {
  * （进了审核队列要撤回），值得你自己看一眼再按。
  * 自动化省的是填表那 10 分钟，不是点提交那 1 秒。
  */
+/**
+ * 真的跑起来 —— 拉浏览器、填表。
+ *
+ * 填完**不自动提交**：提交进审核队列不可逆，撤回要走流程；
+ * 而自动化省的是填表那十分钟，不是点提交那一秒。
+ * 所以完成时提示语说的是「轮到你了」，不是「已完成」——
+ * 含糊地说完成，人就不会去点最后那一下，歌永远卡在这儿。
+ */
+const publishBusy = ref('');
+
+const runPublish = async (trackId, platform) => {
+  publishBusy.value = trackId;
+  try {
+    const { task_id } = await api.publishRun({ track_id: trackId, platform });
+    tasksStore.showToast('已拉起浏览器填表 —— 填完会提示你去点提交', 'info');
+    await tasksStore.waitForTask?.(task_id);
+  } catch (cause) {
+    await tasksStore.reportError(cause, { action: 'publish.run', tags: { trackId, platform } });
+  } finally {
+    publishBusy.value = '';
+    await load();
+  }
+};
+
 const copyPublish = async (trackId, platform) => {
   const cmd = readiness.value[`${trackId}|${platform}`]?.发布命令 || '';
   if (!cmd) return;

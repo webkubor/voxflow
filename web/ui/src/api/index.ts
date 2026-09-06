@@ -122,6 +122,14 @@ export const api = {
     url: string; title?: string; album?: string; platform?: string;
     publisher?: string; instrumental?: boolean; with_cover?: boolean;
   }) => post<any>('pipeline/import-url', p),
+  /** 真的开始填表（异步任务） */
+  publishRun: (p: { track_id: string; platform: string }) =>
+    post<{ task_id: string }>('publish/run', p),
+  /** 发布前置条件：登录了没、museav 有没有积分、harness 装没装 */
+  preflight: (platform: string) => get<{
+    可以发布: boolean; 阻塞项: string[];
+    items: { 项: string; 就绪: boolean | null; 说明: string; 可自动验证: boolean; 链接: string }[];
+  }>('publish/preflight', { platform }),
   setStage: (track_id: string, stage: Stage) => post('pipeline/stage', { track_id, stage }),
   /** 这首歌发这个平台还缺什么 —— 「备料中」到底算不算完，全靠它回答 */
   readiness: (track_id: string, platform: string) => get<{

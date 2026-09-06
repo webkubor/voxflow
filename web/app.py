@@ -302,6 +302,8 @@ def _task_worker():
                 _run_cover_task(task_id, task["params"], _update_task)
             elif task["type"] == "cover_upscale":
                 _run_cover_upscale_task(task_id, task["params"], _update_task)
+            elif task["type"] == "publish":
+                _run_publish_task(task_id, task["params"], _update_task)
             elif task["type"] == "suno_cover":
                 _run_suno_cover_task(task_id, task["params"], _update_task)
         except Exception as e:
@@ -1775,6 +1777,86 @@ class ImportUrlRequest(BaseModel):
     publisher: str = ""
     instrumental: bool = True     # BGM 居多，默认纯音乐
     with_cover: bool = False      # ⚠️ 出封面要花钱，默认关
+
+
+class PublishRunRequest(BaseModel):
+    track_id: str
+    platform: str = "qishui"
+
+
+def _run_publish_task(task_id: str, params: dict, update_fn):
+    """跑平台填表脚本 —— 真的拉起浏览器，不是改个状态就完事。
+
+    ## 为什么此前是「假的」
+
+    看板上有「备料中 / 发行中 / 等待中」，但**没有任何东西推进它们** ——
+    点完确认发版只是把状态字段改了个值，浏览器不会动、表不会填。
+    人盯着「发布中」等，永远等不到变化，也不知道该干什么。
+
+    现在这一步真的执行 `scripts/publish_<platform>.py`：
+    附着到你日常那个浏览器（登录态直接可用），把整张表填完。
+
+    ## 为什么不替你点「提交」
+
+    提交进审核队列**不可逆**，撤回要走流程。而自动化省下的是填表那十分钟，
+    不是点提交那一秒。所以脚本填完就停，把最后一下留给人 ——
+    任务结束时会明确说「轮到你了」，不是含糊地标成完成。
+    """
+    import subprocess  # noqa: PLC0415
+
+    from core import pipeline  # noqa: PLC0415
+    from core.paths import PROJECT_DIR  # noqa: PLC0415
+
+    track_id, platform = params["track_id"], params["platform"]
+    script = PROJECT_DIR / f"scripts/publish_{platform}.py"
+    if not script.exists():
+        raise ValueError(f"{platform} 还没有自动填表脚本（scripts/publish_{platform}.py）")
+
+    r = pipeline.readiness(track_id, platform)
+    if not r.get("ok"):
+        raise ValueError("备料没齐，先补：" + "、".join(
+            i["名称"] for i in r["items"] if not i["就绪"]))
+
+    update_fn(task_id, progress=15, stage="拉起浏览器…")
+    env = {**os.environ, "VF_BASE": str(PROJECT_DIR), "VF_TRACK": track_id}
+    try:
+        with open(script, encoding="utf-8") as f:
+            proc = subprocess.run(["browser-harness"], stdin=f, env=env,
+                                  capture_output=True, text=True, timeout=600)
+    except FileNotFoundError as e:
+        raise ValueError("没装 browser-harness —— 自动填表跑不了") from e
+    except subprocess.TimeoutExpired as e:
+        raise ValueError("填表超时（10 分钟）—— 去浏览器看看卡在哪一步") from e
+
+    out = (proc.stdout or "") + (proc.stderr or "")
+    if proc.returncode != 0:
+        raise ValueError(f"填表脚本失败：{out[-600:]}")
+
+    pipeline.set_platform_status(track_id, platform, "uploaded")
+    update_fn(
+        task_id, status="done", progress=100,
+        # 说清楚「没做完」而不是「完成了」—— 含糊地标成完成，
+        # 人就不会去点那最后一下，歌永远卡在这儿。
+        stage="表已填好 · 轮到你去浏览器点「提交」",
+        result={"ok": True, "需要你操作": True,
+                "下一步": "浏览器里核对一遍，确认无误后点提交。提交后回来把状态改成「等待中」",
+                "控制台": (pipeline.PLATFORMS.get(platform) or {}).get("console", ""),
+                "日志": out[-1500:]},
+    )
+
+
+@app.post("/api/publish/run")
+def publish_run(req: PublishRunRequest):
+    """开始自动填表。异步任务，前端轮询 /api/tasks 看进度。"""
+    from core import pipeline  # noqa: PLC0415
+
+    track = pipeline.get_track(req.track_id)
+    if not track:
+        raise HTTPException(404, "曲目不存在")
+    label = f"📤 填表: {track.get('release_title') or track.get('title')}"
+    task_id = _submit_task("publish", label,
+                           {"track_id": req.track_id, "platform": req.platform})
+    return {"task_id": task_id, "status": "queued"}
 
 
 @app.get("/api/publish/preflight")
