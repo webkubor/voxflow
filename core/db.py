@@ -66,11 +66,16 @@ CREATE TABLE IF NOT EXISTS tracks (
     updated_at  TEXT
 );
 
--- 一首歌 × 多平台。分表而不是塞 JSON 字段，因为「查某平台上有哪些歌」
--- 是最高频的查询，塞 JSON 就只能全表扫再解析。
+-- 一首本地作品 × 多条平台上架记录。
+--
+-- 以前主键是 (track_id, platform)：一首歌每个平台只能挂一条。
+-- 对不上现实 —— 发到平台后可能改名，也可能把同一首拆成完整版/片段/伴奏
+-- 好几条。上架记录的身份是 (platform, song_id)，跟本地歌名无关。
 CREATE TABLE IF NOT EXISTS track_platforms (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
     track_id     TEXT NOT NULL,
     platform     TEXT NOT NULL,
+    platform_title TEXT DEFAULT '',    -- 平台上的歌名，可以跟本地 title 不同
     status       TEXT NOT NULL,
     song_id      TEXT DEFAULT '',
     song_url     TEXT DEFAULT '',
@@ -81,22 +86,19 @@ CREATE TABLE IF NOT EXISTS track_platforms (
     publish_date TEXT DEFAULT '',
     cover_url    TEXT DEFAULT '',
     cover_local  TEXT DEFAULT '',
-    config       TEXT DEFAULT '{}',     -- JSON：这首歌在这个平台的发布配置
+    config       TEXT DEFAULT '{}',
     note         TEXT DEFAULT '',
     submitted_at TEXT DEFAULT '',
-    -- 单曲维度的平台实况。账号级汇总（platform_accounts.stats）回答不了
-    -- 「哪首歌在赚钱」—— 而那恰恰是决定「下一首做什么风格」的依据。
-    -- 公开 API 给不了这些（网易云的 playedNum 恒为 0，2026-09-05 实测），
-    -- 只能从音乐人后台抓，所以可能长期为空；为空时界面要如实说「没有数据」，
-    -- 不能按比例分摊猜一个 —— 猜出来的单曲收益会直接误导选题。
     plays        INTEGER DEFAULT 0,
     earned_cny   REAL DEFAULT 0,
     stats_at     TEXT DEFAULT '',
     updated_at   TEXT,
-    PRIMARY KEY (track_id, platform),
     FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_tp_platform ON track_platforms(platform, status);
+CREATE INDEX IF NOT EXISTS idx_tp_track ON track_platforms(track_id, platform);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tp_song ON track_platforms(platform, song_id)
+    WHERE song_id != '';
 
 CREATE TABLE IF NOT EXISTS albums (
     key          TEXT PRIMARY KEY,      -- <platform>-<album_id>
@@ -207,13 +209,75 @@ _ADD_COLUMNS = [
     ("track_platforms", "plays", "INTEGER DEFAULT 0"),
     ("track_platforms", "earned_cny", "REAL DEFAULT 0"),
     ("track_platforms", "stats_at", "TEXT DEFAULT ''"),
+    ("track_platforms", "platform_title", "TEXT DEFAULT ''"),
 ]
+
+
+def _migrate_listing_pk(c: sqlite3.Connection) -> None:
+    """
+    旧主键是 (track_id, platform)，一首歌每个平台只能一条。
+    改成自增 id 之后，同一首可以挂多条（改名、拆分）。
+    """
+    have = {r["name"] for r in c.execute("PRAGMA table_info(track_platforms)")}
+    if "id" in have:
+        return
+    cols = [r["name"] for r in c.execute("PRAGMA table_info(track_platforms)")]
+    col_sql = ", ".join(cols)
+    c.execute("PRAGMA foreign_keys = OFF")
+    c.execute("""
+        CREATE TABLE track_platforms_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            track_id TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            platform_title TEXT DEFAULT '',
+            status TEXT NOT NULL,
+            song_id TEXT DEFAULT '',
+            song_url TEXT DEFAULT '',
+            album_id TEXT DEFAULT '',
+            album_name TEXT DEFAULT '',
+            track_no INTEGER,
+            duration INTEGER,
+            publish_date TEXT DEFAULT '',
+            cover_url TEXT DEFAULT '',
+            cover_local TEXT DEFAULT '',
+            config TEXT DEFAULT '{}',
+            note TEXT DEFAULT '',
+            submitted_at TEXT DEFAULT '',
+            plays INTEGER DEFAULT 0,
+            earned_cny REAL DEFAULT 0,
+            stats_at TEXT DEFAULT '',
+            updated_at TEXT,
+            FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE
+        )
+    """)
+    # 旧表没有 platform_title / id，按列名拷。缺的列用默认值。
+    shared = [c_ for c_ in cols if c_ != "id"]
+    c.execute(
+        f"INSERT INTO track_platforms_new ({', '.join(shared)}) "
+        f"SELECT {', '.join(shared)} FROM track_platforms"
+    )
+    c.execute("DROP TABLE track_platforms")
+    c.execute("ALTER TABLE track_platforms_new RENAME TO track_platforms")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tp_platform ON track_platforms(platform, status)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tp_track ON track_platforms(track_id, platform)")
+    c.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_tp_song "
+        "ON track_platforms(platform, song_id) WHERE song_id != ''"
+    )
+    # 旧数据：平台歌名就等于当时的本地 title
+    c.execute("""
+        UPDATE track_platforms SET platform_title = (
+            SELECT title FROM tracks WHERE tracks.id = track_platforms.track_id
+        ) WHERE IFNULL(platform_title,'') = ''
+    """)
+    c.execute("PRAGMA foreign_keys = ON")
 
 
 def init() -> None:
     """建表 + 补列。幂等，每次启动跑一次。"""
     with connect() as c:
         c.executescript(SCHEMA)
+        _migrate_listing_pk(c)
         for table, col, ddl in _ADD_COLUMNS:
             have = {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
             if col not in have:

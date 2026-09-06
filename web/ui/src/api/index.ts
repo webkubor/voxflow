@@ -119,6 +119,11 @@ export const api = {
   upsertTrack: (track: Partial<Track> & { track_id: string }) => post('pipeline/track', track),
   setPlatformStatus: (p: { track_id: string; platform: PlatformKey; status: string }) =>
     post('pipeline/platform', p),
+  linkListing: (p: { listing_id: number; track_id: string }) =>
+    post<{ ok: boolean; track: Track }>('pipeline/link', p),
+  sourceCandidates: () => get<{ tracks: Array<{
+    id: string; title: string; clip_id: string; stage: string; suno: boolean;
+  }> }>('pipeline/sources'),
 
   // ── 艺人档案 ──
   // 注意：后端会把真实姓名这类字段脱敏后再返回（core/pipeline._redact），

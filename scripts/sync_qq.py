@@ -167,16 +167,16 @@ def main() -> None:
 
     # ── 4. 作品回填 ──
     songs = get_singer_songs(SINGER_MID)
-    existing = {t["title"].strip(): t["id"] for t in P.list_tracks()}
     matched, added = [], []
     for s in songs:
         si = s.get("songInfo", {})
         title = (si.get("name") or "").strip()
         if not title:
             continue
-        tid = existing.get(title)
+        sid = str(si.get("id") or "")
+        tid = P.resolve_track_for_listing("tencent", sid, title)
         if not tid:
-            tid = re.sub(r"[^\w一-鿿]+", "-", title).strip("-").lower() or f"qq-{si.get('id')}"
+            tid = re.sub(r"[^\w一-鿿]+", "-", title).strip("-").lower() or f"qq-{sid}"
             P.upsert(tid, title=title, stage="published", note="从 QQ 音乐回填")
             added.append(title)
         else:
@@ -187,7 +187,8 @@ def main() -> None:
         cover = COVER_DIR / f"{amid}.jpg"
         P.set_platform_status(
             tid, "tencent", "online",
-            song_id=str(si.get("id") or ""),
+            platform_title=title,
+            song_id=sid,
             song_url=f"https://y.qq.com/n/ryqq/songDetail/{si.get('mid')}",
             album_id=str(album.get("id") or ""), album=album.get("name") or "",
             track_no=si.get("num"), duration=round((si.get("interval") or 0)),

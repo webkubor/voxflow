@@ -38,6 +38,11 @@ const roles = ref([]);
 const loading = ref(false);
 const current = ref('qishui');
 const openAlbum = ref('');
+const linkOpen = ref(false);
+const linkListingId = ref(null);
+const linkTarget = ref('');
+const linkSources = ref([]);
+const linkBusy = ref(false);
 
 const PLATFORM_STATUS = {
   preparing: '备料中',
@@ -70,8 +75,9 @@ onMounted(load);
 const platformList = computed(() =>
   Object.entries(platforms.value || {}).map(([key, p]) => {
     const account = accounts.value[key] || null;
-    const listed = tracks.value.filter((t) => t.platforms?.[key]);
-    const reviewing = listed.filter((t) => t.platforms[key]?.status === 'reviewing').length;
+    const listed = tracks.value.flatMap((t) =>
+      (t.listings || []).filter((l) => l.platform === key));
+    const reviewing = listed.filter((l) => l.status === 'reviewing').length;
     return {
       key,
       label: p.label,
@@ -94,11 +100,37 @@ const albumsOfPlatform = computed(() =>
 );
 
 const songsOfPlatform = computed(() =>
-  tracks.value
-    .filter((t) => t.platforms?.[current.value])
-    .map((t) => ({ ...t, p: t.platforms[current.value] }))
-    .sort((a, b) => (b.p.publish_date || '').localeCompare(a.p.publish_date || '')),
+  tracks.value.flatMap((t) => {
+    const listings = (t.listings || []).filter((l) => l.platform === current.value);
+    return listings.map((p) => ({ ...t, p }));
+  }).sort((a, b) => (b.p.publish_date || '').localeCompare(a.p.publish_date || '')),
 );
+
+const openLink = async (row) => {
+  if (!row.p?.id) return;
+  linkListingId.value = row.p.id;
+  linkTarget.value = '';
+  linkOpen.value = true;
+  try {
+    linkSources.value = (await api.sourceCandidates()).tracks || [];
+  } catch (cause) {
+    await tasksStore.reportError(cause, { action: 'publish.sources' });
+  }
+};
+
+const confirmLink = async () => {
+  if (!linkListingId.value || !linkTarget.value) return;
+  linkBusy.value = true;
+  try {
+    await api.linkListing({ listing_id: linkListingId.value, track_id: linkTarget.value });
+    linkOpen.value = false;
+    await load();
+  } catch (cause) {
+    await tasksStore.reportError(cause, { action: 'publish.link' });
+  } finally {
+    linkBusy.value = false;
+  }
+};
 
 /**
  * 已上架列表的列。
@@ -107,7 +139,22 @@ const songsOfPlatform = computed(() =>
  * 加一列不用去模板里数 div。
  */
 const songColumns = computed(() => [
-  { title: '歌名', key: 'title', ellipsis: { tooltip: true } },
+  { title: '歌名', key: 'title', ellipsis: { tooltip: true },
+    render: (r) => r.p.platform_title || r.title },
+  { title: '原曲', key: 'origin', width: 168,
+    render: (r) => {
+      if (r.is_source) {
+        const same = (r.p.platform_title || r.title) === r.title;
+        return h('span', { style: 'display:inline-flex;align-items:center;gap:6px' }, [
+          h('span', { style: 'font-size:12px;color:var(--vf-text-2)' }, same ? '本曲' : r.title),
+          r.clip_id ? h('span', { style: 'font-size:10px;padding:1px 6px;border-radius:999px;background:var(--vf-primary-soft);color:var(--vf-primary)' }, 'Suno') : null,
+        ]);
+      }
+      return h('button', {
+        class: 'link-btn',
+        onClick: (e) => { e.stopPropagation(); openLink(r); },
+      }, '关联原曲');
+    } },
   { title: '专辑', key: 'album', width: 170, ellipsis: { tooltip: true },
     render: (r) => r.p.album || '—' },
   { title: '状态', key: 'status', width: 80,
@@ -258,13 +305,36 @@ const fmtDuration = (sec) => {
           v-else
           :columns="songColumns"
           :data="songsOfPlatform"
-          :row-key="(r) => r.id"
+          :row-key="(r) => r.p.id || r.id"
           size="small"
           :bordered="false"
           max-height="440"
         />
       </section>
     </template>
+
+    <n-modal v-model:show="linkOpen" preset="card" title="关联到原曲" style="max-width: 420px">
+      <p class="modal-hint">
+        平台上的歌名可以跟 Suno 原曲不同，也可以一首拆成好几条。选它对应的那首本地作品。
+      </p>
+      <n-select
+        v-model:value="linkTarget"
+        filterable
+        placeholder="选一首有 Suno 或本地音频的作品"
+        :options="linkSources.map((s) => ({
+          value: s.id,
+          label: s.suno ? `${s.title} · Suno` : s.title,
+        }))"
+      />
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="linkOpen = false">取消</n-button>
+          <n-button type="primary" :disabled="!linkTarget" :loading="linkBusy" @click="confirmLink">
+            关联
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
 
@@ -425,6 +495,19 @@ const fmtDuration = (sec) => {
 .adt-name { flex: 1; }
 .adt-dur { color: var(--vf-text-3); font-variant-numeric: tabular-nums; }
 .adt-link { color: var(--vf-primary); text-decoration: none; }
+
+.origin-cell { display: inline-flex; align-items: center; gap: 6px; }
+.origin-name { font-size: 12px; color: var(--vf-text-2); }
+.origin-suno {
+  font-size: 10px; padding: 1px 6px; border-radius: var(--vf-radius-full);
+  background: var(--vf-primary-soft); color: var(--vf-primary);
+}
+.link-btn {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font-size: 12px; color: var(--vf-primary);
+}
+.link-btn:hover { text-decoration: underline; }
+.modal-hint { margin: 0 0 var(--vf-space-4); font-size: 12px; color: var(--vf-text-3); }
 
 @media (max-width: 640px) {
   .platform-tabs { grid-template-columns: 1fr; }

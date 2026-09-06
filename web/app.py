@@ -1588,6 +1588,28 @@ def pipeline_platform(req: PipelinePlatformRequest):
         raise HTTPException(400, str(e))
 
 
+class PipelineLinkRequest(BaseModel):
+    listing_id: int
+    track_id: str
+
+
+@app.post("/api/pipeline/link")
+def pipeline_link(req: PipelineLinkRequest):
+    """把一条平台上架记录挂到某首 Suno/本地原曲上。改名、拆分都走这里。"""
+    from core import pipeline
+    try:
+        return {"ok": True, "track": pipeline.link_listing(req.listing_id, req.track_id)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/pipeline/sources")
+def pipeline_sources():
+    """能当原曲被关联的作品（有 Suno clip 或本地音频）。"""
+    from core import pipeline
+    return {"tracks": pipeline.source_candidates()}
+
+
 @app.get("/api/capabilities")
 async def capabilities():
     """

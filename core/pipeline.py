@@ -192,8 +192,12 @@ def _redact(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _row_to_track(row, platforms: dict[str, Any]) -> dict[str, Any]:
+def _row_to_track(row, platforms: dict[str, Any],
+                  listings: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """一行 tracks + 它的平台状态 → 前端吃的那个结构。"""
+    listings = listings or [
+        {"platform": pk, **info} for pk, info in (platforms or {}).items()
+    ]
     stage = row["stage"]
     backup = db._j(row["cloud_backup"], {}) or {}
     b_status = backup.get("status", "unrecorded")
@@ -208,6 +212,10 @@ def _row_to_track(row, platforms: dict[str, Any]) -> dict[str, Any]:
         "clip_id": row["clip_id"] or None,
         "clip_ids": db._j(row["clip_ids"], []) or [],
         "platforms": platforms,
+        # 这个作品是不是「原曲」（Suno/本地音频），还是平台回填出来的孤儿。
+        # 发行页拿它决定要不要显示「关联原曲」。
+        "is_source": bool(row["clip_id"] or row["audio_file"]),
+        "listings": listings,
         "cloud_backup": {
             "status": b_status,
             "label": BACKUP_STATUS_LABELS.get(b_status, b_status),
@@ -234,7 +242,11 @@ def _row_to_track(row, platforms: dict[str, Any]) -> dict[str, Any]:
 
 
 def _platform_row(r) -> dict[str, Any]:
+    keys = r.keys() if hasattr(r, "keys") else []
     out = {
+        "id": r["id"] if "id" in keys else None,
+        "platform": r["platform"] if "platform" in keys else "",
+        "platform_title": (r["platform_title"] if "platform_title" in keys else "") or "",
         "status": r["status"],
         "song_id": r["song_id"] or None,
         "song_url": r["song_url"] or "",
@@ -257,6 +269,19 @@ def _platform_row(r) -> dict[str, Any]:
     return out
 
 
+def _group_listings(plat_rows) -> tuple[dict[str, dict[str, Any]], dict[str, list]]:
+    """平台记录按作品归堆。platforms 仍是「每平台一条」给旧 UI；listings 是全部。"""
+    by_track: dict[str, dict[str, Any]] = {}
+    listings_by: dict[str, list] = {}
+    for r in plat_rows:
+        row = _platform_row(r)
+        listings_by.setdefault(r["track_id"], []).append(row)
+        slot = by_track.setdefault(r["track_id"], {})
+        if r["platform"] not in slot:
+            slot[r["platform"]] = row
+    return by_track, listings_by
+
+
 def list_tracks() -> list[dict[str, Any]]:
     """所有作品，按最近更新排序。前端看板直接吃这个。"""
     db.init()
@@ -264,11 +289,8 @@ def list_tracks() -> list[dict[str, Any]]:
         rows = c.execute("SELECT * FROM tracks ORDER BY updated_at DESC").fetchall()
         plat_rows = c.execute("SELECT * FROM track_platforms").fetchall()
 
-    by_track: dict[str, dict[str, Any]] = {}
-    for r in plat_rows:
-        by_track.setdefault(r["track_id"], {})[r["platform"]] = _platform_row(r)
-
-    return [_row_to_track(r, by_track.get(r["id"], {})) for r in rows]
+    by_track, listings_by = _group_listings(plat_rows)
+    return [_row_to_track(r, by_track.get(r["id"], {}), listings_by.get(r["id"], [])) for r in rows]
 
 
 def get_track(track_id: str) -> dict[str, Any] | None:
@@ -278,9 +300,10 @@ def get_track(track_id: str) -> dict[str, Any] | None:
         row = c.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone()
         if not row:
             return None
-        plats = {r["platform"]: _platform_row(r) for r in
-                 c.execute("SELECT * FROM track_platforms WHERE track_id = ?", (track_id,)).fetchall()}
-    return _row_to_track(row, plats)
+        plat_rows = c.execute(
+            "SELECT * FROM track_platforms WHERE track_id = ?", (track_id,)).fetchall()
+    by_track, listings_by = _group_listings(plat_rows)
+    return _row_to_track(row, by_track.get(track_id, {}), listings_by.get(track_id, []))
 
 
 def upsert(track_id: str, **fields: Any) -> dict[str, Any]:
@@ -325,13 +348,10 @@ def set_stage(track_id: str, stage: str) -> dict[str, Any]:
 
 def set_platform_status(track_id: str, platform: str, status: str, **extra: Any) -> dict[str, Any]:
     """
-    记录某个平台的发布状态。
+    记录某条平台上架记录。
 
-    每个平台单独记：同一首歌可能在汽水已上架、网易云还在审核 —— 只有一个
-    全局状态的话，这种情况根本表达不出来。
-
-    **整个操作在一个事务里**：以前是「改 JSON 再整份写回」，中途崩了会留下
-    半吊子状态（比如「发版中但不知道发去哪」），那种状态没人看得懂。
+    身份是 (platform, song_id)，不是歌名。同一首本地作品可以挂多条
+    （改名、拆成完整版/片段），对不上的先作为孤儿挂着，再人手关联。
     """
     if platform not in PLATFORMS:
         raise ValueError(f"未知平台: {platform}")
@@ -339,37 +359,133 @@ def set_platform_status(track_id: str, platform: str, status: str, **extra: Any)
     now = _now()
     cfg = extra.pop("config", None)
     album = extra.pop("album", None)
+    platform_title = extra.pop("platform_title", None)
+    song_id = str(extra.get("song_id") or "")
 
     with db.connect() as c:
         c.execute("INSERT OR IGNORE INTO tracks (id, title, stage, created_at, updated_at) "
                   "VALUES (?,?,?,?,?)", (track_id, track_id, "draft", now, now))
-        c.execute("""
-            INSERT INTO track_platforms (track_id, platform, status, updated_at)
-            VALUES (?,?,?,?)
-            ON CONFLICT(track_id, platform) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at
-        """, (track_id, platform, status, now))
+
+        listing = None
+        if song_id:
+            listing = c.execute(
+                "SELECT id, track_id FROM track_platforms WHERE platform=? AND song_id=?",
+                (platform, song_id)).fetchone()
+        if listing is None:
+            listing = c.execute(
+                "SELECT id, track_id FROM track_platforms "
+                "WHERE track_id=? AND platform=? AND IFNULL(song_id,'')=?",
+                (track_id, platform, song_id)).fetchone()
+
+        if listing:
+            lid = listing["id"]
+            c.execute("UPDATE track_platforms SET status=?, updated_at=? WHERE id=?",
+                      (status, now, lid))
+            if listing["track_id"] != track_id:
+                c.execute("UPDATE track_platforms SET track_id=? WHERE id=?", (track_id, lid))
+        else:
+            c.execute(
+                "INSERT INTO track_platforms (track_id, platform, status, updated_at) "
+                "VALUES (?,?,?,?)", (track_id, platform, status, now))
+            lid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
 
         sets, vals = [], []
         mapping = {"song_id": "song_id", "song_url": "song_url", "album_id": "album_id",
                    "track_no": "track_no", "duration": "duration", "publish_date": "publish_date",
                    "cover_url": "cover_url", "cover_local": "cover_local", "note": "note",
                    "submitted_at": "submitted_at",
-                   # 单曲维度的平台实况（来自音乐人后台，见 scripts/ncm_track_stats.py）
                    "plays": "plays", "earned_cny": "earned_cny", "stats_at": "stats_at"}
         for k, col in mapping.items():
             if k in extra and extra[k] is not None:
                 sets.append(f"{col} = ?"); vals.append(extra[k])
         if album is not None:
             sets.append("album_name = ?"); vals.append(album)
+        if platform_title is not None:
+            sets.append("platform_title = ?"); vals.append(platform_title)
         if cfg is not None:
             sets.append("config = ?")
             vals.append(cfg if isinstance(cfg, str) else json.dumps(cfg, ensure_ascii=False))
         if sets:
-            c.execute(f"UPDATE track_platforms SET {', '.join(sets)} WHERE track_id = ? AND platform = ?",
-                      (*vals, track_id, platform))
+            c.execute(f"UPDATE track_platforms SET {', '.join(sets)} WHERE id = ?",
+                      (*vals, lid))
         c.execute("UPDATE tracks SET updated_at = ? WHERE id = ?", (now, track_id))
 
     return get_track(track_id) or {}
+
+
+def link_listing(listing_id: int, track_id: str) -> dict[str, Any]:
+    """
+    把一条平台上架记录挂到某首本地/Suno 作品上。
+
+    改名、拆分都走这条：平台那边的 song_id 不变，只改它属于哪首原曲。
+    原来那条孤儿作品如果只是回填出来的空壳，挂走之后删掉。
+    """
+    db.init()
+    now = _now()
+    with db.connect() as c:
+        listing = c.execute("SELECT * FROM track_platforms WHERE id=?", (listing_id,)).fetchone()
+        if not listing:
+            raise ValueError(f"没有这条上架记录: {listing_id}")
+        dest = c.execute("SELECT id, clip_id, audio_file FROM tracks WHERE id=?", (track_id,)).fetchone()
+        if not dest:
+            raise ValueError(f"没有这首作品: {track_id}")
+        old_tid = listing["track_id"]
+        c.execute("UPDATE track_platforms SET track_id=?, updated_at=? WHERE id=?",
+                  (track_id, now, listing_id))
+        c.execute("UPDATE tracks SET updated_at=? WHERE id=?", (now, track_id))
+        if old_tid != track_id:
+            leftover = c.execute(
+                "SELECT COUNT(*) n FROM track_platforms WHERE track_id=?", (old_tid,)).fetchone()["n"]
+            old = c.execute(
+                "SELECT clip_id, audio_file, note FROM tracks WHERE id=?", (old_tid,)).fetchone()
+            empty_shell = (
+                leftover == 0
+                and old
+                and not old["clip_id"]
+                and not old["audio_file"]
+                and "回填" in (old["note"] or "")
+            )
+            if empty_shell:
+                c.execute("DELETE FROM tracks WHERE id=?", (old_tid,))
+    return get_track(track_id) or {}
+
+
+def resolve_track_for_listing(platform: str, song_id: str, title: str) -> str | None:
+    """
+    给一条平台上架记录找本地作品。顺序：
+
+    1. 这个 (platform, song_id) 已经挂过 → 沿用，避免重跑同步把人手关联冲掉
+    2. 本地有同名作品，优先带 Suno clip / 本地音频的那首（拆成多首同名时挂到原曲）
+    3. 找不到 → None，调用方再建孤儿
+    """
+    db.init()
+    title = (title or "").strip()
+    with db.connect() as c:
+        if song_id:
+            hit = c.execute(
+                "SELECT track_id FROM track_platforms WHERE platform=? AND song_id=?",
+                (platform, str(song_id))).fetchone()
+            if hit:
+                return hit["track_id"]
+        rows = list(c.execute(
+            "SELECT id, clip_id, audio_file FROM tracks WHERE title=?", (title,))) if title else []
+    if not rows:
+        return None
+    sourced = [r for r in rows if r["clip_id"] or r["audio_file"]]
+    return (sourced[0] if sourced else rows[0])["id"]
+
+
+def source_candidates() -> list[dict[str, Any]]:
+    """能当「原曲」被关联的作品：有 Suno clip 或本地音频。"""
+    db.init()
+    with db.connect() as c:
+        rows = c.execute(
+            "SELECT id, title, clip_id, audio_file, stage FROM tracks "
+            "WHERE IFNULL(clip_id,'') != '' OR IFNULL(audio_file,'') != '' "
+            "ORDER BY updated_at DESC"
+        ).fetchall()
+    return [{"id": r["id"], "title": r["title"], "clip_id": r["clip_id"] or "",
+             "stage": r["stage"], "suno": bool(r["clip_id"])} for r in rows]
 
 
 def summary() -> dict[str, int]:

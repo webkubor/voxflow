@@ -27,8 +27,12 @@ export type Stage = 'draft' | 'generated' | 'selected' | 'publishing' | 'publish
 /** 平台标识。加平台时这里和 configs/platforms.json、core/pipeline.PLATFORMS 一起改。 */
 export type PlatformKey = 'qishui' | 'netease' | 'tencent';
 
-/** 作品在某个平台上的状态。 */
+/** 作品在某个平台上的一条上架记录。同一首原曲可以有多条（改名、拆分）。 */
 export interface TrackPlatform {
+  id?: number | null;
+  platform?: string;
+  /** 平台上的歌名，可以跟本地 title 不同。 */
+  platform_title?: string;
   status: string;              // preparing | reviewing | online | rejected …
   song_id?: string | null;
   song_url?: string;
@@ -67,6 +71,10 @@ export interface Track {
   clip_ids: string[];
   /** 平台状态是**对象**不是数组 —— 遍历要用 (值, 键) 两个形参 */
   platforms: Partial<Record<PlatformKey, TrackPlatform>>;
+  /** 这个作品挂着的全部上架记录（含同一平台多条）。 */
+  listings: TrackPlatform[];
+  /** 有 Suno clip 或本地音频 = 原曲；否则是平台回填出来的孤儿。 */
+  is_source: boolean;
   cloud_backup: CloudBackup;
   updated_at: string;
   note: string;
