@@ -1,0 +1,132 @@
+- generic [ref=f4e7]:
+  - generic [ref=f4e8]:
+    - generic [ref=f4e9]:
+      - button "折叠音色库" [ref=f4e10] [cursor=pointer]
+      - generic [ref=f4e13]:
+        - img "VoxFlow" [ref=f4e14]
+        - generic [ref=f4e15]:
+          - generic [ref=f4e16]: VoxFlow
+          - generic [ref=f4e17]: 声流
+    - generic [ref=f4e18]:
+      - generic [ref=f4e19]:
+        - generic [ref=f4e20]:
+          - generic [ref=f4e22]: 语音
+          - generic [ref=f4e23]: Qwen3-TTS
+        - generic [ref=f4e24]:
+          - generic [ref=f4e26]: 音乐
+          - generic [ref=f4e27]: Suno
+        - generic [ref=f4e28]:
+          - generic [ref=f4e30]: museav
+          - generic [ref=f4e31]: 未接
+        - generic [ref=f4e32]:
+          - generic [ref=f4e34]: 文案
+          - generic [ref=f4e35]: 未接
+      - button "错误日志（0 条）" [ref=f4e36] [cursor=pointer]
+      - button "任务队列（0 进行中）" [ref=f4e40] [cursor=pointer]
+  - generic [ref=f4e46]:
+    - complementary [ref=f4e47]:
+      - generic [ref=f4e48]:
+        - heading "音色库" [level=3] [ref=f4e54]
+        - button "注册新音色" [ref=f4e56] [cursor=pointer]
+      - generic [ref=f4e59]:
+        - button "老 老陈·人文旁白 ✓ 低沉稳重，尾音干净，适合历史与人文题材；语速偏慢" [pressed] [ref=f4e60] [cursor=pointer]:
+          - generic [ref=f4e61]:
+            - generic [ref=f4e62]: 老
+            - generic [ref=f4e64]:
+              - generic [ref=f4e65]:
+                - generic "老陈·人文旁白" [ref=f4e66]
+                - generic [ref=f4e67]: ✓
+              - paragraph [ref=f4e68]: 低沉稳重，尾音干净，适合历史与人文题材；语速偏慢
+          - generic [ref=f4e69]:
+            - button "试听" [ref=f4e70]
+            - button "编辑" [ref=f4e74]
+            - button "删除" [ref=f4e78]
+        - button "温 温柔旁白 ✓ 中性偏柔，语速平稳，适合纪录片和知识讲解" [ref=f4e82] [cursor=pointer]:
+          - generic [ref=f4e83]:
+            - generic [ref=f4e84]: 温
+            - generic [ref=f4e86]:
+              - generic [ref=f4e87]:
+                - generic "温柔旁白" [ref=f4e88]
+                - generic [ref=f4e89]: ✓
+              - paragraph [ref=f4e90]: 中性偏柔，语速平稳，适合纪录片和知识讲解
+          - generic [ref=f4e91]:
+            - button "试听" [ref=f4e92]
+            - button "编辑" [ref=f4e96]
+            - button "删除" [ref=f4e100]
+    - generic [ref=f4e105]:
+      - tablist [ref=f4e106]:
+        - tab "声音克隆" [ref=f4e107] [cursor=pointer]
+        - tab "音色设计" [ref=f4e113] [cursor=pointer]
+        - tab "剧本创作" [ref=f4e119] [cursor=pointer]
+        - tab "AI 音乐" [selected] [ref=f4e124] [cursor=pointer]
+        - tab "作品看板" [ref=f4e130] [cursor=pointer]
+        - tab "全网发行" [ref=f4e138] [cursor=pointer]
+        - tab "资产库" [ref=f4e144] [cursor=pointer]
+        - tab "运营台" [ref=f4e150] [cursor=pointer]
+      - generic [ref=f4e159]:
+        - banner [ref=f4e160]:
+          - heading "AI 音乐 · Suno" [level=3] [ref=f4e162]
+          - generic [ref=f4e168]:
+            - generic [ref=f4e169]: 未登录
+            - button "刷新状态" [ref=f4e173] [cursor=pointer]
+        - status "需要先登录 Suno" [ref=f4e179]:
+          - generic [aria-hidden] [ref=f4e180]: ⚠️
+          - generic [ref=f4e181]:
+            - generic [ref=f4e182]: 需要先登录 Suno
+            - generic [ref=f4e183]: 在终端执行 ./voxsuno login（自动从 Chrome 提取会话），然后点刷新。
+        - tablist "生成模式" [ref=f4e184]:
+          - tab "歌曲 完整原创" [selected] [ref=f4e185] [cursor=pointer]:
+            - generic [ref=f4e190]:
+              - generic [ref=f4e191]: 歌曲
+              - generic [ref=f4e192]: 完整原创
+          - tab "BGM 纯背景音" [ref=f4e193] [cursor=pointer]:
+            - generic [ref=f4e198]:
+              - generic [ref=f4e199]: BGM
+              - generic [ref=f4e200]: 纯背景音
+          - tab "翻唱 你的声音" [ref=f4e201] [cursor=pointer]:
+            - generic [ref=f4e207]:
+              - generic [ref=f4e208]: 翻唱
+              - generic [ref=f4e209]: 你的声音
+        - generic [ref=f4e211]:
+          - generic [ref=f4e216]: 热点风向
+          - generic [ref=f4e217]: 网易云热歌榜提炼 · 只学风格不抄作品
+          - button "看当前火什么" [ref=f4e218] [cursor=pointer]
+        - generic [ref=f4e225]:
+          - generic [ref=f4e226]:
+            - generic [ref=f4e227]:
+              - generic [ref=f4e228]:
+                - generic [ref=f4e229]: 歌曲标题
+                - generic [ref=f4e237]:
+                  - textbox "如：月下竹林" [ref=f4e238]
+                  - generic: 如：月下竹林
+              - generic [ref=f4e239]:
+                - generic [ref=f4e240]: 风格标签（逗号分隔）
+                - generic [ref=f4e247]:
+                  - textbox "古风, 古筝, 武侠, cinematic, 110 BPM" [ref=f4e248]
+                  - generic: 古风, 古筝, 武侠, cinematic, 110 BPM
+              - generic [ref=f4e249]:
+                - generic [ref=f4e250]: 声音 Persona
+                - generic [ref=f4e257] [cursor=pointer]:
+                  - generic "（默认 Suno 声音）" [ref=f4e258]
+                  - img "loading" [ref=f4e260]
+                - paragraph [ref=f4e267]:
+                  - text: 需要先有 persona：
+                  - code [ref=f4e268]: ./voxsuno sample <voxkey>
+                  - text: 生成样音 → suno.com 上传建 voice →
+                  - code [ref=f4e269]: ./voxsuno link <id> <名字>
+            - generic [ref=f4e271]:
+              - generic [ref=f4e272]:
+                - generic [ref=f4e273]: 歌词（支持 [Verse] [Chorus] 结构）
+                - generic [ref=f4e277]:
+                  - button "AI 生成" [ref=f4e278] [cursor=pointer]
+                  - button "复制歌词" [disabled] [ref=f4e283]
+              - generic [ref=f4e292]:
+                - textbox "歌词主题（留空则根据标题和风格生成）" [ref=f4e293]
+                - generic: 歌词主题（留空则根据标题和风格生成）
+              - generic [ref=f4e295]:
+                - textbox "[Verse 1] 月下竹林深 我踏碎霜痕 [Chorus] 月下竹林 我独行 江湖夜雨十年灯" [ref=f4e296]:
+                  - /placeholder: "[Verse 1]\n月下竹林深\n我踏碎霜痕\n\n[Chorus]\n月下竹林 我独行\n江湖夜雨十年灯"
+                - generic: "[Verse 1] 月下竹林深 我踏碎霜痕 [Chorus] 月下竹林 我独行 江湖夜雨十年灯"
+          - generic [ref=f4e297]:
+            - button "生成音乐" [disabled] [ref=f4e298]
+            - generic [ref=f4e304]: 生成约耗 35-70 credits · 产物进「资产库」

@@ -174,18 +174,22 @@ export const api = {
   sunoStatus: () => get<Record<string, unknown>>('suno/status'),
   sunoGenerate: (p: { title: string; tags?: string; lyrics?: string; persona?: string }) =>
     post<{ task_id: string }>('suno/generate', p),
+  /** Suno 库里的作品，给翻唱选源用 */
+  sunoClips: () => get<{
+    clips: { id: string; title: string; tags: string; model: string;
+             image_url: string; created_at: string; status: string }[];
+  }>('suno/clips'),
+
   /**
-   * 上传原曲音频做真「同曲不同演绎」 —— Suno covers API。
+   * 翻唱：把库里**已有的一首 clip** 换个风格重做。
    *
-   * 前端已经准备好 FormData / UI，但后端要实现：
-   *   POST /api/suno/cover
-   *   Content-Type: multipart/form-data
-   *   fields: audio (file), title, tags, lyrics, persona
-   *
-   * 后端收到后转发给 Suno 的 /cover 端点（v3.5+），返回 task_id。
-   * 没实现之前调用会 404，错误日志里能看到具体原因。
+   * ⚠️ 接的是 `clip_id`，**不是上传音频** —— `suno cover` 只认库里的 clip，
+   * CLI 没有上传参数。想翻唱外部歌曲要先去 Suno 网页端 Upload Audio
+   * 把它变成一个 clip。这一步绕不开。
    */
-  sunoCover: (form: FormData) => postForm<{ task_id: string }>('suno/cover', form),
+  sunoCover: (p: { clip_id: string; tags?: string; title?: string;
+                   model?: string; audio_influence?: number }) =>
+    post<{ task_id: string }>('suno/cover', p),
 
   // ── 热点风格追踪（测试1：哪个火做哪个，不抄袭）──
   trending: () => get<{

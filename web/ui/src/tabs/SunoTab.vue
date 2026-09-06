@@ -379,43 +379,38 @@
               </p>
             </div>
 
-            <!-- 原曲音频：上传后做真「同曲不同演绎」 -->
+            <!--
+              翻唱源：从 Suno 库里选一首。
+
+              这里原本是「拖拽上传音频」—— 那个设想行不通：`suno cover` 只接
+              clip_id，CLI 没有上传音频的参数。想翻唱外部歌曲，得先在 Suno
+              网页端 Upload Audio 把它变成库里的一个 clip，再回这里选。
+              那一步绕不开，与其留个点了没用的上传框，不如把话说清楚。
+            -->
             <div class="form-cell">
               <div class="cover-audio-head">
-                <label class="form-label"><Icon name="music" size="sm" />原曲音频
-                  <span class="form-label-optional">（可选 · 上传后做真"同曲不同演绎"）</span>
+                <label class="form-label">
+                  <Icon name="music" size="sm" />翻唱源（必填）
+                  <span class="form-label-optional">从你的 Suno 库里选</span>
                 </label>
+                <button class="ghost-btn small" :disabled="clipsLoading" @click="loadClips">
+                  <Icon name="refresh" size="sm" />
+                  <span>{{ clipsLoading ? '读取中…' : '刷新' }}</span>
+                </button>
               </div>
-              <div
-                class="file-drop"
-                :class="{ 'is-dragover': dragOver, 'has-file': coverAudioFile }"
-                @click="triggerFileSelect"
-                @dragover.prevent="dragOver = true"
-                @dragleave.prevent="dragOver = false"
-                @drop.prevent="handleFileDrop"
-              >
-                <input
-                  ref="fileInput"
-                  type="file"
-                  accept="audio/*"
-                  style="display: none"
-                  @change="handleFileSelect"
-                />
-                <div v-if="!coverAudioFile" class="drop-placeholder">
-                  <Icon name="upload" size="md" />
-                  <p>点击或拖拽音频文件到此处</p>
-                  <span class="drop-hint">MP3 / WAV / FLAC · 最大 20MB</span>
-                  <span class="drop-warn">⚠️ 后端需要实现 /api/suno/cover 端点才生效</span>
-                </div>
-                <div v-else class="file-selected" @click.stop>
-                  <Icon name="library" size="md" />
-                  <div class="file-info">
-                    <span class="file-name">{{ coverAudioFile.name }}</span>
-                    <span class="file-meta">{{ formatBytes(coverAudioFile.size) }}</span>
-                  </div>
-                  <button class="ghost-btn small" @click="clearAudioFile">移除</button>
-                </div>
-              </div>
+              <n-select
+                v-model:value="coverClipId"
+                :options="clipOptions"
+                :loading="clipsLoading"
+                filterable
+                placeholder="选一首要翻唱的作品"
+              />
+              <p class="cover-src-hint">
+                想翻唱**别人的歌**？先去
+                <a href="https://suno.com/create" target="_blank" rel="noreferrer">Suno 网页端</a>
+                用 Upload Audio 传原曲，它会变成库里的一个作品，回来刷新就能选到。
+                CLI 不支持直接上传，这一步只能手动。
+              </p>
             </div>
           </div>
 
@@ -564,7 +559,7 @@ import Icon from '../components/Icon.vue';
  * 不同意图下字段组合完全不同。混在一个表单里用户会困惑「这个歌词框要不要填？」
  * 「Persona 是干嘛的」—— 模式分清楚后，每个表单只问该问的问题。
  */
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import copy from 'copy-to-clipboard';
 import { api, toMessage } from '../api';
@@ -591,6 +586,21 @@ const MODES = [
   { value: 'cover', label: '翻唱',  desc: '你的声音',  icon: 'layers' },
 ];
 const mode = ref('song');
+
+/**
+ * 挂载时查一次 Suno 状态。
+ *
+ * 这一屏此前**从不主动查** —— `loadSunoStatus` 只绑在右上角那个刷新按钮上，
+ * 于是 `suno.authenticated` 一直停在初始值 false，界面永远挂着「⚠️ 未登录」
+ * 和「需要先登录 Suno」，而实际上 CLI 早就登录着、额度也读得到。
+ * 人看到那句提示会真的跑去重新登录一遍，然后发现本来就是登录的。
+ *
+ * 顺带把 Suno 库也拉一次 —— 翻唱要从库里选源，进来就有比点开下拉才加载好。
+ */
+onMounted(() => {
+  loadSunoStatus().catch(() => { /* 失败已进 errorLog，这里不再打断首屏 */ });
+  loadClips().catch(() => { /* 同上 */ });
+});
 
 /**
  * 「下次重置」提示文案。
@@ -635,9 +645,16 @@ const BGM_PRESETS = [
 // ─── 翻唱 ───
 const originalSong = ref('');
 const coverSong = ref(null);     // 当前从热点榜选的歌曲对象
-const coverAudioFile = ref(null); // 上传的原曲音频（File 对象）
-const fileInput = ref(null);
-const dragOver = ref(false);
+/*
+ * 翻唱源：Suno 库里的 clip id。
+ *
+ * 这里原本是「上传原曲音频」（coverAudioFile / dragOver / fileInput）——
+ * 那条路走不通：`suno cover` 只接 clip_id，CLI 没有上传参数。
+ * 想翻唱外部歌曲要先在 Suno 网页端 Upload Audio 变成库里的 clip。
+ */
+const coverClipId = ref('');
+const clips = ref([]);
+const clipsLoading = ref(false);
 const MAX_AUDIO_SIZE = 20 * 1024 * 1024; // 20MB —— Suno covers API 上限
 
 const pickCoverSong = (song) => {
@@ -656,44 +673,25 @@ const pickCoverSong = (song) => {
   tasksStore.showToast(`已选《${song.name}》,风格已自动套用热点 tags`, 'success');
 };
 
-const triggerFileSelect = () => fileInput.value?.click();
+const clipOptions = computed(() => clips.value.map((c) => ({
+  // 标签带上风格和模型，同名作品（Suno 一次出两首）才分得清选的是哪个
+  label: `${c.title}${c.tags ? ` · ${c.tags.slice(0, 24)}` : ''}`,
+  value: c.id,
+  disabled: c.status !== 'complete',   // 还没生成完的不能拿来翻唱
+})));
 
-const handleFileSelect = (e) => {
-  const f = e.target.files?.[0];
-  if (f) acceptAudioFile(f);
-};
-
-const handleFileDrop = (e) => {
-  e.preventDefault();
-  dragOver.value = false;
-  const f = e.dataTransfer.files?.[0];
-  if (f) acceptAudioFile(f);
-};
-
-const acceptAudioFile = (f) => {
-  if (!f.type.startsWith('audio/')) {
-    tasksStore.showToast('请选择音频文件（MP3 / WAV / FLAC 等）', 'error');
-    return;
+const loadClips = async () => {
+  clipsLoading.value = true;
+  try {
+    clips.value = (await api.sunoClips()).clips;
+    if (!clips.value.length) {
+      tasksStore.showToast('Suno 库是空的 —— 先生成一首，或去网页端上传原曲', 'warning');
+    }
+  } catch (cause) {
+    await tasksStore.reportError(cause, { action: 'suno.clips' });
+  } finally {
+    clipsLoading.value = false;
   }
-  if (f.size > MAX_AUDIO_SIZE) {
-    tasksStore.showToast(`音频文件过大（${formatBytes(f.size)}）, 最大 20MB`, 'error');
-    return;
-  }
-  coverAudioFile.value = f;
-  tasksStore.showToast(`已选 ${f.name} (${formatBytes(f.size)})`, 'success');
-};
-
-const clearAudioFile = () => {
-  coverAudioFile.value = null;
-  if (fileInput.value) fileInput.value.value = '';
-};
-
-const formatBytes = (bytes) => {
-  if (!bytes) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 };
 
 const generateCoverLyrics = async () => {
@@ -755,18 +753,19 @@ const handleSubmit = async () => {
       const lyrics = sunoForm.lyrics || `[Verse]\n${originalSong.value}\n\n[Chorus]\n你的翻唱演绎`;
 
       let taskId;
-      if (coverAudioFile.value) {
-        // 上传原曲音频 → Suno covers API（前端的真「同曲不同演绎」入口）
-        const formData = new FormData();
-        formData.append('audio', coverAudioFile.value);
-        formData.append('title', title);
-        formData.append('tags', tagsWithCover);
-        formData.append('lyrics', lyrics);
-        formData.append('persona', sunoForm.persona);
-        const data = await submitCover(formData);
+      if (coverClipId.value) {
+        // 选了库里的 clip → 真翻唱（`suno cover`，同曲不同演绎）
+        const data = await submitCover({
+          clip_id: coverClipId.value,
+          tags: sunoForm.tags.trim(),
+          title,
+        });
         taskId = data.task_id;
       } else {
-        // 文本生成 → 没有原曲音频，只是「风格借鉴」
+        // 没选源 → 退化成「按这个风格另写一首」，不是翻唱。
+        // 保留这条路是因为它确实有用（想要那个味道而不是那首歌），
+        // 但别让人以为自己在翻唱 —— 提示里说清楚。
+        tasksStore.showToast('没选翻唱源，这次是按风格另写一首（不是翻唱）', 'info');
         const data = await submitSuno({
           title,
           tags: tagsWithCover,
@@ -784,7 +783,7 @@ const handleSubmit = async () => {
         originalArtist: coverSong.value?.artist,
         tags: tagsWithCover,
         persona: sunoForm.persona,
-        hasSourceAudio: !!coverAudioFile.value,
+        sourceClipId: coverClipId.value || null,
         urls: [],
         files: [],
         status: 'running',

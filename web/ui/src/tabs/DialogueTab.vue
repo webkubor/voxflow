@@ -317,6 +317,9 @@ const submitDialogue = async () => {
   display: flex;
   flex-direction: column;
   gap: var(--vf-space-3);
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 .line-card {
   display: flex;
@@ -428,8 +431,10 @@ const submitDialogue = async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-top: var(--vf-space-4);
-  border-top: 1px solid var(--vf-border);
+  padding: var(--vf-space-4);
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-md);
   gap: var(--vf-space-3);
   flex-wrap: wrap;
 }

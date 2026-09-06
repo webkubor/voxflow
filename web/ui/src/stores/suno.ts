@@ -126,17 +126,21 @@ export const useSunoStore = defineStore('suno', () => {
   };
 
   /**
-   * 提交翻唱 + 上传原曲音频（走 Suno covers API）。
+   * 翻唱：把 Suno 库里已有的一首 clip 换个风格重做。
    *
-   * 前端把表单 + 音频打包成 FormData 直接发，后端需要实现 /api/suno/cover
-   * 转发到 Suno 的 covers 端点。当前后端没实现的话会 404，错误进 errorLog。
+   * ⚠️ 传的是 `clip_id`，**不是上传音频** —— `suno cover` 只认库里的 clip。
+   * 想翻唱外部歌曲要先去 Suno 网页端 Upload Audio 把它变成一个 clip。
+   *
+   * 提交后照常轮询任务，产物入库走和生成同一条链路。
    */
-  const submitCover = async (formData: FormData): Promise<{ task_id: string }> => {
+  const submitCover = async (
+    p: { clip_id: string; tags?: string; title?: string },
+  ): Promise<{ task_id: string }> => {
     error.value = '';
     suno.error = '';
     suno.submitting = true;
     try {
-      const data = await api.sunoCover(formData);
+      const data = await api.sunoCover(p);
       taskTimer = window.setTimeout(() => pollSunoTask(data.task_id), 3000);
       return data;
     } catch (cause) {

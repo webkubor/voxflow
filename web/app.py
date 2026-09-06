@@ -178,6 +178,8 @@ def _task_worker():
                 _run_dialogue_task(task_id, task["params"], _update_task)
             elif task["type"] == "cover":
                 _run_cover_task(task_id, task["params"], _update_task)
+            elif task["type"] == "suno_cover":
+                _run_suno_cover_task(task_id, task["params"], _update_task)
         except Exception as e:
             _err = str(e)
             _update_task(task_id, status="error", error=_err,
@@ -185,7 +187,7 @@ def _task_worker():
             obs.log("task_failed", level="error", task_type=task["type"],
                     task_id=task_id, label=task.get("label", ""), error=_err[:300])
         finally:
-            if task["type"] not in ("suno", "cover"):
+            if task["type"] not in ("suno", "suno_cover", "cover"):
                 # 本地 TTS 单价是 0，但**量**要记 —— 「本月本地合成了多少秒」
                 # 乘上对标商业 API 的单价，就是本地方案实际省下的钱。
                 # 不记量的话，这个工具最大的价值恰好是唯一看不见的那个。
@@ -1903,6 +1905,122 @@ async def suno_batch(req: SunoBatchRequest):
             "files": (t.get("result") or {}).get("files", []) if isinstance(t.get("result"), dict) else [],
         })
     return {"results": results, "elapsed_sec": round(time.time() - start, 1)}
+
+
+class SunoCoverRequest(BaseModel):
+    """
+    翻唱：把 Suno 库里**已有的一首 clip** 换个风格重做。
+
+    ⚠️ 注意它接的是 `clip_id`，**不是上传音频** —— `suno cover` 只认库里的
+    clip（`suno cover <CLIP_ID>`，没有上传参数）。想翻唱外部歌曲，得先在
+    Suno 网页端 Upload Audio 把它变成一个 clip，再拿那个 id 过来。
+    这一步绕不开，CLI 没有对应能力。
+    """
+    clip_id: str
+    tags: str = ""                       # 新风格；留空则沿用原 clip 的风格
+    model: str = "v5.5"
+    # 原曲对结果的影响强度 0-100。留 None 用 Suno 默认 ——
+    # 传一个我们自己拍的数不如让上游决定。
+    audio_influence: Optional[int] = None
+    title: str = ""                      # 只用于任务标签和产物文件名
+
+
+@app.get("/api/suno/clips")
+def suno_clips(limit: int = 40):
+    """
+    列出 Suno 库里的作品，给翻唱选源用。
+
+    直接透传 CLI 的结果，不在这里重新组织字段 —— 那边加了字段这边自动就有。
+    只挑界面要用的几个，免得把 audio_url 这类一次性签名地址塞进前端缓存。
+    """
+    import subprocess  # noqa: PLC0415
+    if not os.path.exists(SUNO_BIN):
+        raise HTTPException(400, f"suno CLI 不存在：{SUNO_BIN}")
+    try:
+        r = subprocess.run([SUNO_BIN, "list", "--json"],
+                           capture_output=True, text=True, timeout=30)
+        clips = (json.loads(r.stdout or "{}").get("data") or {}).get("clips") or []
+    except Exception as e:
+        obs.log("suno_list_failed", level="error", error=str(e)[:200])
+        raise HTTPException(502, f"读 Suno 库失败：{type(e).__name__} {str(e)[:80]}")
+    return {"clips": [{
+        "id": c.get("id", ""),
+        "title": c.get("title") or "(未命名)",
+        "tags": c.get("metadata", {}).get("tags", "") if isinstance(c.get("metadata"), dict) else "",
+        "model": c.get("model_name", ""),
+        "image_url": c.get("image_url", ""),
+        "created_at": c.get("created_at", ""),
+        "status": c.get("status", ""),
+    } for c in clips[:limit]]}
+
+
+@app.post("/api/suno/cover")
+def suno_cover(req: SunoCoverRequest):
+    """提交翻唱任务（异步）。走和生成同一条队列。"""
+    if not req.clip_id.strip():
+        raise HTTPException(400, "要翻唱哪一首？缺 clip_id")
+    label = f"🎤 翻唱：{req.title or req.clip_id[:8]}"
+    return {"task_id": _submit_task("suno_cover", label, req.model_dump()),
+            "status": "queued"}
+
+
+def _run_suno_cover_task(task_id: str, params: dict, update_fn):
+    """
+    执行翻唱：`suno cover <clip_id>` → 产物拷回 out/music。
+    与 _run_suno_task 同形状，区别只在命令和标签。
+    """
+    import subprocess, shutil, glob, tempfile  # noqa: PLC0415
+
+    req = SunoCoverRequest(**params)
+    if not os.path.exists(SUNO_BIN):
+        raise ValueError(f"suno CLI 不存在: {SUNO_BIN}（先 cargo install suno）")
+
+    music_dir = OUT_DIR / MUSIC_SUBDIR
+    music_dir.mkdir(parents=True, exist_ok=True)
+    tmp = tempfile.mkdtemp(prefix="voxcover_")
+
+    cmd = [SUNO_BIN, "cover", req.clip_id, "--model", req.model,
+           "--wait", "--download", tmp]
+    if req.tags.strip():
+        cmd += ["--tags", req.tags.strip()]
+    if req.audio_influence is not None:
+        cmd += ["--audio-influence", str(req.audio_influence)]
+
+    update_fn(task_id, progress=25, stage="Suno 翻唱中（约 1-3 分钟）...")
+    _t0 = time.perf_counter()
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=420)
+    _ms = int((time.perf_counter() - _t0) * 1000)
+    _cr = float((obs.pricing().get("providers", {}).get("suno") or {}).get("credits_per_call", 10))
+
+    if r.returncode != 0:
+        err = (r.stderr or r.stdout or "")[-500:]
+        obs.meter("suno", "cover", credits=_cr, track_id=req.title[:40],
+                  duration_ms=_ms, ok=False, model=req.model,
+                  source_clip=req.clip_id[:12], error=err[-120:])
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise ValueError(f"翻唱失败: {err}")
+
+    obs.meter("suno", "cover", credits=_cr, track_id=req.title[:40],
+              duration_ms=_ms, ok=True, model=req.model,
+              source_clip=req.clip_id[:12], tags=req.tags[:60])
+
+    update_fn(task_id, progress=85, stage="入库音频库...")
+    copied = []
+    for f in glob.glob(os.path.join(tmp, "*")):
+        if os.path.splitext(f)[1].lower() in AUDIO_EXTS:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe = re.sub(r"[^\w\u4e00-\u9fff-]", "_", req.title or "cover")[:30]
+            dest = music_dir / f"[翻唱]{safe}_{ts}{os.path.splitext(f)[1].lower()}"
+            shutil.copy2(f, dest)
+            copied.append(str(dest))
+    shutil.rmtree(tmp, ignore_errors=True)
+    if not copied:
+        raise ValueError("翻唱成功但没拿到音频文件（Suno 下载链路问题，去网页端看）")
+
+    update_fn(task_id, status="done", progress=100, stage="完成",
+              result={"ok": True, "files": copied,
+                      "urls": [f"/api/audio/{MUSIC_SUBDIR}/{os.path.basename(c)}" for c in copied]},
+              completed_at=datetime.now().strftime("%H:%M:%S"))
 
 
 class CoverRequest(BaseModel):

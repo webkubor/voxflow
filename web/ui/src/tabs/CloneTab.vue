@@ -3,122 +3,145 @@
     <!-- 模型未就绪 / 正在下载 -->
     <ModelSetupCard v-if="!modelStatus.base.ready" model="Base" />
 
-    <!-- AI 助手折叠 -->
-    <n-collapse class="ai-collapse" :default-expanded-names="[]">
-      <n-collapse-item name="ai">
-        <template #header>
-          <div class="ai-header">
-            <Icon name="sparkles" size="sm" />
-            <span class="ai-title">AI 帮我写文案</span>
-            <span class="ai-sub">不会写文案？让 AI 快速生成台词或旁白</span>
+    <div class="clone-workbench">
+      <!-- 核心工作台卡片 -->
+      <section class="studio">
+        <!-- 顶栏辅助操作：AI 帮写抽屉开关 + 历史草稿 -->
+        <div class="workbench-sub-bar">
+          <div class="sub-bar-left">
+            <button
+              class="tool-tab-btn"
+              :class="{ active: showAIHelp }"
+              @click="showAIHelp = !showAIHelp"
+            >
+              <Icon name="sparkles" size="sm" />
+              <span>AI 灵感写词</span>
+            </button>
+
+            <button
+              v-if="savedScripts.length > 0"
+              class="tool-tab-btn"
+              :class="{ active: showDrafts }"
+              @click="showDrafts = !showDrafts"
+            >
+              <Icon name="library" size="sm" />
+              <span>历史草稿 ({{ savedScripts.length }})</span>
+            </button>
           </div>
-        </template>
-        <AIHelpSection />
-      </n-collapse-item>
-    </n-collapse>
 
-    <!-- 草稿箱 -->
-    <div v-if="savedScripts.length > 0" class="drafts-section">
-      <div class="section-title">
-        <Icon name="library" size="sm" />
-        <span>历史草稿</span>
-        <span class="section-count">{{ savedScripts.length }}</span>
-      </div>
-      <div class="draft-list">
-        <div
-          v-for="s in savedScripts"
-          :key="s.id"
-          class="draft-chip"
-          @click="loadScript(s)"
-        >
-          <span class="draft-text">{{ s.title }}</span>
-          <button class="draft-remove" title="删除草稿" @click.stop="deleteScript(s.id)">
-            <Icon name="close" size="sm" />
-          </button>
+          <span class="studio-counter">{{ cloneForm.text.length }} / 400 字</span>
         </div>
-      </div>
-    </div>
 
-    <!-- 核心工作台 -->
-    <section class="studio">
-      <div class="studio-head">
-        <span class="studio-title">需要合成的声音文案</span>
-        <span class="studio-counter">{{ cloneForm.text.length }} / 400 字</span>
-      </div>
+        <!-- 展开的 AI 灵感写词面板 -->
+        <div v-if="showAIHelp" class="embedded-tool-panel">
+          <div class="embedded-tool-head">
+            <span class="embedded-tool-title"><Icon name="sparkles" size="sm" />AI 自动生成台词/旁白</span>
+            <button class="close-panel-btn" @click="showAIHelp = false">
+              <Icon name="close" size="sm" />
+            </button>
+          </div>
+          <AIHelpSection />
+        </div>
 
-      <n-input
-        v-model:value="cloneForm.text"
-        type="textarea"
-        :rows="6"
-        maxlength="400"
-        show-count
-        placeholder="在此输入要合成语音的文本内容…"
-        class="clean-textarea"
-      />
+        <!-- 展开的草稿箱面板 -->
+        <div v-if="showDrafts && savedScripts.length > 0" class="embedded-tool-panel">
+          <div class="embedded-tool-head">
+            <span class="embedded-tool-title"><Icon name="library" size="sm" />载入历史草稿</span>
+            <button class="close-panel-btn" @click="showDrafts = false">
+              <Icon name="close" size="sm" />
+            </button>
+          </div>
+          <div class="draft-list">
+            <div
+              v-for="s in savedScripts"
+              :key="s.id"
+              class="draft-chip"
+              @click="loadScript(s)"
+            >
+              <span class="draft-text">{{ s.title }}</span>
+              <button class="draft-remove" title="删除草稿" @click.stop="deleteScript(s.id)">
+                <Icon name="close" size="sm" />
+              </button>
+            </div>
+          </div>
+        </div>
 
-      <!-- 快捷预设 -->
-      <div class="mood-bar">
-        <span class="mood-label">快捷预设</span>
-        <div class="mood-list">
+        <!-- 核心文案输入 -->
+        <div class="form-cell">
+          <n-input
+            v-model:value="cloneForm.text"
+            type="textarea"
+            :rows="5"
+            maxlength="400"
+            show-count
+            placeholder="在此输入要合成语音的文本内容（支持 1-400 字）…"
+            class="clean-textarea"
+          />
+        </div>
+
+        <!-- 快捷情感预设 -->
+        <div class="mood-bar">
+          <span class="mood-label"><Icon name="mask" size="sm" />快捷语气：</span>
+          <div class="mood-list">
+            <button
+              v-for="mood in moodPresets"
+              :key="mood.label"
+              class="mood-chip"
+              :class="{ active: activeMood === mood.label }"
+              @click="toggleMood(mood)"
+            >
+              {{ mood.label }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 细化微调参数 -->
+        <div class="params-grid">
+          <div class="param-cell">
+            <label class="param-label"><Icon name="speech" size="sm" />语气描述微调</label>
+            <n-input
+              v-model:value="cloneForm.tone"
+              placeholder="如：沉稳深情、语速适中（留空继承音色描述）"
+            />
+          </div>
+          <div class="param-cell">
+            <label class="param-label"><Icon name="mask" size="sm" />情绪标签匹配</label>
+            <n-input
+              v-model:value="cloneForm.emotion"
+              placeholder="如：happy、sad、angry（留空自动适配）"
+            />
+          </div>
+        </div>
+
+        <!-- 底部控制栏 -->
+        <div class="studio-footer">
+          <div class="footer-left">
+            <label class="switch-row">
+              <n-switch v-model:value="cloneForm.emotionPriority" size="small" />
+              <span>情绪控制优先</span>
+            </label>
+            <button class="ghost-btn" @click="saveScript">
+              <Icon name="save" size="sm" />
+              <span>保存为草稿</span>
+            </button>
+          </div>
           <button
-            v-for="mood in moodPresets"
-            :key="mood.label"
-            class="mood-chip"
-            :class="{ active: activeMood === mood.label }"
-            @click="toggleMood(mood)"
+            class="primary-btn"
+            :disabled="!selectedPersona || !cloneForm.text.trim()"
+            @click="handleSynthesize"
           >
-            {{ mood.label }}
+            <Icon name="play" size="sm" />
+            <span>立即合成音频</span>
           </button>
         </div>
-      </div>
-
-      <!-- 参数 -->
-      <div class="params-grid">
-        <div class="param-cell">
-          <label class="param-label"><Icon name="speech" size="sm" />语气描述</label>
-          <n-input
-            v-model:value="cloneForm.tone"
-            placeholder="如：沉稳深情、语速适中（留空继承音色描述）"
-          />
-        </div>
-        <div class="param-cell">
-          <label class="param-label"><Icon name="mask" size="sm" />情绪标签</label>
-          <n-input
-            v-model:value="cloneForm.emotion"
-            placeholder="如：happy、sad、angry（留空自动适配）"
-          />
-        </div>
-      </div>
-
-      <!-- 底部控制 -->
-      <div class="studio-footer">
-        <div class="footer-left">
-          <label class="switch-row">
-            <n-switch v-model:value="cloneForm.emotionPriority" size="small" />
-            <span>情绪控制优先</span>
-          </label>
-          <button class="ghost-btn" @click="saveScript">
-            <Icon name="library" size="sm" />
-            <span>保存草稿</span>
-          </button>
-        </div>
-        <button
-          class="primary-btn"
-          :disabled="!selectedPersona || !cloneForm.text.trim()"
-          @click="handleSynthesize"
-        >
-          <Icon name="play" size="sm" />
-          <span>立即合成音频</span>
-        </button>
-      </div>
-    </section>
+      </section>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { reactive, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
-import { toMessage } from '../api';
 import AIHelpSection from '../components/AIHelpSection.vue';
 import ModelSetupCard from '../components/ModelSetupCard.vue';
 import Icon from '../components/Icon.vue';
@@ -136,6 +159,9 @@ const voicesStore = useVoicesStore();
 const { modelStatus } = storeToRefs(capabilitiesStore);
 const { selectedPersona } = storeToRefs(voicesStore);
 const { savedScripts } = storeToRefs(synthStore);
+
+const showAIHelp = ref(false);
+const showDrafts = ref(false);
 
 const cloneForm = reactive({
   text: '',
@@ -191,6 +217,7 @@ const saveScript = async () => {
 
 const loadScript = (script) => {
   cloneForm.text = script.content;
+  showDrafts.value = false;
   tasksStore.showToast(`已装载「${script.title}」`, 'info');
 };
 
@@ -205,78 +232,10 @@ onMounted(() => synthStore.loadScripts());
   margin: 0 auto;
 }
 
-/* AI 助手 */
-.ai-collapse {
-  background: var(--vf-bg-2);
-  border: 1px solid var(--vf-border);
-  border-radius: var(--vf-radius-md);
-  overflow: hidden;
-}
-:deep(.ai-collapse .n-collapse-item__header-main) {
-  width: 100%;
-}
-.ai-header {
+.clone-workbench {
   display: flex;
-  align-items: center;
-  gap: var(--vf-space-2);
-  font-size: 13px;
-}
-.ai-title { font-weight: 600; color: var(--vf-text-1); }
-.ai-sub { font-size: 11px; color: var(--vf-text-3); margin-left: var(--vf-space-2); }
-
-/* 草稿箱 */
-.drafts-section { display: flex; flex-direction: column; gap: var(--vf-space-2); }
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: var(--vf-space-2);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--vf-text-3);
-}
-.section-count {
-  background: var(--vf-bg-3);
-  color: var(--vf-text-2);
-  padding: 1px 7px;
-  border-radius: var(--vf-radius-full);
-  font-size: 11px;
-}
-.draft-list { display: flex; flex-wrap: wrap; gap: var(--vf-space-2); }
-.draft-chip {
-  display: flex;
-  align-items: center;
-  gap: var(--vf-space-2);
-  background: var(--vf-bg-2);
-  border: 1px solid var(--vf-border);
-  padding: 4px 4px 4px var(--vf-space-3);
-  border-radius: var(--vf-radius-full);
-  font-size: 12px;
-  color: var(--vf-text-2);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.draft-chip:hover {
-  background: var(--vf-bg-hover);
-  border-color: var(--vf-border-strong);
-  color: var(--vf-text-1);
-}
-.draft-text { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.draft-remove {
-  background: transparent;
-  border: none;
-  color: var(--vf-text-3);
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.draft-remove:hover {
-  background: var(--vf-err-soft);
-  color: var(--vf-err);
+  flex-direction: column;
+  gap: var(--vf-space-4);
 }
 
 /* 核心工作台 */
@@ -290,12 +249,47 @@ onMounted(() => synthStore.loadScripts());
   gap: var(--vf-space-4);
 }
 
-.studio-head {
+/* 顶栏辅助操作区 */
+.workbench-sub-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding-bottom: var(--vf-space-3);
+  border-bottom: 1px solid var(--vf-border);
 }
-.studio-title { font-size: 13px; font-weight: 600; color: var(--vf-text-1); }
+
+.sub-bar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+}
+
+.tool-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--vf-bg-3);
+  border: 1px solid var(--vf-border);
+  color: var(--vf-text-2);
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: var(--vf-radius-full);
+  cursor: pointer;
+  transition: all 0.15s var(--vf-ease);
+}
+
+.tool-tab-btn:hover {
+  border-color: var(--vf-border-strong);
+  color: var(--vf-text-1);
+}
+
+.tool-tab-btn.active {
+  background: var(--vf-primary-soft);
+  border-color: var(--vf-primary);
+  color: var(--vf-primary);
+  font-weight: 600;
+}
+
 .studio-counter {
   font-size: 11px;
   color: var(--vf-text-3);
@@ -303,19 +297,131 @@ onMounted(() => synthStore.loadScripts());
   font-family: ui-monospace, monospace;
 }
 
-/* mood */
+/* 内嵌浮层小工具面板 */
+.embedded-tool-panel {
+  background: var(--vf-bg-3);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-sm);
+  padding: var(--vf-space-3) var(--vf-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--vf-space-3);
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.embedded-tool-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.embedded-tool-title {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vf-text-1);
+}
+
+.close-panel-btn {
+  background: transparent;
+  border: none;
+  color: var(--vf-text-3);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--vf-radius-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s;
+}
+
+.close-panel-btn:hover {
+  color: var(--vf-text-1);
+}
+
+/* 草稿箱列表 */
+.draft-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--vf-space-2);
+}
+
+.draft-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  padding: 3px 4px 3px var(--vf-space-3);
+  border-radius: var(--vf-radius-full);
+  font-size: 12px;
+  color: var(--vf-text-2);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.draft-chip:hover {
+  background: var(--vf-bg-hover);
+  border-color: var(--vf-border-strong);
+  color: var(--vf-text-1);
+}
+
+.draft-text {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.draft-remove {
+  background: transparent;
+  border: none;
+  color: var(--vf-text-3);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.draft-remove:hover {
+  background: var(--vf-err-soft);
+  color: var(--vf-err);
+}
+
+/* mood 预设栏 */
 .mood-bar {
   display: flex;
   align-items: center;
   gap: var(--vf-space-3);
   flex-wrap: wrap;
 }
+
 .mood-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 12px;
   color: var(--vf-text-3);
   flex: none;
 }
-.mood-list { display: flex; gap: var(--vf-space-2); flex-wrap: wrap; }
+
+.mood-list {
+  display: flex;
+  gap: var(--vf-space-2);
+  flex-wrap: wrap;
+}
+
 .mood-chip {
   background: var(--vf-bg-3);
   border: 1px solid var(--vf-border);
@@ -326,10 +432,12 @@ onMounted(() => synthStore.loadScripts());
   cursor: pointer;
   transition: all 0.15s var(--vf-ease);
 }
+
 .mood-chip:hover {
   border-color: var(--vf-border-strong);
   color: var(--vf-text-1);
 }
+
 .mood-chip.active {
   background: var(--vf-primary-soft);
   border-color: var(--vf-primary);
@@ -337,16 +445,25 @@ onMounted(() => synthStore.loadScripts());
   font-weight: 600;
 }
 
-/* params */
+/* params 参数区 */
 .params-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--vf-space-4);
 }
-.param-cell { display: flex; flex-direction: column; gap: 6px; }
-.param-label { font-size: 12px; color: var(--vf-text-2); }
 
-/* footer */
+.param-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.param-label {
+  font-size: 12px;
+  color: var(--vf-text-2);
+}
+
+/* footer 控制区 */
 .studio-footer {
   display: flex;
   justify-content: space-between;
@@ -356,11 +473,13 @@ onMounted(() => synthStore.loadScripts());
   gap: var(--vf-space-3);
   flex-wrap: wrap;
 }
+
 .footer-left {
   display: flex;
   align-items: center;
   gap: var(--vf-space-4);
 }
+
 .switch-row {
   display: flex;
   align-items: center;
@@ -371,7 +490,7 @@ onMounted(() => synthStore.loadScripts());
 }
 
 .ghost-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   background: var(--vf-bg-3);
@@ -383,6 +502,7 @@ onMounted(() => synthStore.loadScripts());
   cursor: pointer;
   transition: all 0.15s;
 }
+
 .ghost-btn:hover {
   background: var(--vf-bg-hover);
   color: var(--vf-text-1);
@@ -403,13 +523,21 @@ onMounted(() => synthStore.loadScripts());
   cursor: pointer;
   transition: all 0.15s var(--vf-ease);
 }
+
 .primary-btn:hover:not(:disabled) {
   background: #e4e4e7;
   border-color: #e4e4e7;
   transform: translateY(-1px);
 }
+
 .primary-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .params-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

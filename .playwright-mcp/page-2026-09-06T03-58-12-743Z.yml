@@ -1,0 +1,161 @@
+- generic [ref=f3e7]:
+  - generic [ref=f3e8]:
+    - generic [ref=f3e9]:
+      - button "折叠音色库" [ref=f3e10] [cursor=pointer]
+      - generic [ref=f3e13]:
+        - img "VoxFlow" [ref=f3e14]
+        - generic [ref=f3e15]:
+          - generic [ref=f3e16]: VoxFlow
+          - generic [ref=f3e17]: 声流
+    - generic [ref=f3e18]:
+      - generic [ref=f3e19]:
+        - generic [ref=f3e20]:
+          - generic [ref=f3e22]: 语音
+          - generic [ref=f3e23]: Qwen3-TTS 1.7B
+        - generic [ref=f3e24]:
+          - generic [ref=f3e26]: 音乐
+          - generic [ref=f3e27]: Pro Plan · 2480
+        - generic [ref=f3e28]:
+          - generic [ref=f3e30]: museav
+          - generic [ref=f3e31]: voxcraft · 不限额
+        - generic [ref=f3e32]:
+          - generic [ref=f3e34]: 文案
+          - generic [ref=f3e35]: deepseek-v4-flash
+      - button "错误日志（0 条）" [ref=f3e36] [cursor=pointer]
+      - button "任务队列（0 进行中）" [ref=f3e40] [cursor=pointer]
+  - generic [ref=f3e46]:
+    - complementary [ref=f3e47]:
+      - generic [ref=f3e48]:
+        - heading "音色库" [level=3] [ref=f3e54]
+        - button "注册新音色" [ref=f3e56] [cursor=pointer]
+      - generic [ref=f3e59]:
+        - button "老 老陈·人文旁白 ✓ 低沉稳重，尾音干净，适合历史与人文题材；语速偏慢" [pressed] [ref=f3e60] [cursor=pointer]:
+          - generic [ref=f3e61]:
+            - generic [ref=f3e62]: 老
+            - generic [ref=f3e64]:
+              - generic [ref=f3e65]:
+                - generic "老陈·人文旁白" [ref=f3e66]
+                - generic [ref=f3e67]: ✓
+              - paragraph [ref=f3e68]: 低沉稳重，尾音干净，适合历史与人文题材；语速偏慢
+          - generic [ref=f3e69]:
+            - button "试听" [ref=f3e70]
+            - button "编辑" [ref=f3e74]
+            - button "删除" [ref=f3e78]
+        - button "温 温柔旁白 ✓ 中性偏柔，语速平稳，适合纪录片和知识讲解" [ref=f3e82] [cursor=pointer]:
+          - generic [ref=f3e83]:
+            - generic [ref=f3e84]: 温
+            - generic [ref=f3e86]:
+              - generic [ref=f3e87]:
+                - generic "温柔旁白" [ref=f3e88]
+                - generic [ref=f3e89]: ✓
+              - paragraph [ref=f3e90]: 中性偏柔，语速平稳，适合纪录片和知识讲解
+          - generic [ref=f3e91]:
+            - button "试听" [ref=f3e92]
+            - button "编辑" [ref=f3e96]
+            - button "删除" [ref=f3e100]
+    - generic [ref=f3e105]:
+      - tablist [ref=f3e106]:
+        - tab "声音克隆" [ref=f3e107] [cursor=pointer]
+        - tab "音色设计" [ref=f3e113] [cursor=pointer]
+        - tab "剧本创作" [ref=f3e119] [cursor=pointer]
+        - tab "AI 音乐" [selected] [ref=f3e124] [cursor=pointer]
+        - tab "作品看板" [ref=f3e130] [cursor=pointer]
+        - tab "全网发行" [ref=f3e138] [cursor=pointer]
+        - tab "资产库" [ref=f3e144] [cursor=pointer]
+        - tab "运营台" [ref=f3e150] [cursor=pointer]
+      - generic [ref=f3e159]:
+        - banner [ref=f3e160]:
+          - heading "AI 音乐 · Suno" [level=3] [ref=f3e162]
+          - generic [ref=f3e168]:
+            - generic [ref=f3e169]: 未登录
+            - button "刷新状态" [ref=f3e173] [cursor=pointer]
+        - status "需要先登录 Suno" [ref=f3e179]:
+          - generic [aria-hidden] [ref=f3e180]: ⚠️
+          - generic [ref=f3e181]:
+            - generic [ref=f3e182]: 需要先登录 Suno
+            - generic [ref=f3e183]: 在终端执行 ./voxsuno login（自动从 Chrome 提取会话），然后点刷新。
+        - tablist "生成模式" [ref=f3e184]:
+          - tab "歌曲 完整原创" [ref=f3e185] [cursor=pointer]:
+            - generic [ref=f3e190]:
+              - generic [ref=f3e191]: 歌曲
+              - generic [ref=f3e192]: 完整原创
+          - tab "BGM 纯背景音" [ref=f3e193] [cursor=pointer]:
+            - generic [ref=f3e198]:
+              - generic [ref=f3e199]: BGM
+              - generic [ref=f3e200]: 纯背景音
+          - tab "翻唱 你的声音" [active] [selected] [ref=f3e201] [cursor=pointer]:
+            - generic [ref=f3e207]:
+              - generic [ref=f3e208]: 翻唱
+              - generic [ref=f3e209]: 你的声音
+        - status "翻唱热点歌曲" [ref=f3e305]:
+          - generic [aria-hidden] [ref=f3e306]: ✅
+          - generic [ref=f3e307]:
+            - generic [ref=f3e308]: 翻唱热点歌曲
+            - generic [ref=f3e309]: 选一首当前热歌 + 你的声音 Persona → 生成同曲不同演绎的版本。需要先把你的音色链接到 Suno：./voxsuno link <suno_voice_id> <名字>
+        - generic [ref=f3e211]:
+          - generic [ref=f3e216]: 热点风向
+          - generic [ref=f3e217]: 点击歌曲直接翻唱（带你的声音）
+          - button "看当前火什么" [ref=f3e218] [cursor=pointer]
+        - generic [ref=f3e225]:
+          - generic [ref=f3e310]:
+            - generic [ref=f3e312]:
+              - generic [ref=f3e318]: 当前翻唱：
+              - generic [ref=f3e319]: 从上方热点榜选一首，或手动填原曲名
+            - generic [ref=f3e320]:
+              - generic [ref=f3e321]:
+                - generic [ref=f3e322]:
+                  - generic [ref=f3e323]: 原曲（必填）
+                  - generic [ref=f3e330]:
+                    - textbox "如：起风了" [ref=f3e331]
+                    - generic: 如：起风了
+                - generic [ref=f3e332]:
+                  - generic [ref=f3e333]: 翻唱标题（自动：原曲名 + Cover）
+                  - generic [ref=f3e341]:
+                    - textbox "如：起风了 (Cover)" [ref=f3e342]
+                    - generic: 如：起风了 (Cover)
+                - generic [ref=f3e343]:
+                  - generic [ref=f3e344]: 风格标签
+                  - generic [ref=f3e352]:
+                    - textbox "已自动套用热点 tags，可调整" [ref=f3e353]
+                    - generic: 已自动套用热点 tags，可调整
+                - generic [ref=f3e354]:
+                  - generic [ref=f3e355]:
+                    - generic [ref=f3e356]: 用你的声音翻唱
+                    - generic [ref=f3e361]: ⚠️ 未链接任何 Suno 声音
+                  - generic [ref=f3e364]:
+                    - generic "（默认 Suno 声音）" [ref=f3e365]
+                    - img "loading" [ref=f3e367] [cursor=pointer]
+                  - paragraph [ref=f3e374]:
+                    - text: 没有现成的？先到「音色设计」合成一个，
+                    - code [ref=f3e375]: ./voxsuno sample
+                    - text: 生成样音 → suno.com 上传 →
+                    - code [ref=f3e376]: ./voxsuno link
+                - generic [ref=f3e377]:
+                  - generic [ref=f3e378]:
+                    - generic [ref=f3e379]:
+                      - text: 翻唱源（必填）
+                      - generic [ref=f3e385]: 从你的 Suno 库里选
+                    - button "刷新" [ref=f3e386] [cursor=pointer]
+                  - generic [ref=f3e395] [cursor=pointer]:
+                    - textbox [ref=f3e396]
+                    - img "loading" [ref=f3e397]
+                  - paragraph [ref=f3e404]:
+                    - text: 想翻唱**别人的歌**？先去
+                    - link "Suno 网页端" [ref=f3e405] [cursor=pointer]:
+                      - /url: https://suno.com/create
+                    - text: 用 Upload Audio 传原曲，它会变成库里的一个作品，回来刷新就能选到。 CLI 不支持直接上传，这一步只能手动。
+              - generic [ref=f3e407]:
+                - generic [ref=f3e408]:
+                  - generic [ref=f3e409]: 歌词
+                  - generic [ref=f3e413]:
+                    - button "AI 改写" [ref=f3e414] [cursor=pointer]
+                    - button "复制" [disabled] [ref=f3e419]
+                - generic [ref=f3e428]:
+                  - textbox "翻唱《原曲》的歌词主题" [ref=f3e429]
+                  - generic: 翻唱《原曲》的歌词主题
+                - generic [ref=f3e431]:
+                  - textbox "粘贴原曲歌词，或让 AI 基于主题重新写一份。同曲不同词也行 —— 翻唱的核心是「你的演绎」。" [ref=f3e432]
+                  - generic: 粘贴原曲歌词，或让 AI 基于主题重新写一份。同曲不同词也行 —— 翻唱的核心是「你的演绎」。
+          - generic [ref=f3e297]:
+            - button "生成翻唱" [disabled] [ref=f3e433]
+            - generic [ref=f3e304]: 翻唱约耗 50-100 credits · 产物进「资产库」
