@@ -1907,6 +1907,95 @@ async def suno_batch(req: SunoBatchRequest):
     return {"results": results, "elapsed_sec": round(time.time() - start, 1)}
 
 
+# 网易云歌词开头那一坨制作人员名单（作词/作曲/编曲/混音/统筹/推广…）。
+# 它们和歌词混在同一个字段里，直接喂给 Suno 会被**当歌词唱出来**。
+#
+# 判据看**结构不看词表**：枚举职能词是走不通的 —— 试过一版列了二十个词，
+# 仍然漏掉「音频统筹」（开头不是「统筹」）和「发行营销顾问」（压根没列）。
+# 这类名单的真正特征是格式：`短词 + 空格 + 冒号 + 空格 + 人名`。
+# 歌词极少这么写，而网易云的 credits 一律是这个形状。
+#
+# 只剥**开头连续**的那一段，遇到第一行不像名单的就停 —— 正文里的对白
+# （「他说 : 走吧」）不会被误伤。
+_CREDIT_LINE = re.compile(r"^\s*[^\s:：]{1,12}\s+[:：]\s+\S")
+
+
+def _strip_credits(text: str) -> str:
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines) and (not lines[i].strip() or _CREDIT_LINE.match(lines[i])):
+        i += 1
+    # 全被剥光说明判据太凶（整首歌都是这个格式？），那就原样退回去 ——
+    # 宁可多几行名单，也不能把歌词吃掉。
+    rest = "\n".join(lines[i:]).strip()
+    return rest if rest else text.strip()
+
+
+@app.get("/api/lyrics/search")
+def lyrics_search(q: str, limit: int = 8):
+    """
+    按歌名搜网易云的歌，给翻唱取词用。
+
+    走公开接口（和 scripts/sync_lyrics.py 同一套，带 Referer 否则被当盗链拒掉），
+    **只读、不花任何额度**。
+
+    只返回歌名/歌手/id —— 歌词单独一个端点取，因为搜索结果里大多数条目
+    用户看一眼就排除了，没必要为每条都去拉一次歌词。
+    """
+    import urllib.parse, urllib.request  # noqa: PLC0415
+    kw = (q or "").strip()
+    if not kw:
+        raise HTTPException(400, "搜什么？关键词是空的")
+    url = ("https://music.163.com/api/search/get?s="
+           + urllib.parse.quote(kw) + f"&type=1&limit={min(limit, 20)}")
+    try:
+        rq = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0", "Referer": "https://music.163.com/"})
+        with urllib.request.urlopen(rq, timeout=20) as r:
+            d = json.loads(r.read().decode())
+    except Exception as e:
+        obs.log("lyrics_search_failed", level="warn", q=kw[:40], error=str(e)[:120])
+        raise HTTPException(502, f"搜索失败：{type(e).__name__} {str(e)[:60]}")
+
+    songs = ((d.get("result") or {}).get("songs") or [])
+    return {"songs": [{
+        "id": str(x.get("id", "")),
+        "name": x.get("name", ""),
+        "artists": "/".join(a.get("name", "") for a in (x.get("artists") or [])),
+        "album": (x.get("album") or {}).get("name", ""),
+        "duration_ms": x.get("duration", 0),
+    } for x in songs]}
+
+
+@app.get("/api/lyrics/{song_id}")
+def lyrics_get(song_id: str):
+    """
+    取一首歌的歌词，去掉时间戳。
+
+    解析复用 scripts/sync_lyrics.py 的 `lyric_to_plain` —— 那边已经处理了
+    「一行多个时间戳」这种情况，不在这里再写一份。
+    """
+    import urllib.request  # noqa: PLC0415
+    from scripts.sync_lyrics import lyric_to_plain  # noqa: PLC0415
+    url = f"https://music.163.com/api/song/lyric?id={song_id}&lv=1&kv=1&tv=-1"
+    try:
+        rq = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0", "Referer": "https://music.163.com/"})
+        with urllib.request.urlopen(rq, timeout=20) as r:
+            d = json.loads(r.read().decode())
+    except Exception as e:
+        raise HTTPException(502, f"取歌词失败：{type(e).__name__} {str(e)[:60]}")
+
+    if d.get("code") != 200:
+        raise HTTPException(404, f"网易云返回 code={d.get('code')}")
+    lrc = (d.get("lrc") or {}).get("lyric") or ""
+    plain = _strip_credits(lyric_to_plain(lrc)) if lrc else ""
+    # 纯音乐/器乐作品本来就没词 —— 这不是错误，得说清楚，
+    # 否则人会以为接口坏了然后反复重试。
+    return {"song_id": song_id, "lyrics": plain, "has_lyrics": bool(plain),
+            "note": "" if plain else "这首没有歌词（多半是纯音乐/器乐作品）"}
+
+
 class SunoCoverRequest(BaseModel):
     """
     翻唱：把 Suno 库里**已有的一首 clip** 换个风格重做。

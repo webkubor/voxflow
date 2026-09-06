@@ -339,11 +339,22 @@
         <div class="form-grid">
           <div class="form-col">
             <div class="form-cell">
-              <label class="form-label"><Icon name="voice" size="sm" />原曲（必填）</label>
-              <n-input
-                v-model:value="originalSong"
-                placeholder="如：起风了"
+              <label class="form-label">
+                <Icon name="voice" size="sm" />原曲（必填）
+                <span class="form-label-optional">搜到后自动带出歌词</span>
+              </label>
+              <n-select
+                v-model:value="pickedSongId"
+                filterable
+                remote
+                clearable
+                :options="songOptions"
+                :loading="songSearching"
+                placeholder="输入歌名搜索，如：窝囊废"
+                @search="searchSongs"
+                @update:value="onPickSong"
               />
+              <p v-if="lyricsNote" class="song-pick-note">{{ lyricsNote }}</p>
             </div>
 
             <div class="form-cell">
@@ -655,6 +666,19 @@ const coverSong = ref(null);     // 当前从热点榜选的歌曲对象
 const coverClipId = ref('');
 const clips = ref([]);
 const clipsLoading = ref(false);
+
+/*
+ * 按歌名搜原曲 → 自动带出歌词。
+ *
+ * 走网易云公开接口，**只读不花额度**，所以可以放心边打字边搜。
+ * 只用来取词 —— 旋律进不了 Suno（CLI 没有上传能力，音频只能在网页端传），
+ * 这点在下面的提示里跟人说清楚，别让人以为搜到歌就等于能翻唱了。
+ */
+const pickedSongId = ref(null);
+const songs = ref([]);
+const songSearching = ref(false);
+const lyricsNote = ref('');
+let searchTimer = 0;
 const MAX_AUDIO_SIZE = 20 * 1024 * 1024; // 20MB —— Suno covers API 上限
 
 const pickCoverSong = (song) => {
@@ -671,6 +695,47 @@ const pickCoverSong = (song) => {
     : song.name;
   lyricsPrompt.value = `翻唱《${song.name}》, 主题：${themes}`;
   tasksStore.showToast(`已选《${song.name}》,风格已自动套用热点 tags`, 'success');
+};
+
+const songOptions = computed(() => songs.value.map((x) => ({
+  label: `${x.name} — ${x.artists}`,
+  value: x.id,
+})));
+
+/** 输入防抖 300ms —— 每敲一个字都打一次接口既慢又没必要。 */
+const searchSongs = (q) => {
+  clearTimeout(searchTimer);
+  const kw = (q || '').trim();
+  if (!kw) { songs.value = []; return; }
+  searchTimer = window.setTimeout(async () => {
+    songSearching.value = true;
+    try {
+      songs.value = (await api.lyricsSearch(kw)).songs;
+    } catch (cause) {
+      await tasksStore.reportError(cause, { action: 'lyrics.search' });
+    } finally {
+      songSearching.value = false;
+    }
+  }, 300);
+};
+
+/** 选中一首 → 填原曲名 + 拉歌词进歌词框 */
+const onPickSong = async (id) => {
+  lyricsNote.value = '';
+  if (!id) return;
+  const hit = songs.value.find((x) => x.id === id);
+  if (hit) originalSong.value = hit.name;
+  try {
+    const d = await api.lyricsGet(id);
+    if (d.has_lyrics) {
+      sunoForm.lyrics = d.lyrics;
+      lyricsNote.value = '已带出原曲歌词 —— 可以直接用，也可以让 AI 改写成你的版本';
+    } else {
+      lyricsNote.value = d.note || '这首没有歌词';
+    }
+  } catch (cause) {
+    await tasksStore.reportError(cause, { action: 'lyrics.get' });
+  }
 };
 
 const clipOptions = computed(() => clips.value.map((c) => ({
@@ -1587,6 +1652,12 @@ const personaOptions = computed(() => {
 
 /* ── 原曲音频上传 ── */
 .cover-audio-head { margin-bottom: 6px; }
+.song-pick-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--vf-text-3);
+  line-height: 1.6;
+}
 .form-label-optional {
   font-size: 11px;
   color: var(--vf-text-3);

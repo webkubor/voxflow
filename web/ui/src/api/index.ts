@@ -174,6 +174,16 @@ export const api = {
   sunoStatus: () => get<Record<string, unknown>>('suno/status'),
   sunoGenerate: (p: { title: string; tags?: string; lyrics?: string; persona?: string }) =>
     post<{ task_id: string }>('suno/generate', p),
+  // ── 歌词（网易云公开接口，只读、不花额度）──
+  /** 按歌名搜歌 —— 只回歌名/歌手/id，歌词单独取（多数结果一眼就排除了） */
+  lyricsSearch: (q: string, limit = 8) => get<{
+    songs: { id: string; name: string; artists: string; album: string; duration_ms: number }[];
+  }>('lyrics/search', { q, limit }),
+  /** 取一首歌的歌词（已去时间戳）。纯音乐没词是正常的，看 has_lyrics */
+  lyricsGet: (songId: string) => get<{
+    song_id: string; lyrics: string; has_lyrics: boolean; note: string;
+  }>(`lyrics/${encodeURIComponent(songId)}`),
+
   /** Suno 库里的作品，给翻唱选源用 */
   sunoClips: () => get<{
     clips: { id: string; title: string; tags: string; model: string;

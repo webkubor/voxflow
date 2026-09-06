@@ -139,3 +139,7 @@ configs/pipeline.json
 web/ui/log/**/*.log
 web/ui/log/**/snapshots/
 web/ui/log/instances.json
+
+# 浏览器验证的临时产物（截图 / 页面快照 / console 日志）。
+# 每次跑 UI 验证都会重新生成，没有留存价值，更不该进仓库。
+.playwright-mcp/
