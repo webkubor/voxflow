@@ -25,6 +25,7 @@ import { api, toMessage } from '../api';
 import { usePipelineStore } from '../stores/pipeline';
 import { useTasksStore } from '../stores/tasks';
 import Icon from '../components/Icon.vue';
+import PlatformMark from '../components/PlatformMark.vue';
 
 const pipelineStore = usePipelineStore();
 const tasksStore = useTasksStore();
@@ -32,9 +33,25 @@ const { platforms, tracks } = storeToRefs(pipelineStore);
 
 const accounts = ref({});
 const albums = ref({});
+const stageName = ref('');
+const roles = ref([]);
 const loading = ref(false);
-const current = ref('netease');   // 默认停在有数据的那个
+const current = ref('qishui');
 const openAlbum = ref('');
+const linkOpen = ref(false);
+const linkListingId = ref(null);
+const linkTarget = ref('');
+const linkSources = ref([]);
+const linkBusy = ref(false);
+
+const PLATFORM_STATUS = {
+  preparing: '备料中',
+  uploaded: '已上传',
+  reviewing: '审核中',
+  online: '已上架',
+  published: '已上架',
+  rejected: '被驳回',
+};
 
 const load = async () => {
   loading.value = true;
@@ -43,6 +60,8 @@ const load = async () => {
     const [acc, alb] = await Promise.all([api.platformAccounts(), api.albums()]);
     accounts.value = acc.accounts || {};
     albums.value = alb.albums || {};
+    stageName.value = acc.stage_name || '';
+    roles.value = acc.roles || [];
     await pipelineStore.loadPipeline();
   } catch (cause) {
     await tasksStore.reportError(cause, { action: 'publish.load' });
@@ -54,12 +73,21 @@ onMounted(load);
 
 /** 平台清单：顺序固定，不按数据多少排 —— 位置一变人就要重新找 */
 const platformList = computed(() =>
-  Object.entries(platforms.value || {}).map(([key, p]) => ({
-    key,
-    label: p.label,
-    account: accounts.value[key] || null,
-    songCount: tracks.value.filter((t) => t.platforms?.[key]).length,
-  })),
+  Object.entries(platforms.value || {}).map(([key, p]) => {
+    const account = accounts.value[key] || null;
+    const listed = tracks.value.flatMap((t) =>
+      (t.listings || []).filter((l) => l.platform === key));
+    const reviewing = listed.filter((l) => l.status === 'reviewing').length;
+    return {
+      key,
+      label: p.label,
+      account,
+      artistName: account?.artist_name || stageName.value || '',
+      songCount: listed.length,
+      reviewing,
+      synced: Boolean(account?.synced),
+    };
+  }),
 );
 
 const acc = computed(() => accounts.value[current.value] || null);
@@ -72,11 +100,37 @@ const albumsOfPlatform = computed(() =>
 );
 
 const songsOfPlatform = computed(() =>
-  tracks.value
-    .filter((t) => t.platforms?.[current.value])
-    .map((t) => ({ ...t, p: t.platforms[current.value] }))
-    .sort((a, b) => (b.p.publish_date || '').localeCompare(a.p.publish_date || '')),
+  tracks.value.flatMap((t) => {
+    const listings = (t.listings || []).filter((l) => l.platform === current.value);
+    return listings.map((p) => ({ ...t, p }));
+  }).sort((a, b) => (b.p.publish_date || '').localeCompare(a.p.publish_date || '')),
 );
+
+const openLink = async (row) => {
+  if (!row.p?.id) return;
+  linkListingId.value = row.p.id;
+  linkTarget.value = '';
+  linkOpen.value = true;
+  try {
+    linkSources.value = (await api.sourceCandidates()).tracks || [];
+  } catch (cause) {
+    await tasksStore.reportError(cause, { action: 'publish.sources' });
+  }
+};
+
+const confirmLink = async () => {
+  if (!linkListingId.value || !linkTarget.value) return;
+  linkBusy.value = true;
+  try {
+    await api.linkListing({ listing_id: linkListingId.value, track_id: linkTarget.value });
+    linkOpen.value = false;
+    await load();
+  } catch (cause) {
+    await tasksStore.reportError(cause, { action: 'publish.link' });
+  } finally {
+    linkBusy.value = false;
+  }
+};
 
 /**
  * 已上架列表的列。
@@ -85,9 +139,27 @@ const songsOfPlatform = computed(() =>
  * 加一列不用去模板里数 div。
  */
 const songColumns = computed(() => [
-  { title: '歌名', key: 'title', ellipsis: { tooltip: true } },
+  { title: '歌名', key: 'title', ellipsis: { tooltip: true },
+    render: (r) => r.p.platform_title || r.title },
+  { title: '原曲', key: 'origin', width: 168,
+    render: (r) => {
+      if (r.is_source) {
+        const same = (r.p.platform_title || r.title) === r.title;
+        return h('span', { style: 'display:inline-flex;align-items:center;gap:6px' }, [
+          h('span', { style: 'font-size:12px;color:var(--vf-text-2)' }, same ? '本曲' : r.title),
+          r.clip_id ? h('span', { style: 'font-size:10px;padding:1px 6px;border-radius:999px;background:var(--vf-primary-soft);color:var(--vf-primary)' }, 'Suno') : null,
+        ]);
+      }
+      return h('button', {
+        class: 'link-btn',
+        onClick: (e) => { e.stopPropagation(); openLink(r); },
+      }, '关联原曲');
+    } },
   { title: '专辑', key: 'album', width: 170, ellipsis: { tooltip: true },
     render: (r) => r.p.album || '—' },
+  { title: '状态', key: 'status', width: 80,
+    render: (r) => h(NText, { depth: r.p.status === 'online' || r.p.status === 'published' ? 2 : 3 },
+      () => PLATFORM_STATUS[r.p.status] || r.p.status || '—') },
   { title: '发行', key: 'date', width: 104,
     render: (r) => h(NText, { depth: 3 }, () => r.p.publish_date || '—') },
   { title: '时长', key: 'dur', width: 70, align: 'right',
@@ -122,51 +194,56 @@ const fmtDuration = (sec) => {
       </button>
     </div>
 
-    <!-- 用 n-tabs 的 segment 型而不是手搓 button：
-         手写的三个按钮里只有选中那个有边框，另外两个看着像纯文本，
-         人不知道能点。segment 型自带「这是一组可切换项」的视觉语义。 -->
-    <n-tabs v-model:value="current" type="segment" size="small" class="platform-switch">
-      <n-tab v-for="p in platformList" :key="p.key" :name="p.key">
-        {{ p.label }}
-        <n-text depth="3" style="margin-left:6px;font-size:11px">
-          {{ p.account ? `${p.songCount} 首` : '未接入' }}
-        </n-text>
-      </n-tab>
-    </n-tabs>
+    <!-- 发行主体：三个平台的账号都归这个艺名，不要让人去每张卡上猜。 -->
+    <div v-if="stageName" class="owner-strip">
+      <span class="owner-k">发行主体</span>
+      <span class="owner-name">{{ stageName }}</span>
+      <span v-if="roles.length" class="owner-roles">{{ roles.join(' · ') }}</span>
+    </div>
 
-    <!-- 没接入的平台：说清楚差什么，不装作有数据 -->
-    <n-empty
-      v-if="!acc"
-      :description="`${platformList.find(p => p.key === current)?.label || ''} 还没同步过账号数据`"
-      class="empty-platform"
-    >
-      <template #extra>
-        <p class="empty-hint">
-          跑一次同步脚本就有了：<code>browser-harness &lt; scripts/sync_{{ current }}.py</code>
-        </p>
-      </template>
-    </n-empty>
+    <div class="platform-tabs">
+      <button
+        v-for="p in platformList"
+        :key="p.key"
+        class="platform-tab"
+        :class="[`plat-${p.key}`, { active: current === p.key, empty: !p.songCount && !p.synced }]"
+        @click="current = p.key; openAlbum = ''"
+      >
+        <span class="pt-top">
+          <PlatformMark :platform="p.key" size="md" />
+          <span class="pt-label">{{ p.label }}</span>
+        </span>
+        <span class="pt-artist">{{ p.artistName || '未登记账号' }}</span>
+        <span class="pt-meta">
+          <template v-if="p.songCount && p.reviewing === p.songCount">{{ p.reviewing }} 首审核中</template>
+          <template v-else-if="p.songCount">{{ p.songCount }} 首<template v-if="p.reviewing"> · {{ p.reviewing }} 首审核中</template></template>
+          <template v-else-if="p.synced">0 首在线</template>
+          <template v-else>后台未同步</template>
+        </span>
+      </button>
+    </div>
 
-    <template v-else>
+    <template v-if="acc">
       <!-- 账号卡：我是谁 + 这个平台上的数据 -->
       <n-card size="small" class="account-card">
-        <!-- n-space 管间距，不自己写 flex —— 之前头像和文字叠在一起 -->
         <n-space align="center" :size="14" :wrap="false" class="acc-head">
           <n-avatar v-if="acc.avatar_url" :src="acc.avatar_url" :size="52" round />
+          <PlatformMark v-else :platform="current" size="xl" />
           <div class="acc-id">
             <div class="acc-name">
-              {{ acc.artist_name }}
+              {{ acc.artist_name || stageName || '未登记账号' }}
               <n-tag v-if="acc.stats?.roles" size="small" round :bordered="false">{{ acc.stats.roles }}</n-tag>
             </div>
             <div v-if="acc.alias?.length" class="acc-alias">{{ acc.alias.join(' · ') }}</div>
             <div class="acc-links">
-              <a :href="acc.artist_url" target="_blank" rel="noopener">艺人主页</a>
+              <a v-if="acc.artist_url" :href="acc.artist_url" target="_blank" rel="noopener">艺人主页</a>
               <a v-if="acc.user_url" :href="acc.user_url" target="_blank" rel="noopener">个人主页</a>
+              <a v-if="acc.console_url" :href="acc.console_url" target="_blank" rel="noopener">音乐人后台</a>
             </div>
           </div>
         </n-space>
 
-        <div v-if="acc.stats?.works" class="acc-stats">
+        <div v-if="acc.synced && acc.stats?.works" class="acc-stats">
           <div class="stat">
             <span class="stat-n">{{ acc.stats.play_count }}</span>
             <span class="stat-l">播放量<em v-if="acc.stats.play_yesterday_delta"> +{{ acc.stats.play_yesterday_delta }}</em></span>
@@ -177,7 +254,8 @@ const fmtDuration = (sec) => {
           <div class="stat"><span class="stat-n">¥{{ acc.stats.withdrawable_cny }}</span><span class="stat-l">可提现</span></div>
           <div class="stat"><span class="stat-n">{{ acc.stats.musician_index }}</span><span class="stat-l">音乐人指数</span></div>
         </div>
-        <p class="acc-synced">同步于 {{ (acc.synced_at || '').replace('T', ' ') }}</p>
+        <p v-if="acc.synced" class="acc-synced">同步于 {{ (acc.synced_at || '').replace('T', ' ') }}</p>
+        <p v-else class="acc-synced">后台数据还没同步过。身份来自艺人档案，作品数来自本地台账。</p>
       </n-card>
 
       <!-- 专辑：点开看曲目 -->
@@ -215,21 +293,48 @@ const fmtDuration = (sec) => {
         </n-card>
       </section>
 
-      <!-- 已上架作品 -->
+      <!-- 这个平台上的作品。审核中也算，所以不叫「已上架」。 -->
       <section class="section">
-        <h4 class="section-title">已上架 <em>{{ songsOfPlatform.length }}</em></h4>
-        <!-- n-data-table 而不是手写 flex 行：手写版本里歌名是 flex:1，
-             把其余信息全推到最右边，中间空出一大片。表格按内容分配列宽。 -->
+        <h4 class="section-title">作品 <em>{{ songsOfPlatform.length }}</em></h4>
+        <n-empty
+          v-if="!songsOfPlatform.length"
+          description="这个平台上还没有登记过作品"
+          class="empty-platform"
+        />
         <n-data-table
+          v-else
           :columns="songColumns"
           :data="songsOfPlatform"
-          :row-key="(r) => r.id"
+          :row-key="(r) => r.p.id || r.id"
           size="small"
           :bordered="false"
           max-height="440"
         />
       </section>
     </template>
+
+    <n-modal v-model:show="linkOpen" preset="card" title="关联到原曲" style="max-width: 420px">
+      <p class="modal-hint">
+        平台上的歌名可以跟 Suno 原曲不同，也可以一首拆成好几条。选它对应的那首本地作品。
+      </p>
+      <n-select
+        v-model:value="linkTarget"
+        filterable
+        placeholder="选一首有 Suno 或本地音频的作品"
+        :options="linkSources.map((s) => ({
+          value: s.id,
+          label: s.suno ? `${s.title} · Suno` : s.title,
+        }))"
+      />
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="linkOpen = false">取消</n-button>
+          <n-button type="primary" :disabled="!linkTarget" :loading="linkBusy" @click="confirmLink">
+            关联
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
 
@@ -250,29 +355,42 @@ const fmtDuration = (sec) => {
 }
 .tab-subtitle { margin: 4px 0 0; font-size: 12px; color: var(--vf-text-3); }
 
+.owner-strip {
+  display: flex; align-items: baseline; gap: var(--vf-space-3); flex-wrap: wrap;
+  margin: 0 0 var(--vf-space-4);
+  padding: var(--vf-space-3) var(--vf-space-4);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-md);
+  background: var(--vf-bg-2);
+}
+.owner-k { font-size: 11px; color: var(--vf-text-3); letter-spacing: 0.04em; }
+.owner-name { font-size: 15px; font-weight: 600; color: var(--vf-text-1); }
+.owner-roles { font-size: 12px; color: var(--vf-text-2); }
+
 .platform-tabs {
-  display: flex; gap: var(--vf-space-2);
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: var(--vf-space-2);
   margin-bottom: var(--vf-space-4);
 }
 .platform-tab {
-  flex: 1;
   padding: var(--vf-space-3);
   border: 1px solid var(--vf-border);
   border-radius: var(--vf-radius-md);
   background: var(--vf-bg-2);
   color: var(--vf-text-2);
   cursor: pointer;
-  display: flex; flex-direction: column; gap: 2px;
-  transition: border-color .15s, background .15s;
+  display: flex; flex-direction: column; gap: 4px;
+  text-align: left;
+  transition: border-color .15s var(--vf-ease), background .15s var(--vf-ease);
 }
 .platform-tab:hover { background: var(--vf-bg-3); }
-.platform-tab.active {
-  border-color: var(--vf-primary);
-  background: var(--vf-primary-soft);
-  color: var(--vf-text-1);
-}
-.platform-tab.empty { opacity: .55; }
-.pt-label { font-size: 13px; font-weight: 600; }
+.platform-tab.active { color: var(--vf-text-1); background: var(--vf-bg-3); }
+.platform-tab.plat-qishui.active { border-color: var(--vf-plat-qishui); background: var(--vf-plat-qishui-soft); }
+.platform-tab.plat-netease.active { border-color: var(--vf-plat-netease); background: var(--vf-plat-netease-soft); }
+.platform-tab.plat-tencent.active { border-color: var(--vf-plat-tencent); background: var(--vf-plat-tencent-soft); }
+.pt-top { display: flex; align-items: center; gap: var(--vf-space-2); }
+.pt-label { font-size: 13px; font-weight: 600; color: var(--vf-text-1); }
+.pt-artist { font-size: 12px; color: var(--vf-text-2); }
 .pt-meta { font-size: 11px; color: var(--vf-text-3); }
 
 .ghost-btn {
@@ -377,5 +495,22 @@ const fmtDuration = (sec) => {
 .adt-name { flex: 1; }
 .adt-dur { color: var(--vf-text-3); font-variant-numeric: tabular-nums; }
 .adt-link { color: var(--vf-primary); text-decoration: none; }
+
+.origin-cell { display: inline-flex; align-items: center; gap: 6px; }
+.origin-name { font-size: 12px; color: var(--vf-text-2); }
+.origin-suno {
+  font-size: 10px; padding: 1px 6px; border-radius: var(--vf-radius-full);
+  background: var(--vf-primary-soft); color: var(--vf-primary);
+}
+.link-btn {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font-size: 12px; color: var(--vf-primary);
+}
+.link-btn:hover { text-decoration: underline; }
+.modal-hint { margin: 0 0 var(--vf-space-4); font-size: 12px; color: var(--vf-text-3); }
+
+@media (max-width: 640px) {
+  .platform-tabs { grid-template-columns: 1fr; }
+}
 
 </style>

@@ -889,14 +889,37 @@ def economics(days: int = 30):
 
     titles: dict[str, str] = {}
     stages: dict[str, str] = {}
+    release_plat: dict[str, str] = {}
+    release_title: dict[str, str] = {}
+    listings_by: dict[str, list] = {}
     try:
         from core import db
+        db.init()
         with db.connect() as c:
-            for r in c.execute("SELECT id, title, stage FROM tracks"):
+            for r in c.execute(
+                "SELECT id, title, stage, "
+                "IFNULL(release_platform,'') rp, IFNULL(release_title,'') rt "
+                "FROM tracks"
+            ):
                 titles[r["id"]] = r["title"]
                 stages[r["id"]] = r["stage"]
-    except Exception:
-        pass
+                if r["rp"]:
+                    release_plat[r["id"]] = r["rp"]
+                if r["rt"]:
+                    release_title[r["id"]] = r["rt"]
+            for r in c.execute(
+                "SELECT track_id, platform, status, "
+                "IFNULL(platform_title,'') title FROM track_platforms"
+            ):
+                listings_by.setdefault(r["track_id"], []).append({
+                    "platform": r["platform"],
+                    "status": r["status"],
+                    "title": r["title"],
+                })
+    except Exception as e:
+        # 查不到不能把整本账弄没，但必须留下痕迹 —— 运营台缺发布平台
+        # 就是这样被静默 except 吃掉、看起来像「从来没有这个字段」。
+        obs.log("economics_track_lookup_failed", level="error", error=str(e)[:300])
 
     # 收入侧。回本播放数优先用**实测**千播单价（后台的累计收益 ÷ 累计播放），
     # 它比公开资料的区间中位数准 —— 实测已经包含了这个账号的实际权益档位。
@@ -909,17 +932,22 @@ def economics(days: int = 30):
 
     # 有成本或有收入的作品都要出现：只赚不花（历史作品）和只花不赚（还没发）
     # 都是这门生意里真实存在的状态，漏掉哪一边看到的都是残缺的账。
-    all_ids = set(costs) | set(track_rev)
+    all_ids = set(costs) | set(track_rev) | set(listings_by)
     tracks = []
     for tid in all_ids:
         c = costs.get(tid) or {"total_cny": 0.0, "by_provider": {}}
         rev = track_rev.get(tid) or {}
         cost = round(c["total_cny"], 2)
         earned = round(rev.get("earned_cny", 0.0), 2)
+        plats = listings_by.get(tid) or []
+        exclusive = release_plat.get(tid) or (plats[0]["platform"] if plats else "")
         tracks.append({
             "track_id": tid,
             "title": titles.get(tid, tid),
             "stage": stages.get(tid, ""),
+            "release_title": release_title.get(tid, ""),
+            "release_platform": exclusive,
+            "platforms": plats,
             "cost_cny": cost,
             "by_provider": c["by_provider"],
             # 有后台数据才给，没有就是 None —— 前端据此显示「暂无数据」
@@ -1674,6 +1702,24 @@ def pipeline_upsert(req: PipelineTrackRequest):
     )}
 
 
+class PipelineReleaseRequest(BaseModel):
+    track_id: str
+    platform: str
+    release_title: str
+
+
+@app.post("/api/pipeline/release")
+def pipeline_release(req: PipelineReleaseRequest):
+    """确认发版：独家授权只能投一个平台，发行歌名必须唯一。"""
+    from core import pipeline
+    try:
+        track = pipeline.submit_release(req.track_id, req.platform, req.release_title)
+        pipeline.set_stage(req.track_id, "publishing")
+        return {"ok": True, "track": pipeline.get_track(req.track_id) or track}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 class PipelinePlatformRequest(BaseModel):
     track_id: str
     platform: str
@@ -1695,6 +1741,28 @@ def pipeline_platform(req: PipelinePlatformRequest):
         )}
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+class PipelineLinkRequest(BaseModel):
+    listing_id: int
+    track_id: str
+
+
+@app.post("/api/pipeline/link")
+def pipeline_link(req: PipelineLinkRequest):
+    """把一条平台上架记录挂到某首 Suno/本地原曲上。改名、拆分都走这里。"""
+    from core import pipeline
+    try:
+        return {"ok": True, "track": pipeline.link_listing(req.listing_id, req.track_id)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/pipeline/sources")
+def pipeline_sources():
+    """能当原曲被关联的作品（有 Suno clip 或本地音频）。"""
+    from core import pipeline
+    return {"tracks": pipeline.source_candidates()}
 
 
 @app.get("/api/capabilities")

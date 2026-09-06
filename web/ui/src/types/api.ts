@@ -24,11 +24,15 @@
 /** 作品在流水线上的阶段。顺序即流程顺序。 */
 export type Stage = 'draft' | 'generated' | 'selected' | 'publishing' | 'published' | 'archived';
 
-/** 平台标识。加平台时这里和 configs/platforms.json 一起改。 */
+/** 平台标识。加平台时这里和 configs/platforms.json、core/pipeline.PLATFORMS 一起改。 */
 export type PlatformKey = 'qishui' | 'netease' | 'tencent';
 
-/** 作品在某个平台上的状态。 */
+/** 作品在某个平台上的一条上架记录。同一首原曲可以有多条（改名、拆分）。 */
 export interface TrackPlatform {
+  id?: number | null;
+  platform?: string;
+  /** 平台上的歌名，可以跟本地 title 不同。 */
+  platform_title?: string;
   status: string;              // preparing | reviewing | online | rejected …
   song_id?: string | null;
   song_url?: string;
@@ -67,6 +71,14 @@ export interface Track {
   clip_ids: string[];
   /** 平台状态是**对象**不是数组 —— 遍历要用 (值, 键) 两个形参 */
   platforms: Partial<Record<PlatformKey, TrackPlatform>>;
+  /** 这个作品挂着的全部上架记录（含同一平台多条）。 */
+  listings: TrackPlatform[];
+  /** 有 Suno clip 或本地音频 = 原曲；否则是平台回填出来的孤儿。 */
+  is_source: boolean;
+  /** 发出去的歌名。生成名可以重复，这个必须唯一。 */
+  release_title: string;
+  /** 独家授权投向的那一个平台。 */
+  release_platform: string;
   cloud_backup: CloudBackup;
   updated_at: string;
   note: string;
@@ -86,7 +98,13 @@ export interface PipelineResponse {
   stages: Stage[];
   stage_labels: Record<string, string>;
   /** 同样是对象不是数组 */
-  platforms: Record<PlatformKey, { label: string; cover: string; ai_field: string }>;
+  platforms: Record<PlatformKey, {
+    label: string;
+    cover: string;
+    ai_field: string;
+    console?: string;
+    color?: string;
+  }>;
   summary: Record<string, number>;
   tracks: Track[];
 }
@@ -150,7 +168,21 @@ export interface PlatformAccount {
   albums: Array<{ id: string; name: string; size: number }>;
   /** 台账里实际在线的数量。跟 song_count 对不上说明同步漏了。 */
   local_online_count: number;
+  /** 台账里这个平台登记过的作品数（含审核中）。 */
+  local_listed_count: number;
   synced_at: string;
+  /** false = 还没跑过同步脚本，stats 是空的，不要当成「零播放」。 */
+  synced: boolean;
+  console_url: string;
+  color: string;
+}
+
+/** GET /api/platform-accounts。accounts 始终包含三个平台。 */
+export interface PlatformAccountsResponse {
+  accounts: Record<string, PlatformAccount>;
+  /** 发行主体艺名，来自 artist.json。各平台账号都归它。 */
+  stage_name: string;
+  roles: string[];
 }
 
 export interface Persona {
@@ -259,6 +291,12 @@ export interface TrackEconomics {
   track_id: string;
   title: string;
   stage: string;
+  /** 发出去的歌名。空 = 还没发。 */
+  release_title: string;
+  /** 独家投向的平台。空 = 还没发。 */
+  release_platform: string;
+  /** 这首实际出现在哪些平台（含汽水分发）。 */
+  platforms: Array<{ platform: string; status: string; title: string }>;
   cost_cny: number;
   by_provider: Record<string, { credits: number; cost_cny: number; n: number }>;
   /** 近 30 日播放量（音乐人后台）。null = 还没抓过，不是 0 —— 两者含义完全不同 */

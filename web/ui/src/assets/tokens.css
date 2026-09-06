@@ -40,6 +40,14 @@
   --vf-err-soft: rgba(239, 68, 68, 0.10);
   --vf-info: #5f7d95;
 
+  /* ── 发行平台品牌色：识别用，不随主题翻转 ── */
+  --vf-plat-qishui: #2EE6D6;
+  --vf-plat-qishui-soft: rgba(46, 230, 214, 0.14);
+  --vf-plat-netease: #EC4141;
+  --vf-plat-netease-soft: rgba(236, 65, 65, 0.14);
+  --vf-plat-tencent: #31C27C;
+  --vf-plat-tencent-soft: rgba(49, 194, 124, 0.14);
+
   /* ── 发丝级精密边框 (1px Crisp Hairlines) ── */
   --vf-border: rgba(255, 255, 255, 0.07);
   --vf-border-strong: rgba(255, 255, 255, 0.14);

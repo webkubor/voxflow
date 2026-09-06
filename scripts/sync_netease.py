@@ -28,9 +28,9 @@
 
 ## 匹配策略
 
-按标题精确匹配，**不做模糊匹配**：匹配上补平台状态，没匹配上新登记。
-宁可多登记一条让人自己合并，也不能把两首不同的歌并成一首 ——
-那种错误等发现时数据已经混了。
+先认 (platform, song_id)，再按歌名挂到带 Suno clip 的原曲。
+歌名对不上就建成孤儿，由发行页「关联原曲」人手点 ——
+不在这里做模糊匹配。同名拆成多首会挂到同一首原曲。
 
 补平台状态时**不动本地 stage**：平台上架是平台的事实，本地流程阶段是
 我们自己的进度记录，两者不是一回事。
@@ -149,13 +149,15 @@ P.upsert_platform_account(
 print("✓ 账号入库")
 
 # ── 5. 作品回填 ───────────────────────────────────────────
-existing = {t["title"].strip(): t["id"] for t in P.list_tracks()}
+# 先按 (platform, song_id) 认领，再按歌名挂到原曲。歌名对不上的建成孤儿，
+# 不在这里猜 —— 改名/拆分由发行页「关联原曲」人手点。
 matched, added = [], []
 for s in songs:
     title = s["name"].strip()
-    tid = existing.get(title)
+    sid = str(s["id"])
+    tid = P.resolve_track_for_listing("netease", sid, title)
     if not tid:
-        tid = re.sub(r"[^\w一-鿿]+", "-", title).strip("-").lower() or f"ncm-{s['id']}"
+        tid = re.sub(r"[^\w一-鿿]+", "-", title).strip("-").lower() or f"ncm-{sid}"
         P.upsert(tid, title=title, stage="published", note="从网易云回填")
         added.append(title)
     else:
@@ -166,8 +168,9 @@ for s in songs:
     has_cover = cover.exists()
     P.set_platform_status(
         tid, "netease", "online",
-        song_id=str(s["id"]),
-        song_url=f"https://music.163.com/#/song?id={s['id']}",
+        platform_title=title,
+        song_id=sid,
+        song_url=f"https://music.163.com/#/song?id={sid}",
         album_id=str(album.get("id") or ""), album=album.get("name") or "",
         track_no=s.get("no"), duration=round((s.get("duration") or 0) / 1000),
         publish_date=ymd(album.get("publishTime")),

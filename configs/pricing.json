@@ -54,7 +54,7 @@
       "note": "0.2–0.4 元/千播，AI 音乐人权益降级"
     },
     "tencent": {
-      "label": "腾讯系",
+      "label": "QQ音乐",
       "cny_per_1k_plays": 0.0,
       "confidence": "unknown",
       "note": "零一手资料，未证实。填 0 而不是猜一个数 —— 猜的数会被当成真数据用来做决策。"

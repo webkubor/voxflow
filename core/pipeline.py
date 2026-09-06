@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from core import db
-from core.paths import DATA_DIR, LEDGER_FILE, PUBLISH_ACCOUNTS_FILE
+from core.paths import ARTIST_FILE, DATA_DIR, LEDGER_FILE, PUBLISH_ACCOUNTS_FILE
 
 BASE_DIR = DATA_DIR          # 台账里的相对路径都是相对数据根
 LEDGER = LEDGER_FILE
@@ -105,6 +105,24 @@ DEFAULT_PUBLISH_ACCOUNTS = [
     for k, v in PLATFORMS.items()
 ]
 
+# artist.json 的 platform_profiles 用中文名；库和 API 用 qishui/netease/tencent。
+# 两边都认，避免档案里写「QQ音乐」就对不上账号。
+_PROFILE_KEY = {
+    "qishui": "qishui", "汽水音乐": "qishui", "汽水": "qishui",
+    "netease": "netease", "网易云音乐": "netease", "网易云": "netease",
+    "tencent": "tencent", "QQ音乐": "tencent", "腾讯音乐人": "tencent",
+    "腾讯系": "tencent", "腾讯音乐": "tencent", "腾讯音乐（QQ 音乐）": "tencent",
+}
+
+# 艺人档案里的角色键 → 界面上的短标签。顺序即展示顺序。
+_ROLE_LABELS = (
+    ("performer", "唱"),
+    ("lyricist", "词"),
+    ("composer", "曲"),
+    ("producer", "制作"),
+    ("album_artist", "专辑歌手"),
+)
+
 LOGIN_STATUS_LABELS = {
     "connected": "已登录",
     "expired": "登录失效",
@@ -149,6 +167,30 @@ def _publish_accounts() -> list[dict[str, Any]]:
     return normalized
 
 
+def _artist_identity() -> dict[str, Any]:
+    """艺名与各平台主页。真源 artist.json；读不到就空，不编数据。"""
+    empty: dict[str, Any] = {"stage_name": "", "roles": [], "profiles": {}}
+    try:
+        data = json.loads(ARTIST_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return empty
+    if not isinstance(data, dict):
+        return empty
+    profiles: dict[str, dict[str, Any]] = {}
+    for p in data.get("platform_profiles") or []:
+        if not isinstance(p, dict):
+            continue
+        key = p.get("key") or _PROFILE_KEY.get(str(p.get("platform") or ""))
+        if key in PLATFORMS:
+            profiles[key] = p
+    roles = data.get("roles") if isinstance(data.get("roles"), dict) else {}
+    role_tags = [label for field, label in _ROLE_LABELS if roles.get(field)]
+    return {
+        "stage_name": str(data.get("stage_name") or ""),
+        "roles": role_tags,
+        "profiles": profiles,
+    }
+
 
 def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
@@ -175,8 +217,12 @@ def _redact(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _row_to_track(row, platforms: dict[str, Any]) -> dict[str, Any]:
+def _row_to_track(row, platforms: dict[str, Any],
+                  listings: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """一行 tracks + 它的平台状态 → 前端吃的那个结构。"""
+    listings = listings or [
+        {"platform": pk, **info} for pk, info in (platforms or {}).items()
+    ]
     stage = row["stage"]
     backup = db._j(row["cloud_backup"], {}) or {}
     b_status = backup.get("status", "unrecorded")
@@ -191,6 +237,13 @@ def _row_to_track(row, platforms: dict[str, Any]) -> dict[str, Any]:
         "clip_id": row["clip_id"] or None,
         "clip_ids": db._j(row["clip_ids"], []) or [],
         "platforms": platforms,
+        # 这个作品是不是「原曲」（Suno/本地音频），还是平台回填出来的孤儿。
+        # 发行页拿它决定要不要显示「关联原曲」。
+        "is_source": bool(row["clip_id"] or row["audio_file"]),
+        "listings": listings,
+        # 发出去的身份。title 是生成名，可以重复；release_title 必须唯一。
+        "release_title": (row["release_title"] if "release_title" in row.keys() else "") or "",
+        "release_platform": (row["release_platform"] if "release_platform" in row.keys() else "") or "",
         "cloud_backup": {
             "status": b_status,
             "label": BACKUP_STATUS_LABELS.get(b_status, b_status),
@@ -225,7 +278,11 @@ def _row_to_track(row, platforms: dict[str, Any]) -> dict[str, Any]:
 
 
 def _platform_row(r) -> dict[str, Any]:
+    keys = r.keys() if hasattr(r, "keys") else []
     out = {
+        "id": r["id"] if "id" in keys else None,
+        "platform": r["platform"] if "platform" in keys else "",
+        "platform_title": (r["platform_title"] if "platform_title" in keys else "") or "",
         "status": r["status"],
         "song_id": r["song_id"] or None,
         "song_url": r["song_url"] or "",
@@ -248,6 +305,19 @@ def _platform_row(r) -> dict[str, Any]:
     return out
 
 
+def _group_listings(plat_rows) -> tuple[dict[str, dict[str, Any]], dict[str, list]]:
+    """平台记录按作品归堆。platforms 仍是「每平台一条」给旧 UI；listings 是全部。"""
+    by_track: dict[str, dict[str, Any]] = {}
+    listings_by: dict[str, list] = {}
+    for r in plat_rows:
+        row = _platform_row(r)
+        listings_by.setdefault(r["track_id"], []).append(row)
+        slot = by_track.setdefault(r["track_id"], {})
+        if r["platform"] not in slot:
+            slot[r["platform"]] = row
+    return by_track, listings_by
+
+
 def list_tracks() -> list[dict[str, Any]]:
     """所有作品，按最近更新排序。前端看板直接吃这个。"""
     db.init()
@@ -255,11 +325,8 @@ def list_tracks() -> list[dict[str, Any]]:
         rows = c.execute("SELECT * FROM tracks ORDER BY updated_at DESC").fetchall()
         plat_rows = c.execute("SELECT * FROM track_platforms").fetchall()
 
-    by_track: dict[str, dict[str, Any]] = {}
-    for r in plat_rows:
-        by_track.setdefault(r["track_id"], {})[r["platform"]] = _platform_row(r)
-
-    return [_row_to_track(r, by_track.get(r["id"], {})) for r in rows]
+    by_track, listings_by = _group_listings(plat_rows)
+    return [_row_to_track(r, by_track.get(r["id"], {}), listings_by.get(r["id"], [])) for r in rows]
 
 
 def get_track(track_id: str) -> dict[str, Any] | None:
@@ -269,9 +336,10 @@ def get_track(track_id: str) -> dict[str, Any] | None:
         row = c.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone()
         if not row:
             return None
-        plats = {r["platform"]: _platform_row(r) for r in
-                 c.execute("SELECT * FROM track_platforms WHERE track_id = ?", (track_id,)).fetchall()}
-    return _row_to_track(row, plats)
+        plat_rows = c.execute(
+            "SELECT * FROM track_platforms WHERE track_id = ?", (track_id,)).fetchall()
+    by_track, listings_by = _group_listings(plat_rows)
+    return _row_to_track(row, by_track.get(track_id, {}), listings_by.get(track_id, []))
 
 
 def upsert(track_id: str, **fields: Any) -> dict[str, Any]:
@@ -284,7 +352,8 @@ def upsert(track_id: str, **fields: Any) -> dict[str, Any]:
             fields[k] = json.dumps(fields[k], ensure_ascii=False)
 
     cols = ("title", "stage", "lyrics", "tags", "prompt", "album_desc", "voice",
-            "clip_id", "clip_ids", "audio_file", "cover_file", "note", "cloud_backup")
+            "clip_id", "clip_ids", "audio_file", "cover_file", "note", "cloud_backup",
+            "release_title", "release_platform")
     given = {k: v for k, v in fields.items() if k in cols and v is not None}
 
     with db.connect() as c:
@@ -302,6 +371,74 @@ def upsert(track_id: str, **fields: Any) -> dict[str, Any]:
     return get_track(track_id) or {}
 
 
+ACTIVE_RELEASE = ("preparing", "uploaded", "reviewing", "online", "published")
+
+
+def _plat_label(platform: str) -> str:
+    return (PLATFORMS.get(platform) or {}).get("label", platform)
+
+
+def find_title_owner(title: str, except_id: str = "") -> dict[str, str] | None:
+    """谁占用了这个发行歌名。空串不算占用。"""
+    title = (title or "").strip()
+    if not title:
+        return None
+    db.init()
+    with db.connect() as c:
+        r = c.execute(
+            "SELECT id, title FROM tracks WHERE release_title=? AND id!=?",
+            (title, except_id)).fetchone()
+        if r:
+            return {"id": r["id"], "title": r["title"] or title}
+        r = c.execute(
+            """
+            SELECT t.id, t.title FROM track_platforms p
+            JOIN tracks t ON t.id = p.track_id
+            WHERE p.platform_title=? AND p.status IN ({})
+              AND t.id!=?
+            LIMIT 1
+            """.format(",".join("?" * len(ACTIVE_RELEASE))),
+            (title, *ACTIVE_RELEASE, except_id),
+        ).fetchone()
+        if r:
+            return {"id": r["id"], "title": r["title"] or title}
+    return None
+
+
+def submit_release(track_id: str, platform: str, release_title: str) -> dict[str, Any]:
+    """
+    人点「确认发版」。独家授权 + 发行歌名唯一。
+
+    - 一首只能投一个平台（再投是违约）
+    - 发出去的歌名全局唯一（Suno 生成名可以重复）
+    - 发行歌名一旦定下就必须统一
+    """
+    if platform not in PLATFORMS:
+        raise ValueError(f"未知平台: {platform}")
+    title = (release_title or "").strip()
+    if not title:
+        raise ValueError("发行歌名不能空。Suno 生成名可以重复，发出去的必须唯一。")
+
+    track = get_track(track_id)
+    if not track:
+        raise ValueError(f"没有这首作品: {track_id}")
+
+    already_plat = track.get("release_platform") or ""
+    already_title = track.get("release_title") or ""
+    if already_plat and already_plat != platform:
+        raise ValueError(
+            f"独家授权：已发往{_plat_label(already_plat)}，不能再发到{_plat_label(platform)}")
+    if already_title and already_title != title:
+        raise ValueError(f"发行歌名已定为「{already_title}」，必须统一，不能改成「{title}」")
+
+    owner = find_title_owner(title, except_id=track_id)
+    if owner:
+        raise ValueError(f"发行歌名「{title}」已被「{owner['title']}」占用，发出去的歌名必须唯一")
+
+    upsert(track_id, release_title=title, release_platform=platform)
+    return set_platform_status(track_id, platform, "preparing", platform_title=title)
+
+
 def set_stage(track_id: str, stage: str) -> dict[str, Any]:
     """
     推进状态。**不做自动跃迁** —— 每一步都是显式的。
@@ -316,13 +453,10 @@ def set_stage(track_id: str, stage: str) -> dict[str, Any]:
 
 def set_platform_status(track_id: str, platform: str, status: str, **extra: Any) -> dict[str, Any]:
     """
-    记录某个平台的发布状态。
+    记录某条平台上架记录。
 
-    每个平台单独记：同一首歌可能在汽水已上架、网易云还在审核 —— 只有一个
-    全局状态的话，这种情况根本表达不出来。
-
-    **整个操作在一个事务里**：以前是「改 JSON 再整份写回」，中途崩了会留下
-    半吊子状态（比如「发版中但不知道发去哪」），那种状态没人看得懂。
+    身份是 (platform, song_id)，不是歌名。同一首本地作品可以挂多条
+    （改名、拆成完整版/片段），对不上的先作为孤儿挂着，再人手关联。
     """
     if platform not in PLATFORMS:
         raise ValueError(f"未知平台: {platform}")
@@ -330,37 +464,173 @@ def set_platform_status(track_id: str, platform: str, status: str, **extra: Any)
     now = _now()
     cfg = extra.pop("config", None)
     album = extra.pop("album", None)
+    platform_title = extra.pop("platform_title", None)
+    song_id = str(extra.get("song_id") or "")
 
     with db.connect() as c:
         c.execute("INSERT OR IGNORE INTO tracks (id, title, stage, created_at, updated_at) "
                   "VALUES (?,?,?,?,?)", (track_id, track_id, "draft", now, now))
-        c.execute("""
-            INSERT INTO track_platforms (track_id, platform, status, updated_at)
-            VALUES (?,?,?,?)
-            ON CONFLICT(track_id, platform) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at
-        """, (track_id, platform, status, now))
+
+        listing = None
+        if song_id:
+            listing = c.execute(
+                "SELECT id, track_id FROM track_platforms WHERE platform=? AND song_id=?",
+                (platform, song_id)).fetchone()
+        if listing is None:
+            listing = c.execute(
+                "SELECT id, track_id FROM track_platforms "
+                "WHERE track_id=? AND platform=? AND IFNULL(song_id,'')=?",
+                (track_id, platform, song_id)).fetchone()
+
+        if listing:
+            lid = listing["id"]
+            c.execute("UPDATE track_platforms SET status=?, updated_at=? WHERE id=?",
+                      (status, now, lid))
+            if listing["track_id"] != track_id:
+                c.execute("UPDATE track_platforms SET track_id=? WHERE id=?", (track_id, lid))
+        else:
+            c.execute(
+                "INSERT INTO track_platforms (track_id, platform, status, updated_at) "
+                "VALUES (?,?,?,?)", (track_id, platform, status, now))
+            lid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
 
         sets, vals = [], []
         mapping = {"song_id": "song_id", "song_url": "song_url", "album_id": "album_id",
                    "track_no": "track_no", "duration": "duration", "publish_date": "publish_date",
                    "cover_url": "cover_url", "cover_local": "cover_local", "note": "note",
                    "submitted_at": "submitted_at",
-                   # 单曲维度的平台实况（来自音乐人后台，见 scripts/ncm_track_stats.py）
                    "plays": "plays", "earned_cny": "earned_cny", "stats_at": "stats_at"}
         for k, col in mapping.items():
             if k in extra and extra[k] is not None:
                 sets.append(f"{col} = ?"); vals.append(extra[k])
         if album is not None:
             sets.append("album_name = ?"); vals.append(album)
+        if platform_title is not None:
+            sets.append("platform_title = ?"); vals.append(platform_title)
         if cfg is not None:
             sets.append("config = ?")
             vals.append(cfg if isinstance(cfg, str) else json.dumps(cfg, ensure_ascii=False))
         if sets:
-            c.execute(f"UPDATE track_platforms SET {', '.join(sets)} WHERE track_id = ? AND platform = ?",
-                      (*vals, track_id, platform))
+            c.execute(f"UPDATE track_platforms SET {', '.join(sets)} WHERE id = ?",
+                      (*vals, lid))
         c.execute("UPDATE tracks SET updated_at = ? WHERE id = ?", (now, track_id))
 
     return get_track(track_id) or {}
+
+
+def link_listing(listing_id: int, track_id: str) -> dict[str, Any]:
+    """
+    把一条平台上架记录挂到某首本地/Suno 作品上。
+
+    发行歌名必须跟原曲统一；同一平台不能挂第二条（独家不能重复发）。
+    汽水分发到别的平台、歌名相同，可以挂。
+    """
+    db.init()
+    now = _now()
+    dest = get_track(track_id)
+    if not dest:
+        raise ValueError(f"没有这首作品: {track_id}")
+    with db.connect() as c:
+        listing = c.execute("SELECT * FROM track_platforms WHERE id=?", (listing_id,)).fetchone()
+        if not listing:
+            raise ValueError(f"没有这条上架记录: {listing_id}")
+
+        listing_title = (listing["platform_title"] or "").strip()
+        dest_rt = (dest.get("release_title") or "").strip()
+        dest_rp = dest.get("release_platform") or ""
+
+        same_plat = [l for l in (dest.get("listings") or [])
+                     if l.get("platform") == listing["platform"] and l.get("id") != listing_id]
+        if same_plat:
+            raise ValueError(
+                f"独家授权：这首在{_plat_label(listing['platform'])}已经有一条发行记录，不能再挂")
+
+        if dest_rt and listing_title and dest_rt != listing_title:
+            raise ValueError(
+                f"发行歌名必须统一：原曲是「{dest_rt}」，这条是「{listing_title}」")
+
+        check_title = dest_rt or listing_title
+        if check_title:
+            owner = find_title_owner(check_title, except_id=track_id)
+            if owner and owner["id"] != listing["track_id"]:
+                raise ValueError(
+                    f"发行歌名「{check_title}」已被「{owner['title']}」占用")
+
+        old_tid = listing["track_id"]
+        c.execute("UPDATE track_platforms SET track_id=?, updated_at=? WHERE id=?",
+                  (track_id, now, listing_id))
+        if not dest_rt and listing_title:
+            c.execute("UPDATE tracks SET release_title=? WHERE id=?", (listing_title, track_id))
+        if not dest_rp:
+            c.execute("UPDATE tracks SET release_platform=? WHERE id=?",
+                      (listing["platform"], track_id))
+        c.execute("UPDATE tracks SET updated_at=? WHERE id=?", (now, track_id))
+        if old_tid != track_id:
+            leftover = c.execute(
+                "SELECT COUNT(*) n FROM track_platforms WHERE track_id=?", (old_tid,)).fetchone()["n"]
+            old = c.execute(
+                "SELECT clip_id, audio_file, note FROM tracks WHERE id=?", (old_tid,)).fetchone()
+            empty_shell = (
+                leftover == 0
+                and old
+                and not old["clip_id"]
+                and not old["audio_file"]
+                and "回填" in (old["note"] or "")
+            )
+            if empty_shell:
+                c.execute("DELETE FROM tracks WHERE id=?", (old_tid,))
+    return get_track(track_id) or {}
+
+
+def resolve_track_for_listing(platform: str, song_id: str, title: str) -> str | None:
+    """
+    给一条平台上架记录找本地作品。顺序：
+
+    1. 这个 (platform, song_id) 已经挂过 → 沿用，避免重跑同步把人手关联冲掉
+    2. 本地有同名作品，优先带 Suno clip / 本地音频的那首（拆成多首同名时挂到原曲）
+    3. 找不到 → None，调用方再建孤儿
+    """
+    db.init()
+    title = (title or "").strip()
+    with db.connect() as c:
+        if song_id:
+            hit = c.execute(
+                "SELECT track_id FROM track_platforms WHERE platform=? AND song_id=?",
+                (platform, str(song_id))).fetchone()
+            if hit:
+                return hit["track_id"]
+        if title:
+            hit = c.execute(
+                "SELECT id FROM tracks WHERE release_title=?", (title,)).fetchone()
+            if hit:
+                return hit["id"]
+            rows = list(c.execute(
+                "SELECT id, clip_id, audio_file FROM tracks WHERE title=?", (title,)))
+        else:
+            rows = []
+    if not rows:
+        return None
+    sourced = [r for r in rows if r["clip_id"] or r["audio_file"]]
+    # 生成名可以重复：同名原曲超过一首就不敢自动挂，留给人手点。
+    if len(sourced) > 1:
+        return None
+    return (sourced[0] if sourced else rows[0])["id"]
+
+
+def source_candidates() -> list[dict[str, Any]]:
+    """能当「原曲」被关联的作品：有 Suno clip 或本地音频。"""
+    db.init()
+    with db.connect() as c:
+        rows = c.execute(
+            "SELECT id, title, clip_id, audio_file, stage, "
+            "release_title, release_platform FROM tracks "
+            "WHERE IFNULL(clip_id,'') != '' OR IFNULL(audio_file,'') != '' "
+            "ORDER BY updated_at DESC"
+        ).fetchall()
+    return [{"id": r["id"], "title": r["title"], "clip_id": r["clip_id"] or "",
+             "stage": r["stage"], "suno": bool(r["clip_id"]),
+             "release_title": r["release_title"] or "",
+             "release_platform": r["release_platform"] or ""} for r in rows]
 
 
 def summary() -> dict[str, int]:
@@ -426,14 +696,21 @@ def list_platform_accounts() -> dict[str, Any]:
 
     对不上说明同步漏了或者平台那边有变动 —— 数字自己会说话，
     比在界面上写「同步成功」有用得多。
+
+    **三个平台始终都返回**，哪怕还没跑过同步脚本。身份来自 artist.json
+    （艺名、主页），统计来自 platform_accounts 表。汽水没同步过后台时，
+    界面仍能看到「月栖洲 / 汽水音乐」，而不是整页「未接入」。
     """
     db.init()
+    identity = _artist_identity()
     with db.connect() as c:
-        rows = c.execute("SELECT * FROM platform_accounts").fetchall()
+        rows = {r["platform"]: dict(r) for r in c.execute("SELECT * FROM platform_accounts")}
         online = {r["platform"]: r["n"] for r in c.execute(
             "SELECT platform, COUNT(*) n FROM track_platforms "
             "WHERE status IN ('online','published') GROUP BY platform")}
-        albums_by = {}
+        listed = {r["platform"]: r["n"] for r in c.execute(
+            "SELECT platform, COUNT(*) n FROM track_platforms GROUP BY platform")}
+        albums_by: dict[str, list] = {}
         # albums 的主键是 key（<platform>-<album_id>），不是 id —— 写错列名
         # 会让整个端点 500，而前端只看到「加载失败」
         for r in c.execute("SELECT platform, album_id, title, track_count FROM albums "
@@ -441,15 +718,41 @@ def list_platform_accounts() -> dict[str, Any]:
             albums_by.setdefault(r["platform"], []).append(
                 {"id": r["album_id"], "name": r["title"], "size": r["track_count"]})
 
-    out = {}
-    for r in rows:
-        d = dict(r)
-        d["alias"] = db._j(r["alias"], []) or []
-        d["stats"] = db._j(r["stats"], {}) or {}
-        d["albums"] = albums_by.get(r["platform"], [])
-        d["local_online_count"] = online.get(r["platform"], 0)
-        out[r["platform"]] = d
-    return {"accounts": out}
+    out: dict[str, Any] = {}
+    for key, meta in PLATFORMS.items():
+        row = rows.get(key) or {}
+        profile = identity["profiles"].get(key) or {}
+        artist_name = (row.get("artist_name") or identity["stage_name"] or "").strip()
+        artist_url = (row.get("artist_url") or profile.get("artist_url") or "").strip()
+        user_url = (row.get("user_url") or profile.get("user_url") or "").strip()
+        synced_at = row.get("synced_at") or ""
+        out[key] = {
+            "platform": key,
+            "label": meta["label"],
+            "artist_id": row.get("artist_id") or profile.get("artist_id") or "",
+            "artist_name": artist_name,
+            "alias": db._j(row.get("alias"), []) or [],
+            "avatar_url": row.get("avatar_url") or "",
+            "brief": row.get("brief") or "",
+            "artist_url": artist_url,
+            "user_id": row.get("user_id") or profile.get("user_id") or "",
+            "user_url": user_url,
+            "song_count": int(row["song_count"] or 0) if row.get("song_count") is not None else 0,
+            "album_count": int(row["album_count"] or 0) if row.get("album_count") is not None else 0,
+            "stats": db._j(row.get("stats"), {}) or {},
+            "albums": albums_by.get(key, []),
+            "local_online_count": online.get(key, 0),
+            "local_listed_count": listed.get(key, 0),
+            "synced_at": synced_at,
+            "synced": bool(synced_at),
+            "console_url": meta.get("console") or "",
+            "color": meta.get("color") or "",
+        }
+    return {
+        "accounts": out,
+        "stage_name": identity["stage_name"],
+        "roles": identity["roles"],
+    }
 
 
 def upsert_platform_account(platform: str, **fields: Any) -> None:

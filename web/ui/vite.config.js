@@ -71,7 +71,7 @@ export default defineConfig({
     proxy: {
       // agentProxy 包一层：代理请求的实际 URL、状态码、Set-Cookie 都会落日志。
       // 原生 proxy 出问题时只有一句 500，看不到到底请求了什么。
-      '/api': agentProxy('http://localhost:8866'),
+      '/api': agentProxy(`http://localhost:${process.env.VF_API_PORT || 8866}`),
     },
   },
 });

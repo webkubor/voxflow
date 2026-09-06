@@ -43,7 +43,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
     const data = await guard(() => api.pipeline(), error);
     stages.value = data.stages || [];
     stageLabels.value = data.stage_labels || {};
-    platforms.value = data.platforms || [];
+    platforms.value = data.platforms || ({} as PipelineResponse['platforms']);
     summary.value = data.summary || {};
     tracks.value = data.tracks || [];
     return data;
@@ -52,6 +52,8 @@ export const usePipelineStore = defineStore('pipeline', () => {
   const setStage = (trackId: string, stage: Stage) => guard(() => api.setStage(trackId, stage), error);
   const upsertTrack = (track: Partial<Track> & { track_id: string }) => guard(() => api.upsertTrack(track), error);
   const setPlatformStatus = (p: { track_id: string; platform: PlatformKey; status: string }) => guard(() => api.setPlatformStatus(p), error);
+  const submitRelease = (p: { track_id: string; platform: PlatformKey; release_title: string }) =>
+    guard(() => api.submitRelease(p), error);
   const loadPublishBoard = async () => {
     const data = await guard(() => api.publishBoard(), error);
     publishAccounts.value = (data.accounts || []) as PlatformAccount[];
@@ -67,6 +69,6 @@ export const usePipelineStore = defineStore('pipeline', () => {
 
   return {
     stages, stageLabels, platforms, summary, tracks, backupTracks, publishAccounts, artist, error,
-    loadPipeline, loadPublishBoard, setStage, upsertTrack, setPlatformStatus, saveArtist,
+    loadPipeline, loadPublishBoard, setStage, upsertTrack, setPlatformStatus, submitRelease, saveArtist,
   };
 });
