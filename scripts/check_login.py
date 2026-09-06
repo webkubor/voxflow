@@ -17,6 +17,26 @@ harness 附着的是用户日常那个浏览器，登录态直接可用，探一
 —— 已登录的页面上也可能有「登录设备管理」之类的字样，那样会误判。
 看的是最终 URL：跳到 /login、/passport、/sign 就是没登录。
 """
+# ── harness 的 socket 超时太小，先抬高 ──────────────────────────
+#
+# `browser_harness/helpers.py` 里 `_send()` 写死 `ipc.connect(timeout=5.0)`。
+# 5 秒够普通 CDP 调用，但**传文件不够** —— 这里要通过 CDP 把一个 28MB 的 wav
+# 塞给 <input type=file>，实测直接 TimeoutError。
+#
+# 而那个报错长得像网络问题（socket recv timed out），完全看不出是文件太大，
+# 排查时会往浏览器连不上的方向去猜。
+#
+# 不改 harness 本体（那是外部依赖，装更新就没了），只在本脚本里把连接超时
+# 调大。其余行为一个字不动。
+try:
+    from browser_harness import _ipc as _bh_ipc
+
+    _bh_orig_connect = _bh_ipc.connect
+    _bh_ipc.connect = lambda name, timeout=1.0: _bh_orig_connect(name, timeout=180.0)
+except Exception:  # noqa: BLE001 —— 抬不高就按原样跑，大不了还是超时
+    pass
+
+
 import json
 import os
 import sys

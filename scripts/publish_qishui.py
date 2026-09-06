@@ -22,6 +22,26 @@
 不要在这里硬编码平台规则 —— 加平台/改规则都该只动那份配置。
 """
 
+# ── harness 的 socket 超时太小，先抬高 ──────────────────────────
+#
+# `browser_harness/helpers.py` 里 `_send()` 写死 `ipc.connect(timeout=5.0)`。
+# 5 秒够普通 CDP 调用，但**传文件不够** —— 这里要通过 CDP 把一个 28MB 的 wav
+# 塞给 <input type=file>，实测直接 TimeoutError。
+#
+# 而那个报错长得像网络问题（socket recv timed out），完全看不出是文件太大，
+# 排查时会往浏览器连不上的方向去猜。
+#
+# 不改 harness 本体（那是外部依赖，装更新就没了），只在本脚本里把连接超时
+# 调大。其余行为一个字不动。
+try:
+    from browser_harness import _ipc as _bh_ipc
+
+    _bh_orig_connect = _bh_ipc.connect
+    _bh_ipc.connect = lambda name, timeout=1.0: _bh_orig_connect(name, timeout=180.0)
+except Exception:  # noqa: BLE001 —— 抬不高就按原样跑，大不了还是超时
+    pass
+
+
 import json
 import os
 import sys
@@ -111,8 +131,16 @@ def set_file(label_keyword, path):
 print("\n上传物料…")
 print("  音频:", "✓" if set_file("完整版", audio) else "✗")
 # 上传后平台要解析音频（采样率/位深/声道），太早往下走会看到「音频无效」——
-# 那不是文件真有问题，是还没传完就被校验了
-time.sleep(12)
+# 那不是文件真有问题，是还没传完就被校验了。
+#
+# ⚠️ 2026-09-06 实测：29MB 的 wav 等 12 秒**远远不够**，平台同时报出
+# 「音频无效」和「非纯音乐请填歌词」两条 —— 后一条尤其误导人，
+# 看起来像 AI 声明或歌词填错了，实际是它解析到了半截的文件。
+#
+# 两个应对，都要：① 上传前把音频转成 320k mp3（29MB → 6MB）；
+# ② 这里按文件大小等，别写死一个数。
+_mb = (os.path.getsize(audio) / 1048576) if audio and os.path.exists(audio) else 6
+time.sleep(min(60, max(15, _mb * 2.5)))
 # 「专辑封面」这个词离 input 太远（中间隔着说明文字），
 # 用规格说明里的「1440」当锚点，它就贴在上传框旁边
 print("  封面:", "✓" if (set_file("1440", cover) or set_file("上传封面", cover)) else "✗")
@@ -162,6 +190,31 @@ time.sleep(1)
 if album_desc:
     print("  专辑介绍:", "✓" if fill_by_label("关于专辑的介绍", album_desc, multiline=True) else "✗")
     time.sleep(1)
+
+# ── 是否是纯音乐 ──────────────────────────────────────────
+#
+# ⚠️ 这个开关此前完全没设，是「上传卡住」的真凶之一。
+#
+# 它默认是「否」，于是平台要求填歌词；而我们在歌词栏填的是 `[Instrumental]`，
+# 平台把它当成空 —— 报出「您上传的音频非纯音乐，请填写歌词」。
+# 那句话读起来像是音频被检测出人声了，实际是**这个开关没打开**。
+#
+# 判断依据用歌词字段：`[Instrumental]` 或空 = 纯音乐。
+# 不去猜音频里有没有人声 —— 那是平台该判的，我们只如实声明。
+_is_inst = (lyrics or "").strip().lower() in ("", "[instrumental]", "instrumental")
+r_inst = js("""(() => {
+  const lab=[...document.querySelectorAll('*')].find(e=>e.children.length===0 && e.innerText?.trim()==='是否是纯音乐');
+  if(!lab) return '没有这个开关';
+  let row=lab.parentElement;
+  for(let i=0;i<4 && row;i++){ if(row.innerText.length>8) break; row=row.parentElement; }
+  const want=%s;
+  const btn=[...row.querySelectorAll('button,label,span,div')]
+    .find(e=>e.children.length===0 && e.innerText?.trim()===want);
+  if(!btn) return '没找到「'+want+'」';
+  btn.click(); return '已选「'+want+'」';
+})()""" % ("'是'" if _is_inst else "'否'"))
+print("\n是否是纯音乐:", r_inst)
+time.sleep(1)
 
 # ── 作品类型 + AI 声明 ────────────────────────────────────
 # AI 声明必须如实填。平台有官方选项，瞒报被查到会影响账号 ——
@@ -229,8 +282,29 @@ picked = js("""(() => {
   if (!el) return 'not-found'
   el.click(); return 'Suno'
 })()""")
-print("  AI工具:", ai, picked)
-
+# ── 使用的 AI 工具 ────────────────────────────────────────
+#
+# AI 声明选「是」之后这一栏必填。它是个下拉，**选项要展开之后才渲染出来** ——
+# 展开和选择必须分两次 js 调用，中间等一下；写在同一次里必然 not-found
+# （之前就是这么失败的，报「opened not-found」看起来像没有这个选项）。
+r_open = js("""(() => {
+  const lab=[...document.querySelectorAll('*')].find(e=>e.children.length===0 && e.innerText?.trim()==='使用的AI工具');
+  if(!lab) return 'no-label';
+  let row=lab.parentElement;
+  for(let i=0;i<5 && row;i++){ if(row.innerText.includes('请选择')||row.querySelector('input,[class*=select]')) break; row=row.parentElement; }
+  const sel=row.querySelector('[class*=select],[class*=Select],input');
+  if(!sel) return 'no-control';
+  sel.click(); return 'opened';
+})()""")
+time.sleep(1.5)
+r_pick = js("""(() => {
+  const opt=[...document.querySelectorAll('[class*=option],[class*=Option],[role=option],li')]
+    .find(e=>e.offsetParent && e.innerText?.trim()==='Suno');
+  if(!opt) return 'not-found';
+  opt.click(); return 'Suno';
+})()""") if r_open == 'opened' else r_open
+print("  AI工具:", r_open, r_pick)
+time.sleep(1)
 # 填完必须看红字。fill_input 吞字这种错，不截图会当成成功。
 reds = js("""(() => {
   const reds = []
