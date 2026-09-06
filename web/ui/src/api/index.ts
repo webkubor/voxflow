@@ -116,6 +116,12 @@ export const api = {
   // ── 作品流水线 ──
   pipeline: () => get<PipelineResponse>('pipeline'),
   setStage: (track_id: string, stage: Stage) => post('pipeline/stage', { track_id, stage }),
+  /** 这首歌发这个平台还缺什么 —— 「备料中」到底算不算完，全靠它回答 */
+  readiness: (track_id: string, platform: string) => get<{
+    ok: boolean;
+    items: { 名称: string; 就绪: boolean; 说明: string }[];
+    缺口数: number; 平台: string; 控制台: string; 发布命令: string;
+  }>('pipeline/readiness', { track_id, platform }),
   upsertTrack: (track: Partial<Track> & { track_id: string }) => post('pipeline/track', track),
   setPlatformStatus: (p: { track_id: string; platform: PlatformKey; status: string }) =>
     post('pipeline/platform', p),

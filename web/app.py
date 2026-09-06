@@ -1626,6 +1626,23 @@ class PipelineStageRequest(BaseModel):
     stage: str
 
 
+@app.get("/api/pipeline/readiness")
+def pipeline_readiness(track_id: str, platform: str):
+    """这首歌发这个平台，备料齐了没有 —— 缺哪几项、每项怎么补。
+
+    「备料中」原本是个空状态：点了确认发版就写上它，然后什么都不发生，
+    也没有任何东西告诉你算不算完、下一步点哪儿。这个端点就是那一环。
+    """
+    from core import pipeline  # noqa: PLC0415 —— 与本文件其余 pipeline 端点一致，延迟导入
+
+    if not track_id or not platform:
+        raise HTTPException(400, "缺少 track_id 或 platform")
+    r = pipeline.readiness(track_id, platform)
+    if r.get("错误"):
+        raise HTTPException(404, r["错误"])
+    return r
+
+
 @app.post("/api/pipeline/stage")
 def pipeline_set_stage(req: PipelineStageRequest):
     """

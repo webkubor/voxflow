@@ -122,6 +122,10 @@
               class="meta-pill warn"
             >
               {{ platformLabel(pk) }} · {{ statusLabel(info.status) }}
+              <span v-if="waitedDays(info) !== null"
+                    :class="['wait-badge', { overdue: waitedDays(info) > 3 }]">
+                已等 {{ waitedDays(info) }} 天
+              </span>
             </span>
           </div>
           <div class="track-actions">
@@ -158,8 +162,61 @@
           </div>
         </div>
 
-        <!-- 详情：歌词和发布配置 -->
+        <!-- 详情：试听来源 / 备料清单 / 歌词 / 发布配置 -->
         <div v-if="expanded.has(t.id)" class="track-detail">
+          <!-- 三个来源各有各的用处，所以并列摆出来，不用去别处找 -->
+          <div class="detail-block">
+            <span class="detail-label">试听与来源</span>
+            <!-- ⚠️ .detail-block 是横向 flex（56px 标签 + 内容），
+                 内容必须包在**一个**容器里 —— 直接塞多个兄弟节点的话，
+                 它们会各自成为并排的 flex 子项，被挤成竖排文字。 -->
+            <div class="detail-body">
+            <div class="source-row">
+              <a v-if="t.suno_url" class="source-pill" :href="t.suno_url" target="_blank" rel="noopener">
+                <Icon name="music" size="sm" /> Suno 原件
+              </a>
+              <a v-if="t.r2_url" class="source-pill" :href="t.r2_url" target="_blank" rel="noopener">
+                <Icon name="download" size="sm" /> R2 直链（可分发）
+              </a>
+              <span v-if="!t.audio_url" class="source-pill muted">本地无音频</span>
+            </div>
+            <audio v-if="t.audio_url" :src="t.audio_url" controls preload="none" class="track-audio" />
+            </div>
+          </div>
+
+          <!-- 备料清单：「备料中」到底算不算完，之前界面上完全没说 -->
+          <div v-for="(info, pk) in t.platforms" :key="`rd-${pk}`" class="detail-block">
+            <template v-if="info.status === 'preparing'">
+              <span class="detail-label">{{ platformLabel(pk) }} 备料清单</span>
+              <div v-if="!readiness[`${t.id}|${pk}`]" class="detail-meta">
+                <button class="ghost-btn small" @click="checkReady(t.id, pk)">检查还缺什么</button>
+              </div>
+              <template v-else>
+                <div class="detail-body">
+                <div v-for="it in readiness[`${t.id}|${pk}`].items" :key="it.名称"
+                     class="ready-row" :class="{ miss: !it.就绪 }">
+                  <Icon :name="it.就绪 ? 'check' : 'close'" size="sm" />
+                  <span class="ready-name">{{ it.名称 }}</span>
+                  <span v-if="!it.就绪" class="ready-hint">{{ it.说明 }}</span>
+                </div>
+                <div class="ready-foot">
+                  <button v-if="readiness[`${t.id}|${pk}`].ok && readiness[`${t.id}|${pk}`].发布命令"
+                          class="primary-btn small" @click="copyPublish(t.id, pk)">
+                    <Icon name="save" size="sm" /><span>复制发布命令</span>
+                  </button>
+                  <span v-else-if="!readiness[`${t.id}|${pk}`].ok" class="ready-hint">
+                    还缺 {{ readiness[`${t.id}|${pk}`].缺口数 }} 项，补齐了才能发
+                  </span>
+                  <a v-if="readiness[`${t.id}|${pk}`].控制台" class="source-pill"
+                     :href="readiness[`${t.id}|${pk}`].控制台" target="_blank" rel="noopener">
+                    打开{{ platformLabel(pk) }}后台
+                  </a>
+                </div>
+                </div>
+              </template>
+            </template>
+          </div>
+
           <div v-if="t.tags" class="detail-block">
             <span class="detail-label">风格</span>
             <span class="detail-tags">{{ t.tags }}</span>
@@ -172,7 +229,15 @@
             <span class="detail-label">{{ platformLabel(pk) }}</span>
             <div class="detail-platform">
               <span class="meta-pill warn">{{ statusLabel(info.status) }}</span>
-              <span v-if="info.submitted_at" class="detail-meta">提交于 {{ info.submitted_at.replace('T', ' ') }}</span>
+              <span v-if="info.submitted_at" class="detail-meta">
+                提交于 {{ info.submitted_at.replace('T', ' ') }}
+                <template v-if="waitedDays(info) !== null">· 已等 {{ waitedDays(info) }} 天</template>
+              </span>
+              <span v-else-if="info.status === 'preparing'" class="detail-meta">
+                还没提交 —— 备料完成后跑
+                <code>VF_TRACK={{ t.id }} browser-harness &lt; scripts/publish_{{ pk }}.py</code>
+                自动填表，最后一步由你点提交
+              </span>
               <p v-if="info.note" class="detail-meta">{{ info.note }}</p>
               <div v-if="info.config" class="detail-config">
                 <template v-for="(v, k) in info.config" :key="k">
@@ -458,6 +523,16 @@ const advance = async (track) => {
   busyId.value = track.id;
   try {
     await pipelineStore.setStage(track.id, action.to);
+    // 「标记已上架」必须**连平台状态一起改**，否则会出现自相矛盾的行：
+    // 流水线写着「已上架」，平台那栏还停在「备料中」。
+    // 两个状态各说各话之后，这张看板就没法用来回答「这歌到底发出去没有」。
+    if (action.to === 'published') {
+      const inflight = Object.entries(track.platforms || {})
+        .filter(([, i]) => ['preparing', 'uploaded', 'reviewing'].includes(i?.status));
+      for (const [pk] of inflight) {
+        await pipelineStore.setPlatformStatus({ track_id: track.id, platform: pk, status: 'online' });
+      }
+    }
     await load();
     tasksStore.showToast(`「${track.title}」→ ${stageLabels.value[action.to]}`, 'success');
   } catch (cause) {
@@ -537,6 +612,41 @@ const batchAdvance = async () => {
 
 const platformLabel = (key) => platforms.value?.[key]?.label || key;
 
+/**
+ * 备料清单，按 `trackId|platform` 缓存。
+ *
+ * 不在 load() 里一次性全查：看板可能有几十首，而备料清单只有展开
+ * 「备料中」那几首时才有意义 —— 为了不看的东西打几十个请求不划算。
+ */
+const readiness = ref({});
+
+const checkReady = async (trackId, platform) => {
+  try {
+    readiness.value = { ...readiness.value, [`${trackId}|${platform}`]: await api.readiness(trackId, platform) };
+  } catch (cause) {
+    await tasksStore.reportError(cause, { action: 'pipeline.readiness', tags: { trackId, platform } });
+  }
+};
+
+/**
+ * 把发布命令放进剪贴板。
+ *
+ * 为什么是复制命令而不是一个「立即发布」按钮：填表要驱动**你本机那个
+ * 已登录的浏览器**，服务端替你点不了；而且最后那一下提交是不可逆的
+ * （进了审核队列要撤回），值得你自己看一眼再按。
+ * 自动化省的是填表那 10 分钟，不是点提交那 1 秒。
+ */
+const copyPublish = async (trackId, platform) => {
+  const cmd = readiness.value[`${trackId}|${platform}`]?.发布命令 || '';
+  if (!cmd) return;
+  try {
+    await navigator.clipboard.writeText(cmd);
+    tasksStore.showToast('命令已复制 —— 在项目目录里粘贴执行，会自动填表并停在提交前', 'success');
+  } catch {
+    tasksStore.showToast(cmd, 'info');   // 剪贴板被拒（非 https）就直接显示出来
+  }
+};
+
 const PLATFORM_STATUS = {
   preparing: '备料中',
   uploaded: '已上传',
@@ -545,9 +655,55 @@ const PLATFORM_STATUS = {
   rejected: '被驳回',
 };
 const statusLabel = (s) => PLATFORM_STATUS[s] || s;
+
+/**
+ * 已提交审核多少天。不在审核中、或没有提交时间就返回 null（不显示）。
+ *
+ * 为什么要显示这个：审核状态本身是**静止的**，voxflow 不会去平台轮询，
+ * 所以「审核中」这三个字放三天和放三十天长得一模一样。
+ * 汽水承诺 1-2 个工作日 —— 逆着风跑起来 8-30 提交，直到 9-6 才被发现
+ * 卡了 7 天，就是因为界面上看不出时间在流逝。
+ *
+ * 超过 3 天标红：那已经超过任何平台承诺的审核时长，该去后台查了。
+ */
+const waitedDays = (info) => {
+  if (info?.status !== 'reviewing' || !info?.submitted_at) return null;
+  const t = Date.parse(info.submitted_at);
+  if (Number.isNaN(t)) return null;
+  return Math.floor((Date.now() - t) / 86400000);
+};
 </script>
 
 <style scoped>
+.detail-body { flex: 1; min-width: 0; }
+.source-row { display: flex; flex-wrap: wrap; gap: var(--vf-space-2); margin-bottom: var(--vf-space-2); }
+.source-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 10px; border-radius: 999px; font-size: 12px;
+  background: var(--vf-bg-3, rgba(255,255,255,.06));
+  color: var(--vf-text-2, #bbb); text-decoration: none;
+}
+.source-pill:hover { color: var(--vf-text-1, #fff); }
+.source-pill.muted { opacity: .5; }
+.ready-row { display: flex; align-items: baseline; gap: 6px; font-size: 12px; padding: 2px 0; }
+.ready-row.miss { color: #ff7a5c; }
+.ready-name { min-width: 9em; }
+.ready-hint { color: var(--vf-text-3, #888); }
+.ready-foot { display: flex; align-items: center; gap: var(--vf-space-2); margin-top: var(--vf-space-2); }
+.wait-badge {
+  margin-left: var(--vf-space-1);
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--vf-bg-3, rgba(255,255,255,.08));
+  color: var(--vf-text-3, #999);
+}
+/* 超期就必须扎眼 —— 这条信息的全部价值就在于被看见 */
+.wait-badge.overdue {
+  background: rgba(255, 99, 71, .18);
+  color: #ff7a5c;
+  font-weight: 600;
+}
 .board-wrap {
   display: flex;
   flex-direction: column;

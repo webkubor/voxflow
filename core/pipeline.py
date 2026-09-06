@@ -179,6 +179,14 @@ def _row_to_track(row, platforms: dict[str, Any]) -> dict[str, Any]:
             "/api/audio/" + "/".join(row["audio_file"].split("/")[-2:])
             if (row["audio_file"] or "").startswith("out/") else ""
         ),
+        # 三个来源各有各的用处，所以三个都给，前端不用自己拼：
+        #   suno_url  —— 云端原件，能看生成参数、能在 Suno 里再加工
+        #   r2_url    —— 公网直链，发给别人下载（本地路径对别人没意义）
+        #   audio_url —— 本机文件，最快、离线也能听
+        # 拼 URL 这件事放前端做，拼错了是静默 404 —— 点了没反应、不报错。
+        "suno_url": f"https://suno.com/song/{row['clip_id']}" if row["clip_id"] else "",
+        "r2_url": backup.get("location", "") if str(
+            backup.get("location", "")).startswith("http") else "",
     }
 
 
@@ -441,3 +449,107 @@ def publication_board() -> dict[str, Any]:
             for t in tracks if account["platform"] in t["platforms"]
         ]
     return {"accounts": accounts, "tracks": tracks}
+
+
+# ─────────────────────── 备料检查 ───────────────────────
+#
+# 「备料中」原本是个**空状态** —— 点了确认发版就写上它，然后什么也不发生，
+# 也没有任何东西告诉你备料算不算完、下一步该点哪里。链路就断在这儿。
+#
+# 这里把它变成一份**可核对的清单**：这首歌发这个平台还缺什么，
+# 每一项缺了怎么补。全绿了才谈得上「去发布」。
+#
+# 清单项来自 `configs/platforms.json` 里实测的表单字段，不在这里硬编码平台规则 ——
+# 平台改版时改那份配置，这段逻辑不用动。
+
+
+def _artist_profile() -> dict[str, Any]:
+    from core.paths import ARTIST_FILE
+    try:
+        return json.loads(ARTIST_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def readiness(track_id: str, platform: str) -> dict[str, Any]:
+    """这首歌发这个平台，备料齐了没有。
+
+    返回 {ok, items: [{名称, 就绪, 说明}], 缺口数}
+    """
+    track = get_track(track_id)
+    if not track:
+        return {"ok": False, "items": [], "错误": "曲目不存在"}
+    spec = (_platform_specs() or {}).get(platform) or {}
+    artist = _artist_profile()
+    cover_min = spec.get("cover", {}).get("min_size", "1440x1440")
+
+    def item(name: str, ok: bool, hint: str) -> dict[str, Any]:
+        return {"名称": name, "就绪": bool(ok), "说明": "" if ok else hint}
+
+    # 封面必须真的够大 —— Suno 自带的是 360×360，放大是糊的，
+    # 「有封面」和「封面能用」是两回事，只判存在会在上传时被平台打回。
+    cover_ok = bool(track.get("cover_url")) and _cover_big_enough(track_id, cover_min)
+    items = [
+        item("完整版音频", bool(track.get("audio_url")),
+             "曲库里没有音频文件 —— 先在 AI 音乐那屏生成或补录"),
+        item(f"专辑封面 ≥{cover_min}", cover_ok,
+             f"缺封面或尺寸不足 {cover_min}（Suno 自带的 360×360 不能用）· 点「出封面」"),
+        item("歌词", bool(track.get("lyrics")), "歌词为空 —— 在详情里补，平台必填"),
+        item("歌曲标题", bool((track.get("title") or "").strip()), "标题为空"),
+        item("专辑名称", bool(_album_name_of(track, platform)),
+             "没有专辑名 —— 单曲也要填，可以和歌名一致"),
+        item("艺名（表演者/词曲作者）", bool(artist.get("stage_name")),
+             "artist.json 里没有 stage_name"),
+        item("法律姓名（版权登记用）", bool(artist.get("real_name")),
+             "artist.json 里没有 real_name —— 结算要它，艺名不能替"),
+    ]
+    missing = [i for i in items if not i["就绪"]]
+    return {
+        "ok": not missing,
+        "items": items,
+        "缺口数": len(missing),
+        "平台": spec.get("label", platform),
+        "控制台": (spec.get("entries", {}).get("single", {}) or {}).get("url")
+                  or spec.get("console", ""),
+        # 备料齐了给出那条真正能把表填完的命令。自动化的价值在填表这 10 分钟，
+        # 最后点提交那一秒留给人 —— 提交进审核队列是不可逆的。
+        "发布命令": f"VF_BASE=$PWD VF_TRACK={track_id} browser-harness < scripts/publish_{platform}.py"
+                    if (Path(__file__).resolve().parent.parent
+                        / f"scripts/publish_{platform}.py").exists() else "",
+    }
+
+
+def _platform_specs() -> dict[str, Any]:
+    from core.paths import CONFIG_DIR, PROJECT_DIR
+    for p in (CONFIG_DIR / "platforms.json", PROJECT_DIR / "configs/platforms.json"):
+        if p.exists():
+            try:
+                return json.loads(p.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return {}
+    return {}
+
+
+def _album_name_of(track: dict[str, Any], platform: str) -> str:
+    info = (track.get("platforms") or {}).get(platform) or {}
+    return (info.get("album_name") or track.get("album_desc") or "").strip()
+
+
+def _cover_big_enough(track_id: str, min_size: str) -> bool:
+    """封面短边够不够。读不出尺寸时**放行** —— 宁可让平台去判，
+    也不要因为本地缺个图像库就把人卡在这一步。"""
+    try:
+        need = int(str(min_size).lower().split("x")[0])
+    except (ValueError, IndexError):
+        return True
+    db.init()
+    with db.connect() as c:
+        row = c.execute("SELECT cover_file FROM tracks WHERE id=?", (track_id,)).fetchone()
+    if not row or not row["cover_file"]:
+        return False
+    try:
+        from PIL import Image
+        with Image.open(row["cover_file"]) as im:
+            return min(im.size) >= need
+    except Exception:      # noqa: BLE001 —— 读不出就不拦
+        return True
