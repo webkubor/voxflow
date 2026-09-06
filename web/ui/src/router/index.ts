@@ -46,6 +46,7 @@ export const tabRoutes = [
   { path: '/works', name: 'works', component: TabPlaceholder },
   { path: '/publish', name: 'publish', component: TabPlaceholder },
   { path: '/library', name: 'library', component: TabPlaceholder },
+  { path: '/intake', name: 'intake', component: TabPlaceholder },
   { path: '/ops', name: 'ops', component: TabPlaceholder },
 ];
 

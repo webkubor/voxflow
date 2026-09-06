@@ -157,6 +157,7 @@
             <n-tab-pane name="dialogue" tab="剧本"><DialogueTab /></n-tab-pane>
             <n-tab-pane name="library" tab="音频"><LibraryTab /></n-tab-pane>
             <n-tab-pane name="suno" tab="音乐"><SunoTab /></n-tab-pane>
+            <n-tab-pane name="intake" tab="入库"><IntakeTab /></n-tab-pane>
             <n-tab-pane name="works" tab="发歌"><PipelineBoard /></n-tab-pane>
             <n-tab-pane name="publish" tab="发行"><PublishTab /></n-tab-pane>
             <n-tab-pane name="ops" tab="运营"><OpsTab /></n-tab-pane>
@@ -263,6 +264,7 @@ const SunoTab = lazyTab(() => import('../tabs/SunoTab.vue'), 'AI 音乐');
 const PipelineBoard = lazyTab(() => import('./PipelineBoard.vue'), '发歌记录');
 const PublishTab = lazyTab(() => import('../tabs/PublishTab.vue'), '全网发行');
 const LibraryTab = lazyTab(() => import('../tabs/LibraryTab.vue'), '音频文件');
+const IntakeTab = lazyTab(() => import('../tabs/IntakeTab.vue'), '自动化发布');
 const OpsTab = lazyTab(() => import('../tabs/OpsTab.vue'), '运营台');
 import GlobalPlayer from './GlobalPlayer.vue';
 import TaskPanel from './TaskPanel.vue';
@@ -347,6 +349,8 @@ const tabs = [
   { name: 'dialogue', label: '剧本创作', icon: 'dialogue' },
   { name: 'library', label: '音频文件', icon: 'library' },
   { name: 'suno', label: 'AI 音乐', icon: 'suno' },
+  // 只负责发布的人从这一页进：贴链接就能入库备料，不碰模型和 Suno
+  { name: 'intake', label: '自动化发布', icon: 'upload' },
   { name: 'works', label: '发歌记录', icon: 'board' },
   { name: 'publish', label: '全网发行', icon: 'publish' },
   { name: 'ops', label: '运营台', icon: 'pulse' },

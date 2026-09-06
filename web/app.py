@@ -1767,6 +1767,89 @@ def pipeline_readiness(track_id: str, platform: str):
     return r
 
 
+class ImportUrlRequest(BaseModel):
+    url: str                      # R2 直链或任意可直接下载的音频地址
+    title: str = ""
+    album: str = ""
+    platform: str = "qishui"
+    publisher: str = ""
+    instrumental: bool = True     # BGM 居多，默认纯音乐
+    with_cover: bool = False      # ⚠️ 出封面要花钱，默认关
+
+
+@app.post("/api/pipeline/import-url")
+def pipeline_import_url(req: ImportUrlRequest):
+    """贴一个音频链接进来 → 下载 → 入库 → 备料。一步到位。
+
+    ## 这个端点是给「只负责发布的人」用的
+
+    他们手里只有台账里那条「⬇ 下载音频」的链接。此前要先手动下载、
+    改名、丢进目录、再跑脚本 —— 四步，每步都能错（下到 Downloads 忘了移、
+    名字对不上台账、目录路径记错）。而这四步机器全能做。
+
+    封面**默认不出**：出图花钱（museav 1 积分/张 ≈ ¥0.83）。
+    贴十个链接就是十块，得由人显式点头，不能因为「顺手」就替他花掉。
+    """
+    from core import cover, db, notify, pipeline, r2  # noqa: PLC0415
+    from core.utils import sanitize_path_component  # noqa: PLC0415
+
+    url = (req.url or "").strip()
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(400, "请贴一个 http(s) 开头的音频直链")
+
+    # 文件名从 URL 尾巴取，取不到就用标题。**不猜扩展名** ——
+    # 猜错会让平台在上传时才报「格式不支持」，那时候人已经填完一整张表了。
+    from urllib.parse import unquote, urlparse  # noqa: PLC0415
+    tail = unquote(os.path.basename(urlparse(url).path))
+    ext = os.path.splitext(tail)[1].lower()
+    if ext not in AUDIO_EXTS:
+        raise HTTPException(400, f"链接看不出音频格式（{ext or '无扩展名'}），"
+                                 f"支持 {', '.join(sorted(AUDIO_EXTS))}")
+
+    name = (req.title or os.path.splitext(tail)[0] or "未命名").strip()
+    safe = sanitize_path_component(name, fallback="未命名")
+    music_dir = OUT_DIR / MUSIC_SUBDIR
+    music_dir.mkdir(parents=True, exist_ok=True)
+    dest = music_dir / f"{safe}{ext}"
+
+    if not dest.exists():
+        try:
+            from core import net  # noqa: PLC0415
+            with net.opener().open(url, timeout=120) as resp:
+                dest.write_bytes(resp.read())
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(502, f"下载失败：{str(e)[:160]}") from e
+    if dest.stat().st_size < 10_000:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(502, "下载到的文件太小，多半不是音频（链接可能已失效）")
+
+    track_id = uuid.uuid4().hex[:12]
+    db.init()
+    rel = os.path.relpath(str(dest), str(DATA_DIR)).replace("\\", "/")
+    pipeline.upsert(track_id, title=name, stage="selected", audio_file=rel,
+                    album_desc=req.album, note=f"链接导入 {url[:120]}")
+
+    prep = pipeline.prepare(track_id, req.platform, album=req.album,
+                            publisher=req.publisher, instrumental=req.instrumental)
+
+    cover_result = None
+    if req.with_cover:
+        try:
+            c = cover.generate(cover.build_prompt(name), track_id=track_id, ratio="1:1")
+            pipeline.upsert(track_id, cover_file=c.get("path", ""))
+            cover_result = {"ok": True, "credits": c.get("credits"), "url": c.get("url")}
+            prep = pipeline.prepare(track_id, req.platform, album=req.album,
+                                    publisher=req.publisher, instrumental=req.instrumental)
+        except Exception as e:  # noqa: BLE001 —— 出图失败不该让整次导入白做
+            cover_result = {"ok": False, "错误": str(e)[:200]}
+
+    obs.log("track_imported_url", track_id=track_id, title=name[:40],
+            size_kb=dest.stat().st_size // 1024, cover=bool(cover_result and cover_result.get("ok")))
+    return {"ok": True, "track_id": track_id, "title": name,
+            "文件": dest.name, "大小KB": dest.stat().st_size // 1024,
+            "备料": prep, "封面": cover_result}
+
+
 @app.post("/api/pipeline/import")
 async def pipeline_import(
     audio: UploadFile = File(...),
