@@ -2,12 +2,27 @@
   <div class="tab-content-container">
     <section class="intake">
       <header class="intake-head">
-        <h2>贴链接 · 自动入库备料</h2>
-        <p class="sub">
-          从台账里复制「⬇ 下载音频」那个链接贴进来。
-          自动下载 → 入库 → 备料，之后照着清单去平台上传就行。
-          <b>不需要 Suno 账号，也不需要下载 AI 模型。</b>
-        </p>
+        <h2>自动化发布</h2>
+        <!-- 「歌是怎么来的」有两条路，此前界面上完全没体现 ——
+             拿到音频的新人不知道自己该走哪条，只能挨个 tab 点过去。 -->
+        <div class="paths">
+          <div class="path">
+            <span class="pn">A</span>
+            <div>
+              <b>别人给我一个链接</b>
+              <p>台账里那条「⬇ 下载音频」，复制粘贴到下面即可。<br>
+                 <b>不需要 Suno 账号，也不需要下 7GB 模型。</b></p>
+            </div>
+          </div>
+          <div class="path">
+            <span class="pn">B</span>
+            <div>
+              <b>歌是我自己在这台机器上生成的</b>
+              <p>不用走这一页 —— 去「AI 音乐」生成，产物会自动进
+                 <a href="#/works">发歌记录</a>。这里是给「只拿到音频」的人用的。</p>
+            </div>
+          </div>
+        </div>
       </header>
 
       <div class="form">
@@ -137,6 +152,18 @@ const copy = async (text) => {
 </script>
 
 <style scoped>
+.paths { display: flex; flex-direction: column; gap: 10px; margin: 0 0 var(--vf-space-4); }
+.path {
+  display: flex; gap: 10px; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--vf-border, #333); font-size: 13px; line-height: 1.7;
+}
+.path p { margin: 2px 0 0; color: var(--vf-text-3, #999); }
+.pn {
+  flex: none; width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 12px; font-weight: 600;
+  background: var(--vf-bg-3, rgba(255,255,255,.08));
+}
+
 .intake { max-width: 720px; margin: 0 auto; padding: var(--vf-space-4) var(--vf-space-2); }
 .intake-head h2 { margin: 0 0 6px; font-size: 18px; }
 .sub { margin: 0 0 var(--vf-space-4); color: var(--vf-text-3, #999); font-size: 13px; line-height: 1.7; }

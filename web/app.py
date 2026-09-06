@@ -1777,6 +1777,90 @@ class ImportUrlRequest(BaseModel):
     with_cover: bool = False      # ⚠️ 出封面要花钱，默认关
 
 
+@app.get("/api/publish/preflight")
+def publish_preflight(platform: str = "qishui"):
+    """自动化发布的**前置条件**：不是缺什么素材，是这台机器能不能发。
+
+    ## 为什么单独一项
+
+    备料检查回答的是「这首歌的物料齐没齐」（音频、封面、歌词）。
+    但物料齐了也可能发不出去 —— 没登录平台、museav 没积分、
+    browser-harness 没装。此前这些全没检查，人按着「✅ 备料齐了」
+    去跑发布命令，跑起来才发现登录过期，白填一遍表。
+
+    ## 能验的和不能验的，分开说
+
+    有些事服务端验不了 —— **平台登录态在你的浏览器里**，不在这个进程里。
+    与其猜一个「大概已登录」，不如老实说「验不了，点这个链接自己看一眼」。
+    假装检查过比不检查更危险：人会信它。
+    """
+    import shutil as _sh  # noqa: PLC0415
+
+    from core import cover, notify, pipeline, r2  # noqa: PLC0415
+    from core.paths import ARTIST_FILE  # noqa: PLC0415
+
+    spec = pipeline.PLATFORMS.get(platform) or {}
+    items = []
+
+    def add(name, ok, detail, *, verifiable=True, link=""):
+        items.append({"项": name, "就绪": bool(ok), "说明": detail,
+                      "可自动验证": verifiable, "链接": link})
+
+    # 1) 出图能力：museav 装没装、登没登、有没有积分
+    cs = cover.status() if hasattr(cover, "status") else {}
+    if not cs:
+        try:
+            b = cover.balance()
+            cs = {"can_generate": b.get("available") and (b.get("unmetered") or b.get("credits", 0) > 0),
+                  "detail": b.get("detail", "")}
+        except Exception as e:  # noqa: BLE001
+            cs = {"can_generate": False, "detail": str(e)[:120]}
+    add("封面出图（museav）", cs.get("can_generate"),
+        cs.get("detail") or "museav 未就绪 —— 终端跑 `museav login`，或检查积分")
+
+    # 2) 自动填表要用的浏览器工具
+    harness = _sh.which("browser-harness")
+    add("browser-harness", bool(harness),
+        f"已装：{harness}" if harness else "没装 —— 自动填表跑不了，只能手工填")
+
+    # 3) 平台脚本
+    script = PROJECT_DIR / f"scripts/publish_{platform}.py" if "PROJECT_DIR" in dir() else None
+    from core.paths import PROJECT_DIR as _PD  # noqa: PLC0415
+    script = _PD / f"scripts/publish_{platform}.py"
+    add(f"{spec.get('label', platform)} 填表脚本", script.exists(),
+        f"scripts/publish_{platform}.py" if script.exists()
+        else f"没有 publish_{platform}.py —— 这个平台还没做自动填表")
+
+    # 4) 艺人档案（版权登记和结算要）
+    ok_artist, detail = False, "artist.json 不存在"
+    try:
+        a = json.loads(ARTIST_FILE.read_text(encoding="utf-8"))
+        ok_artist = bool(a.get("stage_name") and a.get("real_name"))
+        detail = f"{a.get('stage_name','?')} / 法律姓名已填" if ok_artist else "缺艺名或法律姓名"
+    except (OSError, ValueError):
+        pass
+    add("艺人档案", ok_artist, detail)
+
+    # 5) R2（把音频发给别人下载要用）
+    add("R2 图床", r2.enabled(),
+        "已配置" if r2.enabled() else "没配 —— 音频传不上公网，别人拿不到")
+
+    # 6) 台账
+    acc = notify.account()
+    add("飞书台账", bool((acc.get("base") or {}).get("app_token")),
+        f"{acc.get('company','')} · {acc.get('chat_name','')}" if acc else "没配通知账户")
+
+    # 7) 平台登录 —— **服务端验不了**，登录态在用户浏览器里
+    console = spec.get("console") or ""
+    add(f"{spec.get('label', platform)} 登录", None,
+        "登录态在你的浏览器里，这个进程看不到 —— 点右边链接确认能进后台",
+        verifiable=False, link=console)
+
+    blocking = [i for i in items if i["可自动验证"] and not i["就绪"]]
+    return {"platform": platform, "items": items,
+            "可以发布": not blocking, "阻塞项": [i["项"] for i in blocking]}
+
+
 @app.post("/api/pipeline/import-url")
 def pipeline_import_url(req: ImportUrlRequest):
     """贴一个音频链接进来 → 下载 → 入库 → 备料。一步到位。
@@ -1823,11 +1907,39 @@ def pipeline_import_url(req: ImportUrlRequest):
         dest.unlink(missing_ok=True)
         raise HTTPException(502, "下载到的文件太小，多半不是音频（链接可能已失效）")
 
-    track_id = uuid.uuid4().hex[:12]
     db.init()
     rel = os.path.relpath(str(dest), str(DATA_DIR)).replace("\\", "/")
-    pipeline.upsert(track_id, title=name, stage="selected", audio_file=rel,
-                    album_desc=req.album, note=f"链接导入 {url[:120]}")
+
+    # ⚠️ **先查有没有同一首，别无脑新建。**
+    #
+    # 同一首歌完全可能已经在库里了：Suno 同步补录过、或者上次导入过。
+    # 无脑 uuid4 新建的后果是同名两条 —— 一条有封面一条没有、
+    # 一条在备料一条在发行，人看着一模一样的两行不知道该点哪个。
+    #
+    # 认三样，任一命中就复用：音频路径、发行名、原始曲名。
+    # 音频路径最硬（同一个文件不可能是两首歌），放第一位。
+    track_id = ""
+    for row in pipeline.list_tracks():
+        if row.get("audio_file") == rel or \
+           (row.get("release_title") or "").strip() == name or \
+           (row.get("title") or "").strip() == name:
+            track_id = row["id"]
+            break
+    reused = bool(track_id)
+    track_id = track_id or uuid.uuid4().hex[:12]
+    fields = {"stage": "selected", "audio_file": rel,
+              "note": f"链接导入 {url[:120]}"}
+    if req.album:
+        fields["album_desc"] = req.album
+    # 复用时**不覆盖曲名**：库里那条的曲名可能是 Suno 的原始标题
+    # （一次出两首时两条同名），而这次传进来的是发行名 —— 覆盖过去
+    # 会把「原始曲名 / 发行歌名」这组对应关系搞丢。
+    if reused:
+        fields["release_title"] = name
+    else:
+        fields["title"] = name
+        fields["release_title"] = name
+    pipeline.upsert(track_id, **fields)
 
     prep = pipeline.prepare(track_id, req.platform, album=req.album,
                             publisher=req.publisher, instrumental=req.instrumental)
@@ -1846,6 +1958,7 @@ def pipeline_import_url(req: ImportUrlRequest):
     obs.log("track_imported_url", track_id=track_id, title=name[:40],
             size_kb=dest.stat().st_size // 1024, cover=bool(cover_result and cover_result.get("ok")))
     return {"ok": True, "track_id": track_id, "title": name,
+            "复用已有曲目": reused,
             "文件": dest.name, "大小KB": dest.stat().st_size // 1024,
             "备料": prep, "封面": cover_result}
 

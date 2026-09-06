@@ -111,19 +111,30 @@
         <!-- 右侧主创作工作区 -->
         <n-layout-content class="main-content">
           <!-- Tab 导航：图标 + 文字 -->
-          <nav class="tab-nav" role="tablist">
+          <!-- 一级：三个入口。二级只在选中那一组里出现。 -->
+          <nav class="nav-l1" role="tablist">
             <button
-              v-for="t in tabs"
-              :key="t.name"
-              class="tab-nav-item"
-              :class="{ active: currentTab === t.name }"
+              v-for="g in visibleGroups"
+              :key="g.key"
+              class="nav-l1-item"
+              :class="{ active: activeGroup?.key === g.key }"
               role="tab"
-              :aria-selected="currentTab === t.name"
-              @click="goTab(t.name)"
+              :aria-selected="activeGroup?.key === g.key"
+              @click="goTab(g.tabs[0].name)"
             >
-              <Icon :name="t.icon" size="md" />
-              <span class="tab-nav-label">{{ t.label }}</span>
+              <Icon :name="g.icon" size="md" />
+              <span>{{ g.title }}</span>
             </button>
+          </nav>
+          <nav v-if="(activeGroup?.tabs.length || 0) > 1" class="nav-l2">
+            <button
+              v-for="t in activeGroup.tabs"
+              :key="t.name"
+              class="nav-l2-item"
+              :class="{ active: currentTab === t.name }"
+              :title="t.hint"
+              @click="goTab(t.name)"
+            >{{ t.label }}</button>
           </nav>
 
           <!-- 共享的「当前音色」状态条 -->
@@ -323,38 +334,65 @@ watch(
   { immediate: true },
 );
 
-const tabs = [
-  // 菜单按「先做，再看，最后经营」排，名字必须说清各自回答什么问题。
-  //
-  // 2026-09-06 之前叫「资产库」和「作品看板」，两个名字什么都能装，
-  // 于是没人分得清它俩和左栏「音色库」的关系 —— 三样东西其实回答三个
-  // 完全不同的问题，重叠的只有名字：
-  //
-  //   音色库（左栏）  我有哪些**嗓子**可用          输入
-  //   音频文件        我生成过哪些音频**文件**      输出，能听能下载
-  //   发歌记录        我的**歌**走到哪一步了        发行流水线
-  //
-  // 「资产库」→「音频文件」：它就是磁盘上那些 wav/mp3，说清楚就不歧义了。
-  // 「作品看板」→「发歌记录」：这才是「哪些发过、哪些没发」的那张表。
-  //
-  // 顺序也改了。原本「音频文件」夹在发歌记录和全网发行中间 —— 等于在歌曲
-  // 链条里插了个不相干的东西。**音乐作品才是这个工具的最终产物**，
-  // 音频文件只是做声音那三步的产物、是中间素材。
-  //
-  // 现在分成前后两段，各自一条完整链路：
-  //   前四个  做声音 → 声音产物：克隆 / 设计 / 剧本 → 音频文件
-  //   后四个  做歌 → 发歌 → 发行 → 经营：AI 音乐 → 发歌记录 → 全网发行 → 运营台
-  { name: 'clone', label: '声音克隆', icon: 'clone' },
-  { name: 'design', label: '音色设计', icon: 'design' },
-  { name: 'dialogue', label: '剧本创作', icon: 'dialogue' },
-  { name: 'library', label: '音频文件', icon: 'library' },
-  { name: 'suno', label: 'AI 音乐', icon: 'suno' },
-  // 只负责发布的人从这一页进：贴链接就能入库备料，不碰模型和 Suno
-  { name: 'intake', label: '自动化发布', icon: 'upload' },
-  { name: 'works', label: '发歌记录', icon: 'board' },
-  { name: 'publish', label: '全网发行', icon: 'publish' },
-  { name: 'ops', label: '运营台', icon: 'pulse' },
+/**
+ * 导航分成三段，不再平铺八个。
+ *
+ * 八个平铺入口 = 八个都要理解。实际上只有三件事：做声音、做音乐、把歌发出去。
+ * 分了组之后，拿到音频的人一眼看到「发布与经营」，不用先搞懂什么是音色设计。
+ *
+ * **要模型的 tab 在没下模型时直接不显示**（needsModel）。
+ * 此前是显示出来、点进去再弹一张「请先下载 7GB 模型」——
+ * 等于让人先建立一遍认知再告诉他用不了。选择不下模型的人，
+ * 这三个入口对他就是不存在的功能，不该占据他的注意力。
+ */
+/**
+ * 两级导航：一级三个入口，二级是那一组内部的分工。
+ *
+ * 此前九个入口平铺一行 —— 九个都要理解，而它们其实只回答三个问题：
+ * 我要做音色？做音乐？还是把歌发出去？
+ *
+ * 中间版本我给平铺的按钮插了几个分组标签，那不是层级，是把一行挤得更乱
+ * —— 用户当场指出来了。层级的意义在于**一次只让人面对三个选择**。
+ *
+ * **要模型的一级入口在没下模型时整个不显示**（needsModel）。
+ * 此前是显示出来、点进去再弹「请先下载 7GB 模型」——
+ * 等于让人先建立一遍认知再告诉他用不了。
+ */
+const TAB_GROUPS = [
+  {
+    key: 'voice', title: '音色', icon: 'voice', needsModel: true,
+    tabs: [
+      { name: 'clone', label: '声音克隆', icon: 'clone', hint: '用参考音频克隆一个音色' },
+      { name: 'design', label: '音色设计', icon: 'design', hint: '用文字描述设计一个音色' },
+      { name: 'dialogue', label: '剧本创作', icon: 'dialogue', hint: '多角色对话合成' },
+      { name: 'library', label: '音频文件', icon: 'library', hint: '本机生成过的音频文件' },
+    ],
+  },
+  {
+    key: 'music', title: '音乐', icon: 'suno',
+    tabs: [
+      { name: 'suno', label: 'AI 音乐', icon: 'suno', hint: '生成歌曲 / BGM / 翻唱（需 Suno 会员）' },
+    ],
+  },
+  {
+    key: 'release', title: '发行', icon: 'publish',
+    tabs: [
+      { name: 'intake', label: '自动化发布', icon: 'upload', hint: '拿到音频从这里进：贴链接自动入库备料' },
+      { name: 'works', label: '发歌记录', icon: 'board', hint: '哪些发过、哪些没发、谁负责' },
+      { name: 'publish', label: '全网发行', icon: 'publish', hint: '各平台账号与已上架作品' },
+      { name: 'ops', label: '运营台', icon: 'pulse', hint: '成本、收益、回本播放量' },
+    ],
+  },
 ];
+
+const tabs = TAB_GROUPS.flatMap((g) => g.tabs);
+
+const visibleGroups = computed(() => TAB_GROUPS.filter(
+  (g) => !g.needsModel || modelStatus.value?.base?.ready || modelStatus.value?.design?.ready,
+));
+
+const activeGroup = computed(() =>
+  visibleGroups.value.find((g) => g.tabs.some((t) => t.name === currentTab.value)));
 
 const goTab = (name) => {
   if (route.name !== name) router.push({ name });
@@ -510,6 +548,27 @@ const formatRenewDate = (iso) => {
 </script>
 
 <style scoped>
+.nav-l1 { display: flex; gap: 4px; }
+.nav-l1-item {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 18px; border-radius: 8px 8px 0 0; cursor: pointer;
+  border: none; background: transparent; color: var(--vf-text-2, #bbb);
+  font-size: 14px; border-bottom: 2px solid transparent;
+}
+.nav-l1-item.active {
+  color: var(--vf-text-1, #fff); font-weight: 600;
+  border-bottom-color: var(--vf-accent, #7c9cff);
+}
+.nav-l2 {
+  display: flex; gap: 2px; padding: 6px 0 2px;
+  border-bottom: 1px solid var(--vf-border, #333);
+}
+.nav-l2-item {
+  padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+  border: none; background: transparent; color: var(--vf-text-3, #999);
+}
+.nav-l2-item.active { background: var(--vf-bg-3, rgba(255,255,255,.08)); color: var(--vf-text-1, #fff); }
+
 /* 异步组件加载失败的兜底屏。用 :deep 是因为它渲染在 errorComponent 里，
    不在本组件的模板作用域内。 */
 :deep(.tab-load-error) {
