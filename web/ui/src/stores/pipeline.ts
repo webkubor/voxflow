@@ -43,7 +43,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
     const data = await guard(() => api.pipeline(), error);
     stages.value = data.stages || [];
     stageLabels.value = data.stage_labels || {};
-    platforms.value = data.platforms || [];
+    platforms.value = data.platforms || ({} as PipelineResponse['platforms']);
     summary.value = data.summary || {};
     tracks.value = data.tracks || [];
     return data;

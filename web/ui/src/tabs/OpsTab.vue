@@ -69,9 +69,13 @@
             <div v-else class="rev-grid">
               <div v-for="r in revenueRows" :key="r.key" class="rev-card">
                 <div class="rev-head">
-                  <span class="rev-name">{{ r.label }}</span>
+                  <span class="rev-name">
+                    <PlatformMark :platform="r.key" size="sm" />
+                    {{ r.label }}
+                  </span>
                   <span class="rev-earn">¥{{ fmt(r.earned_cny) }}</span>
                 </div>
+                <div v-if="r.artist" class="rev-artist">{{ r.artist }}</div>
                 <div class="rev-stats">
                   <span>{{ r.songs }} 首在线</span>
                   <span>{{ r.plays.toLocaleString() }} 播放</span>
@@ -302,6 +306,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { api, toMessage } from '../api';
 import Icon from '../components/Icon.vue';
+import PlatformMark from '../components/PlatformMark.vue';
 import WarnBanner from '../components/WarnBanner.vue';
 import type { EconomicsResponse, HealthResponse, LogRecord, MetricsResponse, ProviderUsage, TrackEconomics } from '../types/api';
 
@@ -534,8 +539,12 @@ onUnmounted(() => { clearInterval(fastTimer); clearInterval(slowTimer); });
   flex-direction: column;
   gap: 6px;
 }
-.rev-head { display: flex; justify-content: space-between; align-items: baseline; }
-.rev-name { font-size: 13px; color: var(--vf-text-1); }
+.rev-head { display: flex; justify-content: space-between; align-items: center; gap: var(--vf-space-2); }
+.rev-name {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--vf-text-1);
+}
+.rev-artist { font-size: 12px; color: var(--vf-text-2); }
 .rev-earn { font-size: 16px; font-weight: 600; color: var(--vf-ok); font-variant-numeric: tabular-nums; }
 .rev-stats { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--vf-text-3); }
 .rev-rate { font-size: 12px; color: var(--vf-text-2); font-variant-numeric: tabular-nums; }

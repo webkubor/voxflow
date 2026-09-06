@@ -24,7 +24,7 @@
 /** 作品在流水线上的阶段。顺序即流程顺序。 */
 export type Stage = 'draft' | 'generated' | 'selected' | 'publishing' | 'published' | 'archived';
 
-/** 平台标识。加平台时这里和 configs/platforms.json 一起改。 */
+/** 平台标识。加平台时这里和 configs/platforms.json、core/pipeline.PLATFORMS 一起改。 */
 export type PlatformKey = 'qishui' | 'netease' | 'tencent';
 
 /** 作品在某个平台上的状态。 */
@@ -86,7 +86,13 @@ export interface PipelineResponse {
   stages: Stage[];
   stage_labels: Record<string, string>;
   /** 同样是对象不是数组 */
-  platforms: Record<PlatformKey, { label: string; cover: string; ai_field: string }>;
+  platforms: Record<PlatformKey, {
+    label: string;
+    cover: string;
+    ai_field: string;
+    console?: string;
+    color?: string;
+  }>;
   summary: Record<string, number>;
   tracks: Track[];
 }
@@ -150,7 +156,21 @@ export interface PlatformAccount {
   albums: Array<{ id: string; name: string; size: number }>;
   /** 台账里实际在线的数量。跟 song_count 对不上说明同步漏了。 */
   local_online_count: number;
+  /** 台账里这个平台登记过的作品数（含审核中）。 */
+  local_listed_count: number;
   synced_at: string;
+  /** false = 还没跑过同步脚本，stats 是空的，不要当成「零播放」。 */
+  synced: boolean;
+  console_url: string;
+  color: string;
+}
+
+/** GET /api/platform-accounts。accounts 始终包含三个平台。 */
+export interface PlatformAccountsResponse {
+  accounts: Record<string, PlatformAccount>;
+  /** 发行主体艺名，来自 artist.json。各平台账号都归它。 */
+  stage_name: string;
+  roles: string[];
 }
 
 export interface Persona {

@@ -121,6 +121,7 @@
               :key="pk"
               class="meta-pill warn"
             >
+              <PlatformMark :platform="pk" size="sm" />
               {{ platformLabel(pk) }} · {{ statusLabel(info.status) }}
             </span>
           </div>
@@ -169,7 +170,10 @@
             <pre class="detail-lyrics">{{ t.lyrics }}</pre>
           </div>
           <div v-for="(info, pk) in t.platforms" :key="pk" class="detail-block">
-            <span class="detail-label">{{ platformLabel(pk) }}</span>
+            <span class="detail-label">
+              <PlatformMark :platform="pk" size="sm" />
+              {{ platformLabel(pk) }}
+            </span>
             <div class="detail-platform">
               <span class="meta-pill warn">{{ statusLabel(info.status) }}</span>
               <span v-if="info.submitted_at" class="detail-meta">提交于 {{ info.submitted_at.replace('T', ' ') }}</span>
@@ -197,8 +201,11 @@
       <div class="platform-picks">
         <label v-for="(p, pk) in platforms" :key="pk" class="platform-pick">
           <input type="checkbox" :value="pk" v-model="pickedPlatforms" />
-          <span class="pick-label">{{ p.label }}</span>
-          <span class="pick-meta">封面 {{ p.cover }} · {{ p.ai_field }}</span>
+          <PlatformMark :platform="pk" size="md" />
+          <span class="pick-copy">
+            <span class="pick-label">{{ p.label }}</span>
+            <span class="pick-meta">封面 {{ p.cover }} · {{ p.ai_field }}</span>
+          </span>
         </label>
       </div>
 
@@ -271,6 +278,7 @@ import { api, toMessage } from '../api';
 import { usePipelineStore } from '../stores/pipeline';
 import { useTasksStore } from '../stores/tasks';
 import Icon from './Icon.vue';
+import PlatformMark from './PlatformMark.vue';
 
 const pipelineStore = usePipelineStore();
 const tasksStore = useTasksStore();
@@ -866,8 +874,11 @@ const statusLabel = (s) => PLATFORM_STATUS[s] || s;
 .detail-block { display: flex; gap: var(--vf-space-3); font-size: 12px; }
 .detail-label {
   flex: none;
-  width: 56px;
+  min-width: 56px;
   color: var(--vf-text-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .detail-tags { color: var(--vf-text-2); line-height: 1.6; }
 .detail-lyrics {
@@ -909,8 +920,9 @@ const statusLabel = (s) => PLATFORM_STATUS[s] || s;
   transition: background 0.15s;
 }
 .platform-pick:hover { background: var(--vf-bg-3); }
+.pick-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .pick-label { color: var(--vf-text-1); }
-.pick-meta { margin-left: auto; font-size: 11px; color: var(--vf-text-3); }
+.pick-meta { font-size: 11px; color: var(--vf-text-3); }
 
 .inbox-list { display: flex; flex-direction: column; gap: var(--vf-space-2); }
 .inbox-item {

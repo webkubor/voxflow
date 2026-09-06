@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from core import db
-from core.paths import DATA_DIR, LEDGER_FILE, PUBLISH_ACCOUNTS_FILE
+from core.paths import ARTIST_FILE, DATA_DIR, LEDGER_FILE, PUBLISH_ACCOUNTS_FILE
 
 BASE_DIR = DATA_DIR          # 台账里的相对路径都是相对数据根
 LEDGER = LEDGER_FILE
@@ -58,18 +58,45 @@ STAGE_LABELS = {
 }
 
 # 目标平台。SOP 差异（封面尺寸、AI 声明方式、上传方式）见 docs/ROADMAP.md，
-# 这里只登记「支持发到哪」。
+# 这里只登记「支持发到哪」。label 是给人看的名字（QQ 音乐不要写成「腾讯系」）。
 PLATFORMS = {
-    "qishui": {"label": "汽水音乐", "cover": "1440x1440", "ai_field": "创作方式=AI"},
-    "netease": {"label": "网易云", "cover": "1400x1400", "ai_field": "AI 音乐人身份"},
-    "tencent": {"label": "腾讯系", "cover": "待确认", "ai_field": "待确认"},
+    "qishui": {
+        "label": "汽水音乐", "cover": "1440x1440", "ai_field": "创作方式=AI",
+        "console": "https://music.douyin.com/console", "color": "#2EE6D6",
+    },
+    "netease": {
+        "label": "网易云音乐", "cover": "1400x1400", "ai_field": "AI 音乐人身份",
+        "console": "https://music.163.com/musician", "color": "#EC4141",
+    },
+    "tencent": {
+        "label": "QQ音乐", "cover": "待确认", "ai_field": "待确认",
+        "console": "https://y.qq.com/musician", "color": "#31C27C",
+    },
 }
 
 DEFAULT_PUBLISH_ACCOUNTS = [
     {"id": "qishui-main", "platform": "qishui", "label": "汽水音乐账号"},
     {"id": "netease-main", "platform": "netease", "label": "网易云音乐人账号"},
-    {"id": "tencent-main", "platform": "tencent", "label": "腾讯音乐人账号"},
+    {"id": "tencent-main", "platform": "tencent", "label": "QQ音乐账号"},
 ]
+
+# artist.json 的 platform_profiles 用中文名；库和 API 用 qishui/netease/tencent。
+# 两边都认，避免档案里写「QQ音乐」就对不上账号。
+_PROFILE_KEY = {
+    "qishui": "qishui", "汽水音乐": "qishui", "汽水": "qishui",
+    "netease": "netease", "网易云音乐": "netease", "网易云": "netease",
+    "tencent": "tencent", "QQ音乐": "tencent", "腾讯音乐人": "tencent",
+    "腾讯系": "tencent", "腾讯音乐": "tencent", "腾讯音乐（QQ 音乐）": "tencent",
+}
+
+# 艺人档案里的角色键 → 界面上的短标签。顺序即展示顺序。
+_ROLE_LABELS = (
+    ("performer", "唱"),
+    ("lyricist", "词"),
+    ("composer", "曲"),
+    ("producer", "制作"),
+    ("album_artist", "专辑歌手"),
+)
 
 LOGIN_STATUS_LABELS = {
     "connected": "已登录",
@@ -114,6 +141,30 @@ def _publish_accounts() -> list[dict[str, Any]]:
         })
     return normalized
 
+
+def _artist_identity() -> dict[str, Any]:
+    """艺名与各平台主页。真源 artist.json；读不到就空，不编数据。"""
+    empty: dict[str, Any] = {"stage_name": "", "roles": [], "profiles": {}}
+    try:
+        data = json.loads(ARTIST_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return empty
+    if not isinstance(data, dict):
+        return empty
+    profiles: dict[str, dict[str, Any]] = {}
+    for p in data.get("platform_profiles") or []:
+        if not isinstance(p, dict):
+            continue
+        key = p.get("key") or _PROFILE_KEY.get(str(p.get("platform") or ""))
+        if key in PLATFORMS:
+            profiles[key] = p
+    roles = data.get("roles") if isinstance(data.get("roles"), dict) else {}
+    role_tags = [label for field, label in _ROLE_LABELS if roles.get(field)]
+    return {
+        "stage_name": str(data.get("stage_name") or ""),
+        "roles": role_tags,
+        "profiles": profiles,
+    }
 
 
 def _now() -> str:
@@ -384,14 +435,21 @@ def list_platform_accounts() -> dict[str, Any]:
 
     对不上说明同步漏了或者平台那边有变动 —— 数字自己会说话，
     比在界面上写「同步成功」有用得多。
+
+    **三个平台始终都返回**，哪怕还没跑过同步脚本。身份来自 artist.json
+    （艺名、主页），统计来自 platform_accounts 表。汽水没同步过后台时，
+    界面仍能看到「月栖洲 / 汽水音乐」，而不是整页「未接入」。
     """
     db.init()
+    identity = _artist_identity()
     with db.connect() as c:
-        rows = c.execute("SELECT * FROM platform_accounts").fetchall()
+        rows = {r["platform"]: dict(r) for r in c.execute("SELECT * FROM platform_accounts")}
         online = {r["platform"]: r["n"] for r in c.execute(
             "SELECT platform, COUNT(*) n FROM track_platforms "
             "WHERE status IN ('online','published') GROUP BY platform")}
-        albums_by = {}
+        listed = {r["platform"]: r["n"] for r in c.execute(
+            "SELECT platform, COUNT(*) n FROM track_platforms GROUP BY platform")}
+        albums_by: dict[str, list] = {}
         # albums 的主键是 key（<platform>-<album_id>），不是 id —— 写错列名
         # 会让整个端点 500，而前端只看到「加载失败」
         for r in c.execute("SELECT platform, album_id, title, track_count FROM albums "
@@ -399,15 +457,41 @@ def list_platform_accounts() -> dict[str, Any]:
             albums_by.setdefault(r["platform"], []).append(
                 {"id": r["album_id"], "name": r["title"], "size": r["track_count"]})
 
-    out = {}
-    for r in rows:
-        d = dict(r)
-        d["alias"] = db._j(r["alias"], []) or []
-        d["stats"] = db._j(r["stats"], {}) or {}
-        d["albums"] = albums_by.get(r["platform"], [])
-        d["local_online_count"] = online.get(r["platform"], 0)
-        out[r["platform"]] = d
-    return {"accounts": out}
+    out: dict[str, Any] = {}
+    for key, meta in PLATFORMS.items():
+        row = rows.get(key) or {}
+        profile = identity["profiles"].get(key) or {}
+        artist_name = (row.get("artist_name") or identity["stage_name"] or "").strip()
+        artist_url = (row.get("artist_url") or profile.get("artist_url") or "").strip()
+        user_url = (row.get("user_url") or profile.get("user_url") or "").strip()
+        synced_at = row.get("synced_at") or ""
+        out[key] = {
+            "platform": key,
+            "label": meta["label"],
+            "artist_id": row.get("artist_id") or profile.get("artist_id") or "",
+            "artist_name": artist_name,
+            "alias": db._j(row.get("alias"), []) or [],
+            "avatar_url": row.get("avatar_url") or "",
+            "brief": row.get("brief") or "",
+            "artist_url": artist_url,
+            "user_id": row.get("user_id") or profile.get("user_id") or "",
+            "user_url": user_url,
+            "song_count": int(row["song_count"] or 0) if row.get("song_count") is not None else 0,
+            "album_count": int(row["album_count"] or 0) if row.get("album_count") is not None else 0,
+            "stats": db._j(row.get("stats"), {}) or {},
+            "albums": albums_by.get(key, []),
+            "local_online_count": online.get(key, 0),
+            "local_listed_count": listed.get(key, 0),
+            "synced_at": synced_at,
+            "synced": bool(synced_at),
+            "console_url": meta.get("console") or "",
+            "color": meta.get("color") or "",
+        }
+    return {
+        "accounts": out,
+        "stage_name": identity["stage_name"],
+        "roles": identity["roles"],
+    }
 
 
 def upsert_platform_account(platform: str, **fields: Any) -> None:

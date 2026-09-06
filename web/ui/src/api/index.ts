@@ -37,7 +37,7 @@ import { API_TIMEOUT_MS, API_RETRY_LIMIT } from '../config/constants';
 import type {
   Album, CapabilitiesResponse, PersonasResponse, PipelineResponse,
   EconomicsResponse, HealthResponse, LogRecord, MetricsResponse,
-  PlatformAccount, PlatformKey, Stage, Track,
+  PlatformAccountsResponse, PlatformKey, Stage, Track,
 } from '../types/api';
 import { CLIENT_VERSION, toError, toMessage, VoxError } from '../lib/errors';
 
@@ -129,7 +129,7 @@ export const api = {
   // ── 专辑与平台 ──
   albums: (platform?: string) =>
     get<{ albums: Record<string, Album> }>('albums', platform ? { platform } : undefined),
-  platformAccounts: () => get<{ accounts: Record<string, PlatformAccount> }>('platform-accounts'),
+  platformAccounts: () => get<PlatformAccountsResponse>('platform-accounts'),
   publishBoard: () => get<{ accounts: unknown[]; tracks: Track[] }>('publish-board'),
 
   // ── 音色 ──
