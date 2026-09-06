@@ -254,6 +254,19 @@ CREATE TABLE IF NOT EXISTS publish_events (
     ts         TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_pe_track ON publish_events(track_id, ts DESC);
+
+-- 同一首歌在同一平台，**同一个 song_id 只能有一条**。
+--
+-- 主键从 (track_id, platform) 改成自增 id 是为了支持「一首歌挂多条上架记录」
+-- （改名、拆成完整版/片段），那些记录的 song_id 是不同的。但改完之后
+-- 就没有任何东西拦得住**误插重复**了 —— 2026-09-06 一天里出现两次：
+-- 同一首歌两条平台记录，状态还各不相同（一条备料中一条审核中），
+-- 看板上一首歌显示两遍，人不知道该信哪个。
+--
+-- 靠代码里「插之前先查一下」防不住：查漏一处就漏一次，而漏掉的那次
+-- 不报错、当场看不出来。约束写在库上，才是插不进去。
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tp_unique
+    ON track_platforms(track_id, platform, IFNULL(song_id, ''));
 """
 
 

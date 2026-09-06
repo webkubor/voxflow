@@ -185,7 +185,17 @@ print("  歌曲标题:", "✓" if fill_by_label("歌曲标题", title) else "✗
 time.sleep(1)
 print("  歌词:", "✓" if fill_by_label("歌词", lyrics, multiline=True) else "✗")
 time.sleep(1)
-print("  专辑名称:", "✓" if fill_by_label("专辑名称", title) else "✗")
+# ⚠️ 专辑名**不是歌名**。
+#
+# 之前这里填的是 `title`，于是**每首歌都新建一个专辑** —— 一批四首就是
+# 四个单曲专辑，平台上散成四条，既不像一个作品集，也拿不到专辑维度的曝光。
+# 同一批次的歌应该共用一个专辑（表单上还有「选择已有专辑」可以复用）。
+#
+# 真源是台账的 album_name / album_desc，填不到就退回歌名（单曲发行是合理的，
+# 但那应该是显式选择，不是因为读不到而默认）。
+_album = (track.get("platforms", {}).get("qishui", {}) or {}).get("album") \
+         or track.get("album_name") or title
+print("  专辑名称:", "✓" if fill_by_label("专辑名称", _album) else "✗", f"（{_album}）")
 time.sleep(1)
 if album_desc:
     print("  专辑介绍:", "✓" if fill_by_label("关于专辑的介绍", album_desc, multiline=True) else "✗")

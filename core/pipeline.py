@@ -1096,8 +1096,18 @@ def set_publisher(track_id: str, platform: str, name: str,
     db.init()
     now = _now()
     with db.connect() as c:
-        c.execute("INSERT OR IGNORE INTO track_platforms (track_id, platform, status, updated_at) "
-                  "VALUES (?,?,?,?)", (track_id, platform, "preparing", now))
+        # ⚠️ 不能用 `INSERT OR IGNORE`。
+        #
+        # 这张表的主键早就从 (track_id, platform) 改成了自增 id（见
+        # `_migrate_listing_pk`）—— OR IGNORE 靠唯一约束才会「忽略」，
+        # 主键一换它就**永远不会触发**，于是每调一次 set_publisher 就多一行。
+        # 结果是同一首歌在同一平台出现好几条，看板上一首歌显示两遍、
+        # 状态还各不相同（一条备料中一条审核中），人根本不知道信哪个。
+        exists = c.execute("SELECT 1 FROM track_platforms WHERE track_id=? AND platform=? LIMIT 1",
+                           (track_id, platform)).fetchone()
+        if not exists:
+            c.execute("INSERT INTO track_platforms (track_id, platform, status, updated_at) "
+                      "VALUES (?,?,?,?)", (track_id, platform, "preparing", now))
         c.execute("UPDATE track_platforms SET publisher=?, publisher_id=?, "
                   "assigned_at=COALESCE(NULLIF(assigned_at,''), ?), updated_at=? "
                   "WHERE track_id=? AND platform=?",
@@ -1141,6 +1151,30 @@ PLATFORM_STATUS_LABELS = {
 }
 
 
+def album_name_for(track: dict[str, Any], platform: str, batch_size: int = 1) -> str:
+    """这次发行该用什么专辑名。
+
+    ## 平台规则，不是我们的偏好
+
+    汽水明写：**「如果专辑内仅有一首歌，专辑名称应与歌曲名称一致」**。
+    所以单曲发行时专辑名 = 歌名，没有选择余地 —— 填别的直接卡在第一步，
+    而且提示是普通文字挂在字段下面（不是红字），很难注意到。
+
+    想共用一张专辑只有一条路：**同一次提交里放进所有歌**
+    （页面上写着「如需代理发行，请创建新专辑并一次性添加所有歌曲，
+    发行后不可增删」）。那种情况下 batch_size > 1，才用得上自定义专辑名。
+
+    2026-09-06 在这上面栽过：我按「同一批次共用专辑」把四首都改成
+    「破晓时分 · 纯音乐 BGM」，结果单曲提交全被拦。规则只在脑子里，
+    没写进代码，就会被下一次的「合理推断」覆盖掉。
+    """
+    name = (track.get("release_title") or track.get("title") or "").strip()
+    if batch_size <= 1:
+        return name
+    info = (track.get("platforms") or {}).get(platform) or {}
+    return (info.get("album") or track.get("album_desc") or name).strip()
+
+
 def prepare(track_id: str, platform: str, *, album: str = "",
             publisher: str = "", publisher_id: str = "",
             instrumental: bool = False) -> dict[str, Any]:
@@ -1176,8 +1210,9 @@ def prepare(track_id: str, platform: str, *, album: str = "",
     if fields:
         upsert(track_id, **fields)
 
+    # 专辑名走统一规则，不再由调用方随手传 —— 见 album_name_for 的注释
     set_platform_status(track_id, platform, "preparing",
-                        album_name=album or track.get("album_desc", ""))
+                        album=album_name_for(track, platform))
     if publisher:
         set_publisher(track_id, platform, publisher, publisher_id)
 
