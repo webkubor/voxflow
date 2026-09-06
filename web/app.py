@@ -149,6 +149,73 @@ def _audio_seconds_of(task: dict) -> float:
     return round(total, 2)
 
 
+def _notify_music_task(task_id: str):
+    """音乐任务结束 → 推群卡片 + 写台账。
+
+    挂在 worker 的 finally 里，和计量同一个收口：六种任务都从这过，
+    挂一处覆盖全部。**只推音乐**（suno / suno_cover）——
+    本地 TTS 一天几十次，全推进去等于把群和台账都刷废。
+
+    整段包在 try 里：通知是旁路，**它挂了不能把生成搞挂**。
+    """
+    try:
+        from core import notify
+        from core.paths import ARTIST_FILE
+
+        with _tasks_lock:
+            task = dict(_tasks.get(task_id) or {})
+        if task.get("type") not in ("suno", "suno_cover"):
+            return
+        params = task.get("params") or {}
+        result = task.get("result") or {}
+        failed = task.get("status") == "error"
+        title = params.get("title") or task.get("label", "未命名")
+
+        artist = ""
+        try:
+            artist = json.loads(ARTIST_FILE.read_text(encoding="utf-8")).get("stage_name", "")
+        except (OSError, json.JSONDecodeError, AttributeError):
+            pass
+
+        files = result.get("files") or []
+        acc = notify.account()
+        buttons = []
+        if (doc := acc.get("doc_url")):
+            buttons.append({"text": "使用说明", "url": doc})
+        if (base_url := (acc.get("base") or {}).get("url")):
+            buttons.append({"text": "打开台账", "url": base_url, "type": "primary"})
+
+        notify.notify(
+            ("❌ 音乐生成失败：" if failed else "🎵 新音乐已生成：") + title,
+            {
+                "艺人": artist,
+                "类型": "翻唱" if task["type"] == "suno_cover" else "AI 音乐",
+                "风格": params.get("tags", ""),
+                "模型": params.get("model", ""),
+                "文件": str(len(files)) + " 个" if files else "",
+                "失败原因": (task.get("error") or "")[:200] if failed else "",
+            },
+            level="error" if failed else "done",
+            buttons=buttons,
+            event="music_failed" if failed else "music_done",
+            dedupe_key=f"voxflow-{task_id}",
+        )
+        if failed:
+            return                      # 失败的不进台账，台账只记真作品
+
+        notify.ledger_add({
+            "曲名": title,
+            "状态": "已生成",
+            "艺人署名": artist,
+            "风格标签": params.get("tags", ""),
+            "生成模型": params.get("model", ""),
+            "生成时间": int(time.time() * 1000),   # 飞书日期字段收毫秒时间戳
+            "备注": f"voxflow task {task_id}",
+        })
+    except Exception as e:                # noqa: BLE001 —— 旁路，绝不影响主流程
+        obs.log("notify_hook_failed", level="warn", task_id=task_id, error=str(e)[:200])
+
+
 def _task_worker():
     """后台 worker：从队列取任务执行"""
     while True:
@@ -187,6 +254,7 @@ def _task_worker():
             obs.log("task_failed", level="error", task_type=task["type"],
                     task_id=task_id, label=task.get("label", ""), error=_err[:300])
         finally:
+            _notify_music_task(task_id)
             if task["type"] not in ("suno", "suno_cover", "cover"):
                 # 本地 TTS 单价是 0，但**量**要记 —— 「本月本地合成了多少秒」
                 # 乘上对标商业 API 的单价，就是本地方案实际省下的钱。
