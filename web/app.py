@@ -178,6 +178,7 @@ def _notify_music_task(task_id: str):
             pass
 
         files = result.get("files") or []
+        warning = result.get("warning") or ""
         acc = notify.account()
         buttons = []
         if (doc := acc.get("doc_url")):
@@ -185,17 +186,42 @@ def _notify_music_task(task_id: str):
         if (base_url := (acc.get("base") or {}).get("url")):
             buttons.append({"text": "打开台账", "url": base_url, "type": "primary"})
 
+        # 任务失败 ≠ 歌没了。CLI 常在下载那步 403，歌已经在 Suno 上，
+        # 甚至已经交到汽水审核。先问台账，再决定群里喊什么。
+        from core import pipeline as _pipe
+        release = _pipe.release_status_for_title(title)
+        if failed and release:
+            notify.notify(
+                f"🎵 {title} · {release['label']}",
+                {
+                    "艺人": artist,
+                    "状态": release["label"],
+                    "说明": "生成任务报错，但台账显示歌已经在发版流程里，不是没生成。",
+                    "任务报错": (task.get("error") or "")[:160],
+                },
+                level="done",
+                buttons=buttons,
+                event="music_done",
+                dedupe_key=f"voxflow-{task_id}",
+            )
+            return
+        if failed and warning:
+            failed = False              # 已确认 Suno 上有歌，只是音频没取回
+
+        head = ("❌ 音乐生成失败：" if failed
+                else ("🎵 已生成，请下载音频：" if warning else "🎵 新音乐已生成："))
         notify.notify(
-            ("❌ 音乐生成失败：" if failed else "🎵 新音乐已生成：") + title,
+            head + title,
             {
                 "艺人": artist,
                 "类型": "翻唱" if task["type"] == "suno_cover" else "AI 音乐",
                 "风格": params.get("tags", ""),
                 "模型": params.get("model", ""),
                 "文件": str(len(files)) + " 个" if files else "",
+                "说明": warning,
                 "失败原因": (task.get("error") or "")[:200] if failed else "",
             },
-            level="error" if failed else "done",
+            level="error" if failed else ("warn" if warning else "done"),
             buttons=buttons,
             event="music_failed" if failed else "music_done",
             dedupe_key=f"voxflow-{task_id}",
@@ -2565,6 +2591,55 @@ def _run_cover_upscale_task(task_id: str, params: dict, update_fn):
               completed_at=datetime.now().strftime("%H:%M:%S"))
 
 
+def _clip_ids_from(stdout: str) -> list[dict]:
+    """从 `suno generate --json` 的回包里取 clip 列表。
+
+    回包结构在不同版本里换过几次，所以这里**认字段不认路径**：
+    递归找带 id 的对象。写死路径的话，Suno 一改 schema 就静默拿不到 ——
+    而拿不到的表现是「提交成功但没有 id」，看起来像生成失败。
+    """
+    try:
+        data = json.loads(stdout or "{}")
+    except json.JSONDecodeError:
+        return []
+    out: list[dict] = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            cid = node.get("id") or node.get("clip_id")
+            if isinstance(cid, str) and len(cid) == 36 and cid.count("-") == 4:
+                out.append({"id": cid, "title": node.get("title", ""),
+                            "status": node.get("status", "")})
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(data)
+    seen, uniq = set(), []
+    for c in out:
+        if c["id"] not in seen:
+            seen.add(c["id"])
+            uniq.append(c)
+    return uniq
+
+
+def _clip_status(ids: list[str]) -> list[dict]:
+    """查一批 clip 的状态。查不到就返回空 —— 调用方按「还没好」处理，
+    不当成失败（网络抖一下不该让一次成功的生成前功尽弃）。"""
+    import subprocess  # noqa: PLC0415
+
+    if not ids:
+        return []
+    try:
+        r = subprocess.run([SUNO_BIN, "status", *ids, "--json"], env=_suno_env(),
+                           capture_output=True, text=True, timeout=60)
+        return _clip_ids_from(r.stdout)
+    except (subprocess.SubprocessError, OSError):
+        return []
+
+
 def _recent_clips_titled(title: str, since_ts) -> list[dict]:
     """去 Suno 问：这个标题、这个时间点之后，有没有新出的 clip。
 
@@ -2618,8 +2693,19 @@ def _run_suno_task(task_id: str, params: dict, update_fn):
         if not persona_id and req.persona.startswith("{"):
             persona_id = req.persona  # 直接传 ID
 
-    update_fn(task_id, progress=15, stage="调用 Suno 生成中...")
-    cmd = [SUNO_BIN, "generate", "--title", req.title, "--model", req.model, "--wait"]
+    # ⚠️ **不加 --wait。**
+    #
+    # 生成本身是异步的：提交之后 Suno 那边排队、渲染，两三分钟出结果。
+    # `--wait` 把它硬跑成同步 —— CLI 阻塞在那儿，voxflow 只能设个超时，
+    # 于是「CLI 超时/中途出错」就被当成了「生成失败」。
+    #
+    # 2026-09-06 连栽两次：歌在 Suno 上好好的、积分也扣了，voxflow 却报失败、
+    # 群里推失败卡片。错的不是判断逻辑，是**用同步的方式跑异步的事**。
+    #
+    # 现在：提交立刻拿 clip id → 轮询 status 直到 complete。
+    # CLI 只负责发起，进度由我们自己看着，中间断了也不影响 Suno 那边。
+    update_fn(task_id, progress=10, stage="提交到 Suno...")
+    cmd = [SUNO_BIN, "generate", "--title", req.title, "--model", req.model, "--json"]
     if req.tags:
         cmd += ["--tags", req.tags]
     if req.lyrics:
@@ -2629,15 +2715,334 @@ def _run_suno_task(task_id: str, params: dict, update_fn):
     if persona_id:
         cmd += ["--persona", persona_id]
 
-    # 临时下载目录，生成后拷回 out/music
     import tempfile
     tmp = tempfile.mkdtemp(prefix="voxsuno_")
-    cmd += ["--download", tmp]
-    update_fn(task_id, progress=30, stage="Suno 生成中（约 1-3 分钟）...")
 
     _t0 = time.perf_counter()
     _started_at = datetime.now(timezone.utc)
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=360)
+    # ⚠️ env=_suno_env() 不能漏 —— 它顺带清掉上一次残留的验证码 Chrome。
+    # 漏了的后果：残留进程占着同一个 profile，新的 Chrome 一起来就退，
+    # 报「Chrome was spawned but never opened the CDP port」，于是
+    # **之后每一次生成都失败**。2026-09-06 就是只给翻唱那处加了、
+    # 漏了这处生成，白排查一轮。
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=360,
+                       env=_suno_env())
+    _ms = int((time.perf_counter() - _t0) * 1000)
+    # 每次调用扣的 credits 从 pricing.json 读，不写死在这里 ——
+    # 换模型/套餐时改配置，不用改代码。
+    _cr = float((obs.pricing().get("providers", {}).get("suno") or {}).get("credits_per_call", 10))
+    if r.returncode != 0:
+        err = (r.stderr or r.stdout or "")[-800:]
+        # 提交这一步失败才是真失败 —— 任务根本没进 Suno 的队列。
+        # 但仍要回查一次：提交成功、只是回包没读到的情况也存在。
+        clips = _recent_clips_titled(req.title, since_ts=_started_at) or _clip_ids_from(r.stdout)
+        if not clips:
+            obs.meter("suno", "generate", credits=_cr, track_id=req.title[:40],
+                      duration_ms=_ms, ok=False, model=req.model, error=err[-120:])
+            raise ValueError(f"Suno 提交失败: {err}")
+    else:
+        clips = _clip_ids_from(r.stdout) or _recent_clips_titled(req.title, since_ts=_started_at)
+
+    if not clips:
+        raise ValueError(f"提交成功但没拿到 clip id：{(r.stdout or r.stderr)[-300:]}")
+
+    # ── 轮询，而不是阻塞等 ────────────────────────────────────────
+    #
+    # 生成在 Suno 服务端跑，这里只是**看着**。中间网络断了、进程被重启，
+    # 都不影响那边的任务 —— 重新查一次状态就能接上，不会把一次成功的生成
+    # 判成失败。这正是 `--wait` 做不到的：它一断，信息就没了。
+    ids = [c["id"] for c in clips]
+    obs.meter("suno", "generate", credits=_cr, track_id=req.title[:40],
+              duration_ms=_ms, ok=True, model=req.model, tags=req.tags[:60],
+              clips=len(ids))
+    update_fn(task_id, progress=25, stage=f"Suno 生成中（{len(ids)} 首）...")
+
+    deadline = time.time() + 900          # 15 分钟，比 Suno 正常出歌久得多
+    done = []
+    while time.time() < deadline:
+        time.sleep(10)
+        st = _clip_status(ids)
+        done = [c for c in st if c.get("status") == "complete"]
+        # 进度按「完成几首」算，不再是写死的 30% —— 那个数字骗了人很久：
+        # 卡在 30% 看起来像卡住了，其实一直在正常生成。
+        pct = 25 + int(60 * len(done) / max(len(ids), 1))
+        update_fn(task_id, progress=pct,
+                  stage=f"Suno 生成中 {len(done)}/{len(ids)} 首...")
+        if len(done) == len(ids):
+            break
+        if any(c.get("status") == "error" for c in st):
+            raise ValueError(f"Suno 报告生成错误：{[c.get('id','')[:8] for c in st if c.get('status')=='error']}")
+    if not done:
+        raise ValueError(f"等了 15 分钟仍未完成（clip: {', '.join(i[:8] for i in ids)}）—— "
+                         f"任务还在 Suno 上，稍后可在网页端查看")
+
+    update_fn(task_id, progress=85, stage="入库音频库...")
+    copied = []
+    for f in glob.glob(os.path.join(tmp, "*")):
+        if os.path.splitext(f)[1].lower() in AUDIO_EXTS:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe = re.sub(r"[^\w\u4e00-\u9fff-]", "_", req.title or "cover")[:30]
+            dest = music_dir / f"[翻唱]{safe}_{ts}{os.path.splitext(f)[1].lower()}"
+            shutil.copy2(f, dest)
+            copied.append(str(dest))
+    shutil.rmtree(tmp, ignore_errors=True)
+    if not copied:
+        raise ValueError("翻唱成功但没拿到音频文件（Suno 下载链路问题，去网页端看）")
+
+    update_fn(task_id, status="done", progress=100, stage="完成",
+              result={"ok": True, "files": copied,
+                      "urls": [f"/api/audio/{MUSIC_SUBDIR}/{os.path.basename(c)}" for c in copied]},
+              completed_at=datetime.now().strftime("%H:%M:%S"))
+
+
+class CoverRequest(BaseModel):
+    """
+    出封面。prompt 留空时由 title/tags 拼一句 —— 大多数时候不需要人自己想词。
+    """
+    track_id: str = ""
+    title: str = ""
+    tags: str = ""
+    prompt: str = ""
+    # 任意 W:H。默认方形（专辑封面就是方的），但**不限枚举** —— 中台的
+    # 中台支持任意尺寸，写死枚举等于把上游能力阉掉一半。
+    # 合法性由中台判定（它是尺寸规则的真源），这里只挡格式明显写错的。
+    ratio: str = "1:1"
+    # 留空则按 ratio 自动算一个短边 ≥1440 的合法尺寸（平台要求：汽水 ≥1440、
+    # 网易云 ≥1400）。中台按 ratio 自动算的尺寸更保守，短边够不到 1440。
+    size: str = ""
+    # **留空**。传 "high" 会让中台按 hd 档扣 2 分，而对照实验证明：
+    # 传与不传出来的图尺寸体积完全一样（1254×1254），画质也一样
+    # （中台不传时本来就按高画质出）。见 core/cover.py 文件头。
+    #
+    # 这里当初漏改过一次：改了 cover.generate() 的默认值却没改这个 Pydantic
+    # 模型的，于是「默认」实际上仍然是 high —— 一个默认值分散在两处，
+    # 只改一处就是这种下场。
+    quality: str = ""
+
+
+@app.post("/api/cover/generate")
+def cover_generate(req: CoverRequest):
+    """
+    提交封面出图任务（异步）。
+
+    为什么走任务队列而不是同步等：中台出图要几十秒到几分钟，同步等会让
+    前端一直转圈、还占着一个线程池的位置。而队列这套（进度、取消、失败原因）
+    早就为 Suno 和 TTS 建好了，封面是第五种任务而已。
+    """
+    from core import cover
+    if not cover.available():
+        raise HTTPException(400, "未接 museav 中台。用 ./run.sh web 启动会自动注入凭据。")
+    if not (req.prompt.strip() or req.title.strip()):
+        raise HTTPException(400, "至少要有标题或提示词")
+    # 比例写错是用户输入问题，要在提交时就 400 挡掉 —— 丢进任务队列再失败的话，
+    # 人得等到任务跑起来才看到「看不懂的比例」，中间还白等一次调度。
+    try:
+        cover.normalize_ratio(req.ratio)
+    except cover.CoverError as e:
+        raise HTTPException(400, str(e))
+    label = f"🖼 封面：{req.title or req.track_id or '未命名'}"
+    return {"task_id": _submit_task("cover", label, req.model_dump()), "status": "queued"}
+
+
+class CoverUpscaleRequest(BaseModel):
+    track_id: str
+
+
+@app.post("/api/cover/upscale")
+def cover_upscale(req: CoverUpscaleRequest):
+    """本地 GPU 超分现有封面到 1440，不花中台积分。"""
+    from core import pipeline
+    t = pipeline.get_track(req.track_id)
+    if not t or not t.get("cover_file"):
+        raise HTTPException(400, "这首还没有封面可超分")
+    label = f"🖼 超分：{t.get('title') or req.track_id}"
+    return {"task_id": _submit_task("cover_upscale", label, req.model_dump()),
+            "status": "queued"}
+
+
+@app.get("/api/cover/status")
+def cover_status():
+    """中台能不能出图、一张多少积分。界面用它决定按钮是可点还是灰掉。"""
+    from core import cover
+    unit = obs.unit_price("museav")
+    bal = cover.balance()
+    est = round(cover.CREDITS_PER_COVER * unit, 2)
+    return {
+        "available": cover.available(),
+        # 给界面填下拉用。**不是白名单** —— 用户填别的照样放行，
+        # 能不能出由中台判定。
+        "common_ratios": [{"value": v, "label": lb} for v, lb in cover.COMMON_RATIOS],
+        # 目标边长与各比例算出的实际尺寸 —— 界面能直接告诉人「你会拿到多大的图」
+        "cover_side": cover.COVER_SIDE,
+        "sizes": {v: cover._size_for(v) for v, _ in cover.COMMON_RATIOS},
+        "credits_per_cover": cover.CREDITS_PER_COVER,
+        "est_cny": est,
+        "credits": bal["credits"],
+        "unmetered": bal.get("unmetered", False),
+        "covers_left": bal.get("covers_left", 0),
+        # 能不能真的出图 = 接了中台**且**（不受额度约束 或 余额够）。
+        #
+        # 只看 available 的话按钮是亮的、点下去必然失败；只看余额的话，
+        # 自家租户余额恒为 0 但出图正常，按钮会一直是灰的 —— 两种误判
+        # 都会让人朝错误方向排查。
+        "can_generate": bool(cover.available() and
+                             (bal.get("unmetered") or bal["credits"] >= cover.CREDITS_PER_COVER)),
+        "detail": (f"{bal['detail']}，一张约 ¥{est:.2f}"
+                   if cover.available() else "未接中台（本地模式）"),
+    }
+
+
+def _run_cover_task(task_id: str, params: dict, update_fn):
+    """执行封面出图：中台出图 → 下载 → 回填台账的 cover_file。"""
+    from core import cover, pipeline
+
+    req = CoverRequest(**params)
+    prompt = req.prompt.strip() or cover.build_prompt(req.title, req.tags)
+
+    result = cover.generate(
+        prompt,
+        track_id=req.track_id,
+        ratio=req.ratio,
+        size=req.size,
+        quality=req.quality,
+        on_progress=lambda pct, stage: update_fn(task_id, progress=pct, stage=stage),
+    )
+
+    # 回填台账。出了图不落台账等于没出 —— 下次打开看板还是没封面，
+    # 人会以为失败了然后再出一张，白烧一次积分。
+    if req.track_id:
+        try:
+            pipeline.upsert(req.track_id, cover_file=result["path"])
+        except Exception as e:                                    # noqa: BLE001
+            obs.log("cover_ledger_write_failed", level="warn",
+                    track_id=req.track_id, error=str(e)[:200])
+
+    # 比例被上游改掉时把话说明白 —— 图是好图，但画幅不是要的那个，
+    # 拿去当封面会被平台裁掉或留白。不静默通过。
+    note = ""
+    if result.get("ratio_ok") is False:
+        note = (f"⚠️ 上游没按 {result['ratio_requested']} 出图，"
+                f"实际 {result.get('width')}×{result.get('height')} —— "
+                f"换个上游重出可能就对了")
+
+    update_fn(task_id, status="done", progress=100, stage="完成",
+              result={"ok": True, "prompt": prompt, "note": note, **result},
+              completed_at=datetime.now().strftime("%H:%M:%S"))
+
+
+def _run_cover_upscale_task(task_id: str, params: dict, update_fn):
+    """本地 GPU 超分现有封面到 1440，回填台账。不花中台积分。"""
+    from pathlib import Path
+    from core import cover, pipeline
+    from core.paths import DATA_DIR, PUBLISH_DIR
+
+    tid = (params.get("track_id") or "").strip()
+    t = pipeline.get_track(tid)
+    if not t or not t.get("cover_file"):
+        raise ValueError("这首还没有封面可超分")
+    src = Path(t["cover_file"])
+    if not src.is_absolute():
+        src = DATA_DIR / src
+    title = t.get("release_title") or t.get("title") or tid
+    dest = PUBLISH_DIR / "covers" / f"{title}_1440.jpg"
+    result = cover.upscale_local(
+        src, dest,
+        on_progress=lambda pct, stage: update_fn(task_id, progress=pct, stage=stage),
+    )
+    rel = str(result.relative_to(DATA_DIR)) if str(result).startswith(str(DATA_DIR)) else str(result)
+    pipeline.upsert(tid, cover_file=rel)
+    update_fn(task_id, status="done", progress=100, stage="完成",
+              result={"ok": True, "path": rel},
+              completed_at=datetime.now().strftime("%H:%M:%S"))
+
+
+def _recent_clips_titled(title: str, since_ts) -> list[dict]:
+    """去 Suno 问：这个标题、这个时间点之后，有没有新出的 clip。
+
+    用来在 CLI 报错时判断「到底生成没生成」。`suno list` 是免费命令，
+    问一次不花钱，而问错的代价是：积分照扣、歌明明在、人以为白花了。
+
+    按**标题 + 时间**匹配，不按标题单独匹配 —— 同名歌很常见
+    （Suno 一次就出两首同名的），只看标题会把上次的旧歌错认成这次的。
+    """
+    import subprocess  # noqa: PLC0415 —— 与本文件其余 suno 调用一致，延迟导入
+
+    try:
+        r = subprocess.run([SUNO_BIN, "list", "--json"], env=_suno_env(),
+                           capture_output=True, text=True, timeout=60)
+        clips = (json.loads(r.stdout or "{}").get("data") or {}).get("clips") or []
+    except (subprocess.SubprocessError, OSError, json.JSONDecodeError, ValueError):
+        return []
+    out = []
+    for c in clips:
+        if (c.get("title") or "").strip() != (title or "").strip():
+            continue
+        try:
+            made = datetime.fromisoformat((c.get("created_at") or "").replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if made >= since_ts:
+            out.append({"id": c.get("id"), "title": c.get("title"),
+                        "status": c.get("status"), "created_at": c.get("created_at")})
+    return out
+
+
+def _run_suno_task(task_id: str, params: dict, update_fn):
+    """执行 Suno 音乐生成：调 suno CLI → 产物拷回 out/music"""
+    import subprocess, shutil, glob
+
+    req = SunoGenerateRequest(**params)
+    if not os.path.exists(SUNO_BIN):
+        raise ValueError(f"suno CLI 不存在: {SUNO_BIN}（先 cargo install suno）")
+
+    music_dir = OUT_DIR / MUSIC_SUBDIR
+    music_dir.mkdir(parents=True, exist_ok=True)
+
+    # 解析 persona ID
+    persona_id = None
+    if req.persona:
+        try:
+            personas = json.load(open(SUNO_STATE))
+            persona_id = (personas.get(req.persona) or {}).get("id")
+        except Exception:
+            persona_id = None
+        if not persona_id and req.persona.startswith("{"):
+            persona_id = req.persona  # 直接传 ID
+
+    # ⚠️ **不加 --wait。**
+    #
+    # 生成本身是异步的：提交之后 Suno 那边排队、渲染，两三分钟出结果。
+    # `--wait` 把它硬跑成同步 —— CLI 阻塞在那儿，voxflow 只能设个超时，
+    # 于是「CLI 超时/中途出错」就被当成了「生成失败」。
+    #
+    # 2026-09-06 连栽两次：歌在 Suno 上好好的、积分也扣了，voxflow 却报失败、
+    # 群里推失败卡片。错的不是判断逻辑，是**用同步的方式跑异步的事**。
+    #
+    # 现在：提交立刻拿 clip id → 轮询 status 直到 complete。
+    # CLI 只负责发起，进度由我们自己看着，中间断了也不影响 Suno 那边。
+    update_fn(task_id, progress=10, stage="提交到 Suno...")
+    cmd = [SUNO_BIN, "generate", "--title", req.title, "--model", req.model, "--json"]
+    if req.tags:
+        cmd += ["--tags", req.tags]
+    if req.lyrics:
+        cmd += ["--lyrics", req.lyrics]
+    elif req.lyrics_file and os.path.exists(req.lyrics_file):
+        cmd += ["--lyrics-file", req.lyrics_file]
+    if persona_id:
+        cmd += ["--persona", persona_id]
+
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="voxsuno_")
+
+    _t0 = time.perf_counter()
+    _started_at = datetime.now(timezone.utc)
+    # ⚠️ env=_suno_env() 不能漏 —— 它顺带清掉上一次残留的验证码 Chrome。
+    # 漏了的后果：残留进程占着同一个 profile，新的 Chrome 一起来就退，
+    # 报「Chrome was spawned but never opened the CDP port」，于是
+    # **之后每一次生成都失败**。2026-09-06 就是只给翻唱那处加了、
+    # 漏了这处生成，白排查一轮。
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=360,
+                       env=_suno_env())
     _ms = int((time.perf_counter() - _t0) * 1000)
     # 每次调用扣的 credits 从 pricing.json 读，不写死在这里 ——
     # 换模型/套餐时改配置，不用改代码。
@@ -2687,7 +3092,16 @@ def _run_suno_task(task_id: str, params: dict, update_fn):
 
     shutil.rmtree(tmp, ignore_errors=True)
     if not copied:
-        raise ValueError("Suno 生成成功但没拿到音频文件（下载链路可能受 Suno schema drift 影响，见网页端）")
+        # **没拿到音频 ≠ 生成失败。** 歌已经在 Suno 上了、积分也扣了，
+        # 只是取回那一段坏了（Suno 现在不给音频直链，API 和 CDN 都 403）。
+        # 报成失败会让人以为白花钱，还会往群里推一张失败卡片。
+        update_fn(task_id, status="done", progress=100,
+                  stage=f"已生成 {len(done)} 首 · 音频需在 suno.com 下载",
+                  result={"ok": True, "files": [], "clips": done,
+                          "warning": "Suno 已停止提供音频直链，音频请去网页端下载"})
+        obs.log("suno_audio_not_pulled", level="warn",
+                title=req.title[:40], clips=len(done))
+        return
 
     update_fn(
         task_id, status="done", progress=100, stage="完成",
