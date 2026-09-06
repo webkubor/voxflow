@@ -1753,6 +1753,71 @@ def pipeline_readiness(track_id: str, platform: str):
     return r
 
 
+@app.post("/api/pipeline/import")
+async def pipeline_import(
+    audio: UploadFile = File(...),
+    title: str = Form(""),
+    album: str = Form(""),
+    cover: UploadFile = File(None),
+):
+    """导入一个外部音频，直接进发行流程。
+
+    ## 这是「发布助手」模式的入口
+
+    voxflow 有两类用户，需求完全不重叠：
+
+    - **做歌的**：本地 TTS + Suno 生成 → 发行。要下 7GB 模型、要 Suno 会员。
+    - **发歌的**：拿到别人做好的音频 → 上架、跟进度、看收益。
+      **不需要模型、不需要 Suno**，甚至不需要懂 AI。
+
+    此前曲目只能从生成流程进库，第二类人 clone 下来面对的是一个空看板 ——
+    明明发歌记录、全网发行、运营台这几屏都不依赖模型，却没东西可放。
+
+    这个端点就是那个口子：传一个音频进来就是一首待发的歌。
+
+    ## 为什么直接落到 selected 阶段
+
+    外部音频意味着「歌已经定了」—— draft/generated/selected 这三个阶段
+    是给「还在挑哪一版」用的，导入的人没有这个问题，让他从头点三下没意义。
+    """
+    from core import db, pipeline, r2  # noqa: PLC0415
+    from core.utils import sanitize_path_component  # noqa: PLC0415
+
+    ext = os.path.splitext(audio.filename or "")[1].lower()
+    if ext not in AUDIO_EXTS:
+        raise HTTPException(400, f"不支持的音频格式 {ext or '(无扩展名)'}，支持 {', '.join(sorted(AUDIO_EXTS))}")
+
+    name = (title or os.path.splitext(audio.filename or "")[0] or "未命名").strip()
+    safe = sanitize_path_component(name, fallback="未命名")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    music_dir = OUT_DIR / MUSIC_SUBDIR
+    music_dir.mkdir(parents=True, exist_ok=True)
+    dest = music_dir / f"[导入]{safe}_{ts}{ext}"
+    dest.write_bytes(await audio.read())
+
+    cover_path = ""
+    if cover is not None and cover.filename:
+        cext = os.path.splitext(cover.filename)[1].lower() or ".jpg"
+        cdest = OUT_DIR / "covers" / f"{safe}_{ts}{cext}"
+        cdest.parent.mkdir(parents=True, exist_ok=True)
+        cdest.write_bytes(await cover.read())
+        cover_path = str(cdest)
+
+    track_id = uuid.uuid4().hex[:12]
+    db.init()
+    rel = os.path.relpath(str(dest), str(BASE_DIR)).replace("\\", "/")
+    pipeline.upsert(track_id, title=name, stage="selected", audio_file=rel,
+                    cover_file=cover_path, album_desc=album,
+                    note=f"外部导入 {audio.filename}")
+
+    # 传 R2 拿公网直链 —— 导入的人多半就是要把它发给别人/上传平台，
+    # 本地路径对那两件事都没用。没配 R2 就跳过，不拦流程。
+    url = r2.upload(str(dest)) if r2.enabled() else ""
+    obs.log("track_imported", track_id=track_id, title=name[:40], r2=bool(url))
+    return {"ok": True, "track_id": track_id, "title": name,
+            "audio_url": f"/api/audio/{MUSIC_SUBDIR}/{dest.name}", "r2_url": url}
+
+
 @app.post("/api/pipeline/stage")
 def pipeline_set_stage(req: PipelineStageRequest):
     """

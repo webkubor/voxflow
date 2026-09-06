@@ -1068,3 +1068,62 @@ def _sync_stage_from_platforms(track_id: str) -> None:
     want = derived_stage({r["platform"]: {"status": r["status"]} for r in rows})
     if want and cur and want != cur["stage"]:
         set_stage(track_id, want)
+
+
+def set_publisher(track_id: str, platform: str, name: str,
+                  open_id: str = "") -> None:
+    """记下这首歌在这个平台**由谁负责发布**。
+
+    为什么本地也要存一份（飞书台账里已经有了）：台账是**对外视图** ——
+    别人不给他开数据库，所以要有个地方让大家认领和跟进。但它可能被误删、
+    可能哪天不用飞书了，而「谁发的」是要长期追溯的事实：分成归属看它、
+    上架出问题找谁也看它。所以真源留在本地。
+
+    收益不往这张表里抄 —— 平台后台的数字是实时的，抄进来就是过期快照。
+    """
+    db.init()
+    now = _now()
+    with db.connect() as c:
+        c.execute("INSERT OR IGNORE INTO track_platforms (track_id, platform, status, updated_at) "
+                  "VALUES (?,?,?,?)", (track_id, platform, "preparing", now))
+        c.execute("UPDATE track_platforms SET publisher=?, publisher_id=?, "
+                  "assigned_at=COALESCE(NULLIF(assigned_at,''), ?), updated_at=? "
+                  "WHERE track_id=? AND platform=?",
+                  (name, open_id, now, now, track_id, platform))
+
+
+def publish_log(limit: int = 50) -> list[dict[str, Any]]:
+    """发布记录：哪首歌、发行名、多长、什么平台、谁负责、到哪一步了。
+
+    这是「发歌记录」那一屏和 `voice publish-log` 共用的数据源。
+    """
+    db.init()
+    with db.connect() as c:
+        rows = c.execute("""
+            SELECT t.id, t.title, t.release_title, t.duration,
+                   p.platform, p.status, p.publisher, p.assigned_at,
+                   p.album_name, p.publish_date, p.song_url
+            FROM track_platforms p JOIN tracks t ON t.id = p.track_id
+            ORDER BY COALESCE(NULLIF(p.publish_date,''), p.assigned_at, p.updated_at) DESC
+            LIMIT ?""", (limit,)).fetchall()
+    out = []
+    for r in rows:
+        d = int(r["duration"] or 0)
+        out.append({
+            "曲名": r["title"],
+            "发行歌名": r["release_title"] or r["title"],
+            "时长": f"{d // 60}:{d % 60:02d}" if d else "",
+            "平台": (PLATFORMS.get(r["platform"]) or {}).get("label", r["platform"]),
+            "状态": PLATFORM_STATUS_LABELS.get(r["status"], r["status"]),
+            "负责人": r["publisher"] or "",
+            "专辑": r["album_name"] or "",
+            "上架日": r["publish_date"] or "",
+            "平台链接": r["song_url"] or "",
+        })
+    return out
+
+
+PLATFORM_STATUS_LABELS = {
+    "preparing": "备料中", "uploaded": "已上传", "reviewing": "审核中",
+    "online": "已上架", "rejected": "被驳回",
+}

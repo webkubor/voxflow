@@ -454,3 +454,67 @@ def release(version: str, title: str, changes: list[str], *,
     return notify(f"🚀 {title}", fields, level="start", event="release",
                   account_name="changelog", dedupe_key=f"vf-release-{version}",
                   buttons=[{"text": "查看详情", "url": link, "type": "primary"}] if link else None)
+
+
+def publish_started(*, title: str, release_title: str = "", platform: str = "",
+                    account: str = "", duration_s: float = 0, clip_id: str = "",
+                    album: str = "", source_url: str = "", audio_url: str = "") -> bool:
+    """某首歌进入发布流程 → 推一张卡片。
+
+    这条通知回答的是「**谁要把哪首歌发到哪儿**」—— 生成通知回答不了它，
+    因为生成完到真正开发布之间可能隔好几天，中间还会改名、换平台、换人。
+
+    `Clip ID` 和时长必须带上：**歌会重名，而且是必然重名**（Suno 一次出两首
+    同名的），只报「破晓开始发布了」没人知道是哪一首。时长给人扫一眼分辨，
+    clip id 给机器和排查用。
+    """
+    mm, ss = divmod(int(duration_s or 0), 60)
+    fields = {
+        "曲目": release_title or title,
+        "原始曲名": title if release_title and release_title != title else "",
+        "时长": f"{mm}:{ss:02d}" if duration_s else "",
+        "平台": _platform_label(platform) or platform,
+        "负责账号": account,
+        "归属专辑": album,
+        "Clip ID": clip_id,
+    }
+    buttons = []
+    if source_url:
+        buttons.append({"text": "源文件", "url": source_url})
+    if audio_url:
+        buttons.append({"text": "下载音频", "url": audio_url, "type": "primary"})
+    base_url = ((_cfg_base() or {}).get("url") or "")
+    if base_url:
+        buttons.append({"text": "打开台账", "url": base_url})
+    return notify(f"📤 开始发布：{release_title or title}", fields,
+                  level="start", event="publish_started", buttons=buttons,
+                  dedupe_key=f"vf-pub-{clip_id or title}-{platform}")
+
+
+def _cfg_base() -> dict:
+    return (account() or {}).get("base") or {}
+
+
+def assign_owner(pair_index: int, *, seed: str = "", account_name: str = "") -> dict:
+    """一次生成出的第 N 首该归谁发。
+
+    规则：**第一首归 owner 自己，第二首随机分给 others 里的一个人。**
+
+    为什么第二首要分出去：Suno 一次出两首、旋律不同，是两个独立作品，
+    各自要走一遍上架（填表、传封面、等审核）。全压在一个人身上，
+    多出来的那首多半就烂在库里了 —— 生成成本已经花掉，不发等于白花。
+
+    `seed` 传 clip id：同一首歌**每次算出来的人必须一样**。
+    用真随机的话，重跑一次同步就换个人，@ 来 @ 去没人知道到底归谁。
+    """
+    import hashlib
+    import random
+
+    cfg = (account(account_name) or {}).get("assignees") or {}
+    owner = cfg.get("owner") or {}
+    others = [x for x in (cfg.get("others") or []) if x.get("open_id")]
+    if pair_index <= 0 or not others:
+        return owner
+    # 用 clip id 做种子 → 同一首歌永远分给同一个人
+    rnd = random.Random(hashlib.sha256((seed or str(pair_index)).encode()).hexdigest())
+    return others[rnd.randrange(len(others))]

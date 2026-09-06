@@ -219,6 +219,13 @@ _ADD_COLUMNS = [
     ("tracks", "release_title", "TEXT DEFAULT ''"),
     ("tracks", "release_platform", "TEXT DEFAULT ''"),
     ("tracks", "duration", "INTEGER"),
+    # 发布记录：这首歌**谁负责发的**。飞书台账里有，本地也必须有 ——
+    # 台账是对外视图，可能被人误删、也可能哪天不用飞书了；
+    # 「谁发的」是要长期追溯的事实（分成归属、出问题找谁），得留在真源里。
+    # 收益暂不进这张表（平台后台是实时的，抄进来就是过期快照）。
+    ("track_platforms", "publisher", "TEXT DEFAULT ''"),
+    ("track_platforms", "publisher_id", "TEXT DEFAULT ''"),
+    ("track_platforms", "assigned_at", "TEXT DEFAULT ''"),
 ]
 
 
