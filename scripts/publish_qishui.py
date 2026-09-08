@@ -77,6 +77,16 @@ def _resolve(p: str) -> Path:
 audio = _resolve(track.get("audio_file") or "")
 cover = _resolve(track.get("cover_file") or "")
 
+# 汽水平台对大体积 WAV 解析耗时极长且容易报「音频无效」，
+# 上传前转为 320k MP3，体积缩小 80%，平台解析秒过
+if audio.suffix.lower() == ".wav" and audio.is_file():
+    mp3_candidate = audio.with_suffix(".mp3")
+    if not mp3_candidate.is_file() or mp3_candidate.stat().st_mtime < audio.stat().st_mtime:
+        import subprocess
+        subprocess.run(["ffmpeg", "-y", "-i", str(audio), "-b:a", "320k", str(mp3_candidate)],
+                       check=True, capture_output=True)
+    audio = mp3_candidate
+
 print(f"作品：{title}")
 print(f"  音频 {audio.name}  {'✓' if audio.is_file() else '✗ 缺失'}")
 print(f"  封面 {cover.name}  {'✓' if cover.is_file() else '✗ 缺失'}")

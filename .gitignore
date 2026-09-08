@@ -121,6 +121,7 @@ configs/pipeline.json
 
 # 数据已经搬到 ~/.voxflow —— 这些目录不该再出现在项目里。
 # 留着规则是防止将来手滑又在项目里生成数据。
+/out
 /out/
 /assets/temp/
 /assets/reference_audio/

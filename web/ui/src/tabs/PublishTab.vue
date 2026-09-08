@@ -44,6 +44,60 @@ const linkTarget = ref('');
 const linkSources = ref([]);
 const linkBusy = ref(false);
 
+// ── 宣推短视频 (reel-kit) 状态 ──
+const promoOpen = ref(false);
+const promoBusy = ref(false);
+const selectedTrack = ref(null);
+const promoResult = ref(null);
+const promoTemplates = ref([
+  { label: '🎵 音乐卡片 (music-card)', value: 'music-card' },
+  { label: '📝 金句语录 (quote)', value: 'quote' },
+  { label: '🎨 贴纸推广 (sticker-promo)', value: 'sticker-promo' },
+]);
+const promoForm = ref({
+  template: 'music-card',
+  per_shot: 2.8,
+  accent1: '#ec4899',
+  accent2: '#6366f1',
+  footer: '',
+});
+
+const openPromoModal = (row) => {
+  const targetId = row.origin_id || row.id || row.track_id;
+  const t = (tracks.value || []).find((x) => x.id === targetId) || {
+    id: targetId,
+    title: row.p?.platform_title || row.title,
+    artist: stageName.value || '月栖洲',
+    cover_file: row.cover_file,
+  };
+  selectedTrack.value = t;
+  promoResult.value = null;
+  promoForm.value.footer = `汽水音乐 / 抖音 搜索《${t.title || '新歌'}》全曲收听`;
+  promoOpen.value = true;
+};
+
+const runGeneratePromo = async () => {
+  if (!selectedTrack.value?.id) return;
+  promoBusy.value = true;
+  try {
+    const res = await api.generatePromo({
+      track_id: selectedTrack.value.id,
+      template: promoForm.value.template,
+      per_shot: promoForm.value.per_shot,
+      accent1: promoForm.value.accent1,
+      accent2: promoForm.value.accent2,
+      footer: promoForm.value.footer,
+    });
+    if (res.ok) {
+      promoResult.value = res.result;
+    }
+  } catch (err) {
+    await tasksStore.reportError(err, { action: 'promo.generate' });
+  } finally {
+    promoBusy.value = false;
+  }
+};
+
 const PLATFORM_STATUS = {
   preparing: '备料中',
   uploaded: '已上传',
@@ -164,6 +218,12 @@ const songColumns = computed(() => [
     render: (r) => h(NText, { depth: 3 }, () => r.p.publish_date || '—') },
   { title: '时长', key: 'dur', width: 70, align: 'right',
     render: (r) => h(NText, { depth: 3 }, () => fmtDuration(r.p.duration)) },
+  { title: '宣推', key: 'promo', width: 96, align: 'center',
+    render: (r) => h('button', {
+      class: 'ghost-btn',
+      style: 'padding:2px 8px;font-size:11px;color:var(--vf-primary);border-color:var(--vf-primary-soft)',
+      onClick: (e) => { e.stopPropagation(); openPromoModal(r); },
+    }, '🎬 宣推短片') },
   { title: '', key: 'link', width: 44, align: 'right',
     render: (r) => r.p.song_url
       ? h('a', { href: r.p.song_url, target: '_blank', rel: 'noopener',
@@ -331,6 +391,57 @@ const fmtDuration = (sec) => {
           <n-button @click="linkOpen = false">取消</n-button>
           <n-button type="primary" :disabled="!linkTarget" :loading="linkBusy" @click="confirmLink">
             关联
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <!-- 宣推短视频合成弹窗 (reel-kit 集成) -->
+    <n-modal v-model:show="promoOpen" preset="card" title="🎬 宣推短视频工作台 (reel-kit)" style="max-width: 580px">
+      <div v-if="selectedTrack" class="promo-modal-body">
+        <div class="promo-track-brief">
+          <img v-if="selectedTrack.cover_file" :src="'/api/cover/' + selectedTrack.id" class="promo-cover-preview" />
+          <div class="promo-meta">
+            <h4 class="promo-title">{{ selectedTrack.title }}</h4>
+            <p class="promo-artist">演唱 / 词曲：{{ selectedTrack.artist || stageName || '月栖洲' }}</p>
+            <p class="promo-hint">基于本机 reel-kit 自动化合成 1080×1920 竖版音乐卡片短片</p>
+          </div>
+        </div>
+
+        <n-form label-placement="left" label-width="84" style="margin-top: 16px">
+          <n-form-item label="视频模板">
+            <n-select v-model:value="promoForm.template" :options="promoTemplates" />
+          </n-form-item>
+          <n-form-item label="每镜时长">
+            <n-input-number v-model:value="promoForm.per_shot" :step="0.2" :min="1.5" :max="6.0" style="width: 100%" />
+          </n-form-item>
+          <n-form-item label="氛围渐变">
+            <n-space>
+              <n-color-picker v-model:value="promoForm.accent1" :show-alpha="false" style="width: 130px" />
+              <n-color-picker v-model:value="promoForm.accent2" :show-alpha="false" style="width: 130px" />
+            </n-space>
+          </n-form-item>
+          <n-form-item label="引导文案">
+            <n-input v-model:value="promoForm.footer" placeholder="汽水音乐 / 抖音 搜索曲目全曲收听" />
+          </n-form-item>
+        </n-form>
+
+        <!-- 合成结果预览 -->
+        <div v-if="promoResult" class="promo-result-box">
+          <div class="promo-result-header">
+            <span>✅ 合成成功 ({{ promoResult.duration }}s · {{ promoResult.shots_count }} 镜)</span>
+            <a :href="'/api/promo/video/' + promoResult.filename" :download="promoResult.filename" class="action-link">
+              ⬇ 下载视频 MP4
+            </a>
+          </div>
+          <video controls :src="'/api/promo/video/' + promoResult.filename" class="promo-video-player" />
+        </div>
+      </div>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="promoOpen = false">关闭</n-button>
+          <n-button type="primary" :loading="promoBusy" @click="runGeneratePromo">
+            {{ promoResult ? '重新生成' : '一键生成 1080×1920 短视频' }}
           </n-button>
         </n-space>
       </template>
@@ -508,6 +619,75 @@ const fmtDuration = (sec) => {
 }
 .link-btn:hover { text-decoration: underline; }
 .modal-hint { margin: 0 0 var(--vf-space-4); font-size: 12px; color: var(--vf-text-3); }
+
+/* Promo Modal styles */
+.promo-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vf-space-2);
+}
+.promo-track-brief {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-3);
+  padding: var(--vf-space-3);
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-md);
+}
+.promo-cover-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--vf-radius-sm);
+  object-fit: cover;
+  border: 1px solid var(--vf-border);
+  flex-shrink: 0;
+}
+.promo-meta {
+  flex: 1;
+  min-width: 0;
+}
+.promo-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--vf-text-1);
+}
+.promo-artist {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--vf-text-2);
+}
+.promo-hint {
+  margin: 3px 0 0;
+  font-size: 11px;
+  color: var(--vf-text-3);
+}
+.promo-result-box {
+  margin-top: var(--vf-space-3);
+  padding: var(--vf-space-3);
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--vf-space-3);
+}
+.promo-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vf-text-1);
+}
+.promo-video-player {
+  width: 100%;
+  max-height: 380px;
+  border-radius: var(--vf-radius-sm);
+  background: #000;
+  outline: none;
+}
 
 @media (max-width: 640px) {
   .platform-tabs { grid-template-columns: 1fr; }

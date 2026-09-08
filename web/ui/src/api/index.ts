@@ -301,6 +301,47 @@ export const api = {
   // ── 下载接管 ──
   inbox: () => get<{ files: unknown[]; downloads_dir: string }>('inbox'),
   inboxImport: (paths: string[]) => post<{ ok: boolean; count: number }>('inbox/import', { paths }),
+
+  // ── 宣推短视频 (reel-kit 集成) ──
+  promoStatus: () => get<{
+    available: boolean;
+    binary: string | null;
+    templates: string[];
+    has_music_card: boolean;
+    error?: string;
+  }>('promo/status'),
+  promoVideos: () => get<{
+    videos: Array<{
+      filename: string;
+      path: string;
+      size: number;
+      mtime: number;
+      size_mb: number;
+    }>;
+  }>('promo/videos'),
+  generatePromo: (p: {
+    track_id: string;
+    template?: string;
+    per_shot?: number;
+    accent1?: string;
+    accent2?: string;
+    footer?: string;
+    custom_caps?: string[];
+  }) => post<{
+    ok: boolean;
+    result: {
+      track_id: string;
+      title: string;
+      video_path: string;
+      filename: string;
+      duration: number;
+      shots_count: number;
+      file_size: number;
+      template: string;
+      caps: string[];
+      created_at: number;
+    };
+  }>('promo/generate', p),
 };
 
 export type Api = typeof api;

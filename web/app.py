@@ -3619,12 +3619,13 @@ def _run_suno_task(task_id: str, params: dict, update_fn):
         # **没拿到音频 ≠ 生成失败。** 歌已经在 Suno 上了、积分也扣了，
         # 只是取回那一段坏了（Suno 现在不给音频直链，API 和 CDN 都 403）。
         # 报成失败会让人以为白花钱，还会往群里推一张失败卡片。
+        found = _recent_clips_titled(req.title, since_ts=_started_at)
         update_fn(task_id, status="done", progress=100,
-                  stage=f"已生成 {len(done)} 首 · 音频需在 suno.com 下载",
-                  result={"ok": True, "files": [], "clips": done,
+                  stage=f"已生成 {len(found)} 首 · 音频需在 suno.com 下载",
+                  result={"ok": True, "files": [], "clips": found,
                           "warning": "Suno 已停止提供音频直链，音频请去网页端下载"})
         obs.log("suno_audio_not_pulled", level="warn",
-                title=req.title[:40], clips=len(done))
+                title=req.title[:40], clips=len(found))
         return
 
     update_fn(
@@ -3722,6 +3723,65 @@ def get_cover(track_id: str):
         raise HTTPException(404, f"封面文件不在了：{t['cover_file']}")
     return FileResponse(str(path), media_type=MEDIA_TYPES.get(path.suffix.lower(), "image/jpeg"),
                         headers={"Cache-Control": "no-store"})
+
+
+# ── 宣推短视频 (reel-kit 集成) ──────────────────────────
+class PromoGenerateRequest(BaseModel):
+    track_id: str
+    template: str = "music-card"
+    per_shot: float = 2.8
+    accent1: str = "#ec4899"
+    accent2: str = "#6366f1"
+    footer: str = ""
+    custom_caps: Optional[list[str]] = None
+
+
+@app.get("/api/promo/status")
+def promo_status():
+    """检查推歌环境就绪状态（reel CLI 与可用模板）。"""
+    from core import promo
+    return promo.check_promo_status()
+
+
+@app.get("/api/promo/videos")
+def promo_videos():
+    """获取所有已生成的宣推短视频列表。"""
+    from core import promo
+    return {"videos": promo.list_promo_videos()}
+
+
+@app.post("/api/promo/generate")
+def promo_generate(req: PromoGenerateRequest):
+    """为指定曲目一键合成 1080x1920 宣推短视频。"""
+    from core import promo
+    try:
+        res = promo.generate_promo_video(
+            track_id=req.track_id,
+            template=req.template,
+            per_shot=req.per_shot,
+            accent1=req.accent1,
+            accent2=req.accent2,
+            footer=req.footer,
+            custom_caps=req.custom_caps,
+        )
+        return {"ok": True, "result": res}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/promo/video/{filename}")
+def promo_video_download(filename: str):
+    """推歌短视频流式播放与下载。"""
+    from core.paths import PROMO_DIR
+    p = (PROMO_DIR / filename).resolve()
+    if not p.is_relative_to(PROMO_DIR) or not p.is_file():
+        raise HTTPException(404, "视频文件不存在")
+    return FileResponse(
+        str(p),
+        media_type="video/mp4",
+        filename=p.name,
+        headers={"Accept-Ranges": "bytes"}
+    )
 
 
 # ── 启动入口 ──────────────────────────────────────────────
