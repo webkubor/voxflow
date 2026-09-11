@@ -7,6 +7,7 @@ from cli.commands.doctor import doctor
 from cli.commands.ai import ai_script, ai_polish
 from cli.commands.stats import stats, logs, backfill
 from cli.commands.promo import app as promo_app
+from cli.commands.museav import app as museav_app
 
 app = typer.Typer(
     name="voice",
@@ -17,6 +18,7 @@ app.add_typer(voice_app, name="voice")
 app.add_typer(job_app, name="job")
 app.add_typer(preset_app, name="preset")
 app.add_typer(promo_app, name="promo")
+app.add_typer(museav_app, name="museav")
 app.command("clone")(tts_clone)
 app.command("design")(tts_design)
 app.command("dialogue")(tts_dialogue)

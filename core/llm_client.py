@@ -1,16 +1,27 @@
 """LLM 客户端 — 任何 OpenAI 兼容后端都能接，实现 AI 文案生成与润色
 
-只依赖 OpenAI SDK 的协议本身，不绑定某一家服务。三个环境变量换后端：
+只依赖 OpenAI SDK 的协议本身，不绑定某一家服务。
 
-    本地 FreeLLMAPI（默认）  需要 Docker 起一个容器在 localhost:3001
-    自己的网关 / 中台        比如 museav：见项目根目录 run.sh
+## 凭据来源有三档，按顺序取第一个命中的
+
+1. **环境变量** `VOXFLOW_LLM_BASE_URL` + `VOXFLOW_LLM_API_KEY` —— 显式覆盖，
+   接自己的网关或别家 LLM 时用。
+2. **MUSE AV 应用授权**（`core/museav_auth`）—— 跑过 `voice museav login` 之后
+   自动命中，走中台的 OpenAI 标准路径 `/api/chat/completions`。
+3. **本地 FreeLLMAPI** —— 需要 Docker 起个容器在 localhost:3001。
+
+第 2 档是 2026-09-11 替掉租户 Key 的那条路。原来中台这条线靠环境变量注入
+**voxcraft 租户 Key**，那意味着「应用方持 Key、花应用方的池子」——
+对 VoxFlow 是错的：它装在用户自己机器上，该花用户自己的积分、产出归用户自己，
+而且租户 Key 一旦发出去只能整把吊销、事后查不出哪次调用是哪个工具发的。
+应用授权三件事都解决：一个应用一把、用户能单独撤销、中台记得住是谁调的。
 
 依赖:
     - pip install openai
 
 配置:
-    环境变量 VOXFLOW_LLM_BASE_URL (默认 http://localhost:3001/v1)
-    环境变量 VOXFLOW_LLM_API_KEY  (默认 freellmapi-local)
+    环境变量 VOXFLOW_LLM_BASE_URL (不设则按上面的顺序自动选)
+    环境变量 VOXFLOW_LLM_API_KEY  (同上)
     环境变量 VOXFLOW_LLM_MODEL    (默认 auto, 让路由器选模型)
 """
 
@@ -18,9 +29,32 @@ import os
 import time
 from typing import Optional
 
-_default_base = os.environ.get("VOXFLOW_LLM_BASE_URL", "http://localhost:3001/v1")
-_default_key = os.environ.get("VOXFLOW_LLM_API_KEY", "freellmapi-local")
+_FREELLM_BASE = "http://localhost:3001/v1"
+_FREELLM_KEY = "freellmapi-local"
+# 中台的 OpenAI 标准路径是 /api/chat/completions，SDK 自己拼 /chat/completions，
+# 所以 base_url 给到 /api 为止（见 museav-manager 的 functions/api/chat/completions.js）
+_MUSEAV_BASE = "https://manager.museav.top/api"
+
+_env_base = os.environ.get("VOXFLOW_LLM_BASE_URL", "")
+_env_key = os.environ.get("VOXFLOW_LLM_API_KEY", "")
 _default_model = os.environ.get("VOXFLOW_LLM_MODEL", "auto")
+
+
+def resolve_backend() -> tuple[str, str, str]:
+    """(base_url, api_key, 来源标签)。每次调用都重新解析 —— 授权状态会在运行期变化
+    （用户可能刚跑完 login，也可能刚在 MUSE AV 那边撤销了授权）。"""
+    if _env_base and _env_key:
+        return _env_base, _env_key, "env"
+    try:
+        from core import museav_auth
+
+        key = museav_auth.load_key()
+        if key:
+            return _MUSEAV_BASE, key, "museav"
+    except Exception:  # noqa: BLE001 - 拿不到就往下走兜底，不该让文案功能整个挂掉
+        pass
+    # 只给了其中一个环境变量时，缺的那半用本地兜底值补齐
+    return (_env_base or _FREELLM_BASE), (_env_key or _FREELLM_KEY), "freellm"
 
 # ── System Prompts ──────────────────────────────────────────
 
@@ -58,11 +92,13 @@ _LYRICS_SYSTEM = """\
 
 
 def _get_client():
-    """懒加载 OpenAI 客户端"""
+    """懒加载 OpenAI 客户端。每次都重新 resolve —— 用户可能刚 login 或刚撤销授权"""
     from openai import OpenAI
+
+    base, key, _ = resolve_backend()
     return OpenAI(
-        base_url=_default_base,
-        api_key=_default_key,
+        base_url=base,
+        api_key=key,
         timeout=30,
     )
 
@@ -102,9 +138,11 @@ def check_status(force: bool = False) -> dict:
             messages=[{"role": "user", "content": "hi"}],
             max_tokens=1,
         )
+        base, _, source = resolve_backend()
         result = {
             "available": True,
-            "base_url": _default_base,
+            "base_url": base,
+            "source": source,
             "model": _default_model,
             "models": [_default_model],
             "error": "",
@@ -116,20 +154,29 @@ def check_status(force: bool = False) -> dict:
         # 用户看到「未连接」会去翻配置、改 base_url，而其实等一分钟就好了。
         msg = str(e)
         if "429" in msg or "频率超限" in msg:
+            base, _, source = resolve_backend()
             return {
                 "available": True,
                 "throttled": True,
-                "base_url": _default_base,
+                "base_url": base,
+                "source": source,
                 "model": _default_model,
                 "models": [_default_model],
                 "error": "请求太频繁，稍等一下再试",
             }
+        base, _, source = resolve_backend()
+        # 401 在 museav 这一档有个明确原因：授权被撤销了。直接说清下一步，
+        # 别让人对着「Unauthorized」去翻 base_url
+        err = str(e)
+        if source == "museav" and ("401" in err or "Unauthorized" in err):
+            err = "MUSE AV 授权已失效或被撤销，重新跑 `voice museav login`"
         return {
             "available": False,
-            "base_url": _default_base,
+            "base_url": base,
+            "source": source,
             "model": _default_model,
             "models": [],
-            "error": str(e),
+            "error": err,
         }
 
 
