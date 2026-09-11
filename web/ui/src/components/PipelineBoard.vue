@@ -1164,30 +1164,17 @@ const waitedDays = (info) => {
 .ghost-btn.small { padding: 4px 10px; font-size: 11px; }
 .ghost-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* 流水线里的按钮是小号：只覆盖尺寸，颜色走 main.css 的全局 .primary-btn */
 .primary-btn {
-  display: inline-flex;
-  align-items: center;
   gap: 4px;
-  background: var(--vf-primary);
-  border: 1px solid var(--vf-primary);
-  color: white;
-  font-size: 12px;
-  font-weight: 600;
   padding: 6px 12px;
-  border-radius: var(--vf-radius-sm);
-  cursor: pointer;
-  transition: all 0.15s var(--vf-ease);
-}
-.primary-btn:hover:not(:disabled) {
-  background: var(--vf-primary-hover);
-  border-color: var(--vf-primary-hover);
-  transform: translateY(-1px);
+  font-size: 12px;
 }
 .primary-btn.small { padding: 5px 10px; font-size: 11px; }
 .primary-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.primary-btn.action-success { background: var(--vf-ok); border-color: var(--vf-ok); }
+.primary-btn.action-success { background: var(--vf-ok); border-color: var(--vf-ok); box-shadow: 0 0 0 1px rgba(34,197,94,.35), 0 6px 24px -4px rgba(34,197,94,.4); }
 .primary-btn.action-success:hover:not(:disabled) { background: #16a34a; border-color: #16a34a; }
-.primary-btn.action-default { background: var(--vf-bg-3); color: var(--vf-text-1); border-color: var(--vf-border); }
+.primary-btn.action-default { background: var(--vf-bg-3); color: var(--vf-text-1); border-color: var(--vf-border); box-shadow: none; }
 .primary-btn.action-default:hover:not(:disabled) { background: var(--vf-bg-hover); border-color: var(--vf-border-strong); }
 
 /* detail */

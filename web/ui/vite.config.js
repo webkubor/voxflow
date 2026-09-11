@@ -72,6 +72,9 @@ export default defineConfig({
       // agentProxy 包一层：代理请求的实际 URL、状态码、Set-Cookie 都会落日志。
       // 原生 proxy 出问题时只有一句 500，看不到到底请求了什么。
       '/api': agentProxy(`http://localhost:${process.env.VF_API_PORT || 8866}`),
+      // logo 走 /assets/branding/*，生产由 app.py 挂载，dev 下不代理就是 404 ——
+      // 结果是开发时永远看不见自己的 logo，界面和品牌因此长期各走各的。
+      '/assets': `http://localhost:${process.env.VF_API_PORT || 8866}`,
     },
   },
 });

@@ -1867,30 +1867,6 @@ const personaOptions = computed(() => {
 .ghost-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .ghost-btn.small { padding: 4px 10px; font-size: 11px; }
 
-.primary-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: white;
-  border: 1px solid white;
-  color: black;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 18px;
-  border-radius: var(--vf-radius-sm);
-  cursor: pointer;
-  transition: all 0.15s var(--vf-ease);
-}
-.primary-btn:hover:not(:disabled) {
-  background: #e4e4e7;
-  border-color: #e4e4e7;
-  transform: translateY(-1px);
-}
-.primary-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
 .form-footer {
   display: flex;
   align-items: center;

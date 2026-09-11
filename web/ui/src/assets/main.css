@@ -79,10 +79,10 @@ html, body {
   background: var(--vf-bg-hover);
 }
 .n-tabs.n-tabs--line-type .n-tabs-tab.n-tabs-tab--active {
-  color: var(--vf-text-1) !important;
-  background: var(--vf-bg-active) !important;
+  color: var(--vf-primary-hover) !important;
+  background: var(--vf-primary-soft) !important;
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px var(--vf-border-strong);
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.35);
 }
 .n-tabs.n-tabs--line-type .n-tabs-bar { display: none !important; }
 
@@ -108,15 +108,51 @@ html, body {
   transform: scale(0.97);
 }
 .n-button--primary-type {
-  background: #ffffff !important;
-  border: 1px solid #ffffff !important;
-  color: #000000 !important;
   font-weight: 600 !important;
+  box-shadow: var(--vf-glow);
 }
 .n-button--primary-type:hover:not(.n-button--disabled) {
-  background: #e4e4e7 !important;
-  border-color: #e4e4e7 !important;
+  box-shadow: var(--vf-glow-strong);
   transform: translateY(-1px);
+}
+
+/* ── 主行动按钮 ──────────────────────────────────────────
+ *
+ * 全站唯一定义。别再在组件的 scoped style 里写第二份：scoped 会带
+ * [data-v-x] 属性选择器，特异性比这里高，写了就静默赢过全局，
+ * 于是每个页面的主按钮各长各的（这个项目已经发生过一次）。
+ * 尺寸变体用 .small，语义变体用 .action-*，颜色一律从 token 来。
+ */
+.primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--vf-radius-sm);
+  background: var(--vf-primary);
+  border: 1px solid var(--vf-primary);
+  color: #fff;
+  box-shadow: var(--vf-glow);
+  cursor: pointer;
+  transition: all 0.15s var(--vf-ease);
+}
+.primary-btn:hover:not(:disabled) {
+  background: var(--vf-primary-hover);
+  border-color: var(--vf-primary-hover);
+  box-shadow: var(--vf-glow-strong);
+  transform: translateY(-1px);
+}
+.primary-btn:disabled {
+  opacity: 0.35;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.primary-btn.small {
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
 }
 
 /* ── 输入框 ── */
@@ -134,8 +170,8 @@ html, body {
 .n-input--focus,
 .n-input:focus-within {
   background-color: var(--vf-bg-2) !important;
-  border-color: var(--vf-border-focus) !important;
-  box-shadow: 0 0 0 1px var(--vf-border-focus) !important;
+  border-color: var(--vf-primary) !important;
+  box-shadow: 0 0 0 3px var(--vf-primary-soft) !important;
 }
 .n-input .n-input__textarea-el,
 .n-input .n-input__input-el {

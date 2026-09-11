@@ -252,7 +252,7 @@ const copy = async (text) => {
 .pre-mark { width: 12px; }
 .pre-name { min-width: 9em; }
 .pre-detail { color: var(--vf-text-3, #888); flex: 1; min-width: 0; }
-.pre-link { flex: none; color: var(--vf-accent, #7c9cff); text-decoration: none; }
+.pre-link { flex: none; color: var(--vf-primary-hover); text-decoration: none; }
 
 .paths { display: flex; flex-direction: column; gap: 10px; margin: 0 0 var(--vf-space-4); }
 .path {

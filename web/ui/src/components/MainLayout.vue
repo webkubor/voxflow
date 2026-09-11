@@ -556,8 +556,10 @@ const formatRenewDate = (iso) => {
   font-size: 14px; border-bottom: 2px solid transparent;
 }
 .nav-l1-item.active {
-  color: var(--vf-text-1, #fff); font-weight: 600;
-  border-bottom-color: var(--vf-accent, #7c9cff);
+  color: var(--vf-primary-hover); font-weight: 600;
+  border-bottom-color: var(--vf-primary);
+  /* 当前位置 = 唯一该发光的导航项 */
+  box-shadow: 0 2px 12px -4px var(--vf-primary);
 }
 .nav-l2 {
   display: flex; gap: 2px; padding: 6px 0 2px;
@@ -567,7 +569,11 @@ const formatRenewDate = (iso) => {
   padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
   border: none; background: transparent; color: var(--vf-text-3, #999);
 }
-.nav-l2-item.active { background: var(--vf-bg-3, rgba(255,255,255,.08)); color: var(--vf-text-1, #fff); }
+.nav-l2-item.active {
+  background: var(--vf-primary-soft);
+  color: var(--vf-primary-hover);
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.3);
+}
 
 /* 异步组件加载失败的兜底屏。用 :deep 是因为它渲染在 errorComponent 里，
    不在本组件的模板作用域内。 */
@@ -645,9 +651,13 @@ const formatRenewDate = (iso) => {
   gap: var(--vf-space-2);
 }
 .brand-logo {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: var(--vf-radius-xs);
+  /* logo 源图是纯黑底的霓虹线条：screen 把黑底吃掉，只留发光的线，
+     否则在深色顶栏上就是一个边界可见的黑方块。 */
+  mix-blend-mode: screen;
+  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.55));
 }
 .brand-text {
   display: flex;

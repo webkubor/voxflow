@@ -509,32 +509,6 @@ onMounted(() => synthStore.loadScripts());
   border-color: var(--vf-border-strong);
 }
 
-.primary-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: white;
-  border: 1px solid white;
-  color: black;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 18px;
-  border-radius: var(--vf-radius-sm);
-  cursor: pointer;
-  transition: all 0.15s var(--vf-ease);
-}
-
-.primary-btn:hover:not(:disabled) {
-  background: #e4e4e7;
-  border-color: #e4e4e7;
-  transform: translateY(-1px);
-}
-
-.primary-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
 @media (max-width: 768px) {
   .params-grid {
     grid-template-columns: 1fr;
