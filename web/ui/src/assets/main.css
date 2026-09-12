@@ -82,7 +82,7 @@ html, body {
   color: var(--vf-primary-hover) !important;
   background: var(--vf-primary-soft) !important;
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.35);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vf-primary) 35%, transparent);
 }
 .n-tabs.n-tabs--line-type .n-tabs-bar { display: none !important; }
 
@@ -153,6 +153,41 @@ html, body {
   gap: 4px;
   padding: 6px 12px;
   font-size: 12px;
+}
+
+/* 次级按钮 —— 跟 .primary-btn 同源同尺寸体系。
+ *
+ * 2026-09-12 收拢：这个类原本在 7 个组件的 scoped style 里各写一遍，
+ * 已经分叉成 4 种尺寸（padding 5/6/7px、gap 4/5/6px，OpsTab 那份还是
+ * 透明底），同一屏里两个次级按钮大小都不一样 —— 这正是上面那段注释
+ * 警告过的事，上次只收了 primary，ghost 漏了。
+ *
+ * 尺寸对齐 .primary-btn.small，两者并排时才不会高低不齐。
+ */
+.ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--vf-radius-sm);
+  background: var(--vf-bg-3);
+  border: 1px solid var(--vf-border);
+  color: var(--vf-text-2);
+  cursor: pointer;
+  transition: all 0.15s var(--vf-ease);
+}
+.ghost-btn:hover:not(:disabled) {
+  background: var(--vf-bg-hover);
+  border-color: var(--vf-border-strong);
+  color: var(--vf-text-1);
+}
+.ghost-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.ghost-btn.small {
+  gap: 3px;
+  padding: 4px 10px;
+  font-size: 11px;
 }
 
 /* ── 输入框 ── */

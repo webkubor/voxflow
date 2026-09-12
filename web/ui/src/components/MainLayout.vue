@@ -572,7 +572,7 @@ const formatRenewDate = (iso) => {
 .nav-l2-item.active {
   background: var(--vf-primary-soft);
   color: var(--vf-primary-hover);
-  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.3);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vf-primary) 30%, transparent);
 }
 
 /* 异步组件加载失败的兜底屏。用 :deep 是因为它渲染在 errorComponent 里，
@@ -657,7 +657,7 @@ const formatRenewDate = (iso) => {
   /* logo 源图是纯黑底的霓虹线条：screen 把黑底吃掉，只留发光的线，
      否则在深色顶栏上就是一个边界可见的黑方块。 */
   mix-blend-mode: screen;
-  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.55));
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--vf-primary) 55%, transparent));
 }
 .brand-text {
   display: flex;

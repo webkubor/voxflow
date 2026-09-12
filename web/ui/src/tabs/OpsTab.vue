@@ -651,21 +651,10 @@ onUnmounted(() => { clearInterval(fastTimer); clearInterval(slowTimer); });
 .check.is-bad .check-head { color: var(--vf-err); }
 .check-detail { font-size: 11px; color: var(--vf-text-3); }
 
-.ghost-btn {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: transparent;
-  border: 1px solid var(--vf-border);
-  color: var(--vf-text-2);
-  font-size: 11px;
-  padding: 4px 10px;
-  border-radius: var(--vf-radius-sm);
-  cursor: pointer;
-  transition: all 0.15s var(--vf-ease);
-}
-.ghost-btn:hover { border-color: var(--vf-border-strong); color: var(--vf-text-1); }
+
+/* 这颗刷新按钮靠 margin 推到标题行右端 —— 布局，不是按钮样式，
+   所以留在组件里；按钮本身的样式在 main.css 全局那一份。 */
+.section-title .ghost-btn { margin-left: auto; }
 
 /* ── 日志 ── */
 .log-list {

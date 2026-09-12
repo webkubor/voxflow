@@ -30,15 +30,31 @@
   --vf-text-3: #71717a;         /* 占位符、辅助参数 */
   --vf-text-4: #3f3f46;         /* 极淡边角标签 */
 
-  /* ── 点睛之笔：极度克制的单色冷光 (Precision Accent) ── */
-  --vf-primary: #6366f1;        /* 纯正冷靛蓝 */
-  --vf-primary-hover: #818cf8;
-  --vf-primary-active: #4f46e5;
-  --vf-primary-soft: rgba(99, 102, 241, 0.12);
-  --vf-primary-glow: rgba(99, 102, 241, 0.2);
+  /* ══════════════════════════════════════════════════════════════
+   *  主题色 —— 全站唯一真源。换品牌色只改下面这一行。
+   *
+   *  2026-09-12 之前不是这样：同一个 #6366f1 以 hex 和 rgb(99,102,241)
+   *  两种写法散在 6 个文件里共 21 处，改主题色要翻遍全项目改 21 遍，
+   *  漏一处就是一块颜色对不上的角落 —— 「配置一次就生效」根本做不到。
+   *
+   *  现在所有衍生色都用 color-mix 从 --vf-primary 算出来，包括 naive-ui：
+   *  App.vue 的 themeOverrides 用 readVar() 读的就是这里，组件库跟着一起变。
+   *  不要再往下面写第二个 hex —— 写了就等于把真源劈成两半。
+   * ══════════════════════════════════════════════════════════════ */
+  --vf-primary: #6366f1;        /* ← 唯一真源：纯正冷靛蓝 */
+
+  /* 以下全部派生，不要手填颜色值 */
+  --vf-primary-hover:  color-mix(in srgb, var(--vf-primary) 72%, #fff);
+  --vf-primary-active: color-mix(in srgb, var(--vf-primary) 82%, #000);
+  --vf-primary-soft:   color-mix(in srgb, var(--vf-primary) 12%, transparent);
+  --vf-primary-glow:   color-mix(in srgb, var(--vf-primary) 20%, transparent);
   /* 可直接落在 box-shadow 上的辉光：内 1px 亮边 + 外扩散，对应 logo 的「线 + 晕」 */
-  --vf-glow:        0 0 0 1px rgba(99, 102, 241, 0.35), 0 6px 24px -4px rgba(99, 102, 241, 0.45);
-  --vf-glow-strong: 0 0 0 1px rgba(99, 102, 241, 0.50), 0 8px 32px -4px rgba(99, 102, 241, 0.65);
+  --vf-glow:
+    0 0 0 1px color-mix(in srgb, var(--vf-primary) 35%, transparent),
+    0 6px 24px -4px color-mix(in srgb, var(--vf-primary) 45%, transparent);
+  --vf-glow-strong:
+    0 0 0 1px color-mix(in srgb, var(--vf-primary) 50%, transparent),
+    0 8px 32px -4px color-mix(in srgb, var(--vf-primary) 65%, transparent);
 
   /* ── 语义状态：低饱和度精密指示 ── */
   --vf-ok: #22c55e;

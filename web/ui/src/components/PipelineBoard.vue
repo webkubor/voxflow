@@ -1143,26 +1143,6 @@ const waitedDays = (info) => {
 .meta-pill.success { background: var(--vf-ok-soft); color: var(--vf-ok); }
 
 /* buttons */
-.ghost-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--vf-bg-3);
-  border: 1px solid var(--vf-border);
-  color: var(--vf-text-2);
-  padding: 5px 12px;
-  border-radius: var(--vf-radius-sm);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.ghost-btn:hover:not(:disabled) {
-  background: var(--vf-bg-hover);
-  color: var(--vf-text-1);
-  border-color: var(--vf-border-strong);
-}
-.ghost-btn.small { padding: 4px 10px; font-size: 11px; }
-.ghost-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* 流水线里的按钮是小号：只覆盖尺寸，颜色走 main.css 的全局 .primary-btn */
 .primary-btn {

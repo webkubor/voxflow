@@ -418,7 +418,7 @@ defineExpose({ togglePlay, toggleMute });
   box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
 }
 .play-toggle.playing {
-  box-shadow: 0 0 14px rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--vf-primary) 50%, transparent);
 }
 .equalizer {
   display: flex;
@@ -497,7 +497,7 @@ defineExpose({ togglePlay, toggleMute });
   position: absolute;
   left: 0;
   top: 0;
-  box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--vf-primary) 50%, transparent);
 }
 .progress-fill.active {
   background-size: 200% 100%;
@@ -515,7 +515,7 @@ defineExpose({ togglePlay, toggleMute });
   position: absolute;
   top: 50%;
   transform: translate(-50%, -50%) scale(0);
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5), 0 0 8px rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vf-primary) 50%, transparent), 0 0 8px rgba(255, 255, 255, 0.8);
   transition: transform 0.15s var(--vf-ease);
 }
 .progress-track:hover .progress-thumb,
@@ -637,7 +637,7 @@ defineExpose({ togglePlay, toggleMute });
 }
 .player-mini.playing {
   border-color: var(--vf-primary);
-  box-shadow: 0 0 16px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--vf-primary) 40%, transparent);
 }
 .mini-icon { display: flex; }
 .mini-eq {

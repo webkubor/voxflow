@@ -57,6 +57,9 @@ const promoTemplates = ref([
 const promoForm = ref({
   template: 'music-card',
   per_shot: 2.8,
+  // 宣推视频的封面渐变色，**是内容参数不是 UI 主题色** —— 会原样发给
+  // reel-kit 合成到视频里。默认值取了品牌色，但换 UI 主题色时它不该跟着变
+  // （视频配色是作品的一部分，不是界面皮肤），所以这里刻意不读 token。
   accent1: '#ec4899',
   accent2: '#6366f1',
   footer: '',
@@ -504,25 +507,6 @@ const fmtDuration = (sec) => {
 .pt-artist { font-size: 12px; color: var(--vf-text-2); }
 .pt-meta { font-size: 11px; color: var(--vf-text-3); }
 
-.ghost-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--vf-bg-3);
-  border: 1px solid var(--vf-border);
-  color: var(--vf-text-2);
-  padding: 5px 12px;
-  border-radius: var(--vf-radius-sm);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.ghost-btn:hover:not(:disabled) {
-  background: var(--vf-bg-hover);
-  color: var(--vf-text-1);
-  border-color: var(--vf-border-strong);
-}
-.ghost-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .empty-platform { padding: var(--vf-space-7) 0; }
 .empty-hint { font-size: 12px; color: var(--vf-text-3); }

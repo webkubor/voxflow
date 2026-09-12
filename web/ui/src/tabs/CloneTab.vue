@@ -489,25 +489,7 @@ onMounted(() => synthStore.loadScripts());
   cursor: pointer;
 }
 
-.ghost-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--vf-bg-3);
-  border: 1px solid var(--vf-border);
-  color: var(--vf-text-2);
-  padding: 6px 12px;
-  border-radius: var(--vf-radius-sm);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
 
-.ghost-btn:hover {
-  background: var(--vf-bg-hover);
-  color: var(--vf-text-1);
-  border-color: var(--vf-border-strong);
-}
 
 @media (max-width: 768px) {
   .params-grid {
