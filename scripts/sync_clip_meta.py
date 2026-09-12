@@ -31,7 +31,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from core import notify  # noqa: E402
 
 DRY = "--dry-run" in sys.argv
-SUNO = str(Path.home() / ".cargo/bin/suno")
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
@@ -58,7 +57,9 @@ def main() -> int:
                               {"field_name": "Clip ID", "type": 1})
         print("新增字段 Clip ID:", "✓" if r.get("ok") else str(r.get("error"))[:120])
 
-    out = subprocess.run([SUNO, "list", "--json"], capture_output=True, text=True, timeout=90).stdout
+    # 直连 API，不再经过 suno CLI（2026-09-12）
+    from core import suno_api
+    out = json.dumps({"data": {"clips": suno_api.list_clips(limit=50)["clips"]}})
     clips = {c["id"]: c for c in json.loads(out or "{}").get("data", {}).get("clips", [])}
     print(f"Suno 上 {len(clips)} 首")
 

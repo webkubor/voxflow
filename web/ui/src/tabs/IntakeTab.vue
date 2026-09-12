@@ -110,7 +110,7 @@
             封面：{{ result.封面.ok ? `已生成（扣 ${result.封面.credits} 积分）` : '失败 —— ' + result.封面.错误 }}
           </div>
           <div class="rline">
-            备料：{{ result.备料.备料齐了 ? '✅ 齐了，可以去上传' : `还缺 ${result.备料.缺口数} 项` }}
+            备料：{{ result.备料.备料齐了 ? '齐了，可以去上传' : `还缺 ${result.备料.缺口数} 项` }}
           </div>
           <ul v-if="!result.备料.备料齐了" class="miss">
             <li v-for="m in result.备料.缺" :key="m">{{ m }}</li>

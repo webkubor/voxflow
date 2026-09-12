@@ -432,7 +432,7 @@ const fmtDuration = (sec) => {
         <!-- 合成结果预览 -->
         <div v-if="promoResult" class="promo-result-box">
           <div class="promo-result-header">
-            <span>✅ 合成成功 ({{ promoResult.duration }}s · {{ promoResult.shots_count }} 镜)</span>
+            <span><Icon name="check" size="sm" /> 合成成功 ({{ promoResult.duration }}s · {{ promoResult.shots_count }} 镜)</span>
             <a :href="'/api/promo/video/' + promoResult.filename" :download="promoResult.filename" class="action-link">
               ⬇ 下载视频 MP4
             </a>

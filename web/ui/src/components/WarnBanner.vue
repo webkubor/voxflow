@@ -26,6 +26,10 @@ const props = defineProps({
   action: { type: Boolean, default: false },
 });
 
+// ⚠️ 这四个是 emoji，违反 0.4.0 立的「图标语言收敛成一套、不用 emoji」——
+// emoji 在三套系统上渲染完全不同，也不能跟着主题变色。没一起换掉的原因是
+// Icon.vue 目前只有 check，缺 warn / error / info 三个，补图标是独立的一步。
+// 别照着这里再往别处加 emoji。
 const ICONS = {
   warn: '⚠️',
   error: '❌',

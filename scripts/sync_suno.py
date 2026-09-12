@@ -33,36 +33,36 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from core import db  # noqa: E402
 from core.paths import DATA_DIR  # noqa: E402
 
-SUNO_BIN = os.path.expanduser("~/.cargo/bin/suno")
 DRY = "--dry-run" in sys.argv
 
 
 def fetch_all() -> list[dict]:
-    """翻完所有分页。免费命令，可以放心翻到底。"""
-    clips, cursor, pages = [], None, 0
+    """翻完所有分页。只读调用，不花积分，可以放心翻到底。
+
+    2026-09-12 从 `suno list --json` 换成直连 API（core/suno_api）——
+    整个项目已经不依赖那个 Rust CLI 了，这里留着就是最后一处外部依赖。
+    """
+    from core import suno_api
+
+    clips, cursor, pages = [], "", 0
     while True:
-        cmd = [SUNO_BIN, "list", "--json"] + (["--cursor", cursor] if cursor else [])
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        try:
-            data = json.loads(r.stdout or "{}").get("data") or {}
-        except json.JSONDecodeError:
-            print(f"❌ 第 {pages + 1} 页返回不是 JSON：{(r.stderr or r.stdout)[:200]}")
-            break
-        batch = data.get("clips") or []
+        page = suno_api.list_clips(limit=50, cursor=cursor)
+        batch = page.get("clips") or []
         clips.extend(batch)
         pages += 1
-        cursor = data.get("next_cursor")
-        if not data.get("has_more") or not cursor or pages > 50:
+        cursor = page.get("next_cursor") or ""
+        if not cursor or not batch or pages > 50:
             break
     print(f"云端拉到 {len(clips)} 首（{pages} 页）")
     return clips
 
 
 def main() -> int:
-    if not os.path.exists(SUNO_BIN):
-        print(f"❌ 找不到 suno CLI：{SUNO_BIN}")
+    try:
+        clips = fetch_all()
+    except Exception as e:
+        print(f"❌ 拉取失败：{e}")
         return 1
-    clips = fetch_all()
     if not clips:
         return 1
 
@@ -72,7 +72,7 @@ def main() -> int:
             "SELECT clip_id FROM tracks WHERE clip_id IS NOT NULL AND clip_id != ''")}
         titles = {r["title"] for r in c.execute("SELECT title FROM tracks")}
 
-    added, skipped, timed = 0, 0, 0
+    added, skipped, timed, renamed = 0, 0, 0, 0
     for cl in clips:
         cid = cl.get("id") or ""
         if not cid:

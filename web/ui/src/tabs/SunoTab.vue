@@ -14,7 +14,7 @@
       </div>
       <div class="auth-status">
         <span v-if="suno.authenticated" class="credit-pill">
-          ✅ {{ suno.plan || 'Suno' }} · {{ suno.total_credits_left }} credits
+          {{ suno.plan || 'Suno' }} · {{ suno.total_credits_left }} credits
         </span>
         <span v-else class="credit-pill warn"><Icon name="warning" size="sm" />未登录</span>
         <button class="icon-btn" title="刷新状态" @click="loadSunoStatus">

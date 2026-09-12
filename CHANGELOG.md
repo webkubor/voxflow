@@ -2,6 +2,45 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/) 规范。
 
+## [未发布]
+
+### 🔊 音频能自动下回本地了 —— 之前的结论是错的
+
+`/api/inbox` 的注释里写着「CDN 直链 403，硬绕这层反爬性价比极低」，据此把
+分工定成「人在浏览器点一下下载」。实际抓一次浏览器网络请求就看到：网页
+播放器拉的是 `cloudfront.net/1/clip/<id>.m4a`，**无签名、无 Referer 校验、
+直接 GET 就是 200**。API 那路的 `audio_url` 确实被写死成 `api/forbidden`，
+但那只是 API 一路被关，CDN 一路一直开着。
+
+「能播放就说明音频流一定到了浏览器」—— 这个判断当时没人往下追。
+现在 `core/suno_api.download()` 走 CDN，生成完自动入库；`/api/inbox`
+从必经之路降级为兜底。
+
+### 🖥 Windows 支持
+
+六处 macOS 写死已去掉：数据根走 `%LOCALAPPDATA%\VoxFlow`、播放按平台分支、
+启动前检查从 run.sh 搬进 `voice web`（三平台共用）、补 `run.ps1`。
+`tests/test_platform.py` 注入环境验证分支。**未在真机验证过**。
+
+顺带揪出一个真 bug：`core/llm_client.py` 的默认模型写死 `auto`，而对的值
+export 在 run.sh 里 —— 不走 run.sh 的人（Windows、或直接 `voice web`）
+AI 文案一律报错。配置的默认值不该藏在某个平台的启动脚本里。
+
+### 🎨 UI 收敛
+
+- 主题色收敛成单一真源：同一个 `#6366f1` 原本以两种写法散在 6 个文件共 21 处，
+  现在改 `--vf-primary` 一行全站生效（含 naive-ui）。并写明它源自 logo
+  （实测色相差 5.4°）、换色要连 logo/favicon/banner 一起换。
+- `.ghost-btn` 7 份分叉收拢成全局一份（原本 4 种尺寸，同屏两个按钮大小不一）。
+- 清掉 3 处装饰性 emoji；`WarnBanner` 那组因缺图标暂留，已就地标注原因。
+
+### 🧹 suno CLI 残留清零
+
+`scripts/sync_suno.py` / `sync_clip_meta.py` 改直连。修 `sync_suno.py` 里
+一个既有 bug：`renamed` 从未初始化，脚本跑到最后一行必崩。
+
+---
+
 ## [0.6.0] - 2026-09-12
 
 ### 🔌 甩掉 suno CLI：音乐生成改直连 Suno API
