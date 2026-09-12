@@ -153,13 +153,22 @@ const copy = (t) => navigator.clipboard?.writeText(t);
 }
 /* 自制 ≠ AI 生成。这个区分不是装饰：发行时平台会问「是否 AI 生成」，
    标错是合规问题。 */
-.badge-src.suno { background: var(--vf-primary-soft); color: var(--vf-primary); border: 1px solid var(--vf-primary); }
-.badge-src.self { background: var(--vf-ok-soft); color: var(--vf-ok); border: 1px solid var(--vf-ok); }
+/* 标签压在封面上，而封面亮度不可控 —— 只用半透明品牌色在亮图上会糊掉
+   （实测前两张粉紫色封面上「AI 生成」被压掉一半）。所以先垫一层深色底，
+   再上品牌色描边，任何封面上都读得出来。 */
+.badge-src.suno {
+  background: color-mix(in srgb, #000 62%, var(--vf-primary) 38%);
+  color: #fff; border: 1px solid var(--vf-primary);
+}
+.badge-src.self {
+  background: color-mix(in srgb, #000 62%, var(--vf-ok) 38%);
+  color: #fff; border: 1px solid var(--vf-ok);
+}
 .badge-inst {
   font-size: 11px; padding: 2px 8px; backdrop-filter: blur(6px);
   border-radius: var(--vf-radius-full, 999px);
-  background: var(--vf-primary-soft); color: var(--vf-primary);
-  border: 1px solid var(--vf-primary);
+  background: color-mix(in srgb, #000 62%, var(--vf-primary) 38%);
+  color: #fff; border: 1px solid var(--vf-primary);
 }
 
 .card-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; flex: 1; }

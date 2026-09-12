@@ -103,8 +103,12 @@
 
       <!-- 中部主内容 -->
       <n-layout has-sider class="app-body">
-        <!-- 左侧音色库 -->
+        <!-- 左侧音色库：**只在真用得上音色的屏显示**（克隆/设计/剧本）。
+             音乐、发行、卡片墙、运营台上它既不能操作什么，又吃掉 170px 宽度 ——
+             而这几屏恰恰是内容最密的（卡片墙一行少放一张卡）。
+             音色的完整管理本来就在「音色」那一组里，侧边栏在那里才是顺手的位置。 -->
         <PersonaSidebar
+          v-if="needsPersona"
           ref="sidebarRef"
           :collapsed="siderCollapsed"
           @toggle-collapse="siderCollapsed = !siderCollapsed"
