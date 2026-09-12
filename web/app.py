@@ -2496,6 +2496,19 @@ def llm_polish(req: LLMPolishRequest):
         return {"ok": False, "error": str(e)}
 
 
+@app.post("/api/llm/tags")
+def llm_tags(req: dict):
+    """从一句话主题生成 Suno 风格标签。小白最不会写的一环。"""
+    theme = (req or {}).get("theme", "").strip()
+    if not theme:
+        raise HTTPException(400, "请先写一句主题，比如「上班摸鱼的搞笑歌，年轻女生唱」")
+    from core.llm_client import generate_tags                  # noqa: PLC0415
+    try:
+        return {"ok": True, "text": generate_tags(theme)}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)[:160]}
+
+
 @app.post("/api/llm/lyrics")
 def llm_lyrics(req: LLMLyricsRequest):
     """生成可直接提交给 Suno 的结构化歌词。"""
@@ -2674,7 +2687,10 @@ def gallery(limit: int = 60, only_with_prompt: bool = False):
             "lyrics_preview": lyr[:120],
             "instrumental": "instrumental" in tags.lower(),
             "cover": f"/api/media?path={quote(r['cover_file'])}" if r["cover_file"] else "",
-            "audio": r["cloud_backup"] or "",     # R2 直链，任何人点开就能听
+            # 音频来源：audio_file 是相对数据目录的路径，走 /api/media 取。
+            # **不要用 cloud_backup** —— 那个字段存的是一个 JSON 对象（现在普遍是
+            # "{}"），不是 URL；直接当链接用会拼出 /{} 然后 404。
+            "audio": f"/api/media?path={quote(r['audio_file'])}" if (r["audio_file"] or "").strip() else "",
             "duration": r["duration"],
             "created_at": r["created_at"],
             "stage": r["stage"],

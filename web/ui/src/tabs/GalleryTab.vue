@@ -16,6 +16,9 @@
         <n-button size="small" :loading="loading" @click="load">
           <Icon name="refresh" size="sm" /> 刷新
         </n-button>
+        <n-button type="primary" size="small" class="glow" @click="prepOpen = true">
+          <Icon name="plus" size="sm" /> 一键备料
+        </n-button>
       </div>
     </header>
 
@@ -25,10 +28,20 @@
     <div v-else class="g-grid">
       <article v-for="c in shown" :key="c.id" class="card">
         <div class="card-cover">
-          <img v-if="c.cover" :src="c.cover" :alt="c.title" loading="lazy" />
-          <div v-else class="cover-fallback"><Icon name="suno" /></div>
-          <span v-if="c.instrumental" class="badge-inst">纯音乐</span>
-          <span class="badge-src" :class="c.source">{{ c.source_label }}</span>
+          <img
+            v-if="c.cover && !failed[c.id]" :src="c.cover" alt="" loading="lazy"
+            @error="failed[c.id] = true"
+          />
+          <!-- 247 首里只有 43 首有封面图，所以「没有封面」是常态不是异常。
+               占位要自己长得像个封面 —— 用标题首字 + 主题色渐变，
+               而不是让浏览器画一个破图图标再把 alt 文字漏出来。 -->
+          <div v-else class="cover-ph">
+            <span class="ph-char">{{ (c.title || '?').slice(0, 1) }}</span>
+          </div>
+          <div class="cover-badges">
+            <span class="badge-src" :class="c.source">{{ c.source_label }}</span>
+            <span v-if="c.instrumental" class="badge-inst">纯音乐</span>
+          </div>
         </div>
 
         <div class="card-body">
@@ -40,8 +53,9 @@
               <span>风格提示词</span>
               <button v-if="c.tags" class="copy-mini" @click="copy(c.tags)">复制</button>
             </div>
+            <!-- 定高 + 超出滚动：提示词长短差好几倍，不定高整面卡片就参差不齐 -->
             <p v-if="c.tags" class="prompt-text">{{ c.tags }}</p>
-            <p v-else class="prompt-empty">（这首没记提示词）</p>
+            <p v-else class="prompt-empty">这首没记提示词（多半不是 Suno 生成的）</p>
           </div>
 
           <div class="card-meta">
@@ -65,12 +79,16 @@
       </article>
     </div>
   </div>
+  <PrepModal v-model:show="prepOpen" />
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import Icon from '../components/Icon.vue';
+import PrepModal from '../components/PrepModal.vue';
 
+const prepOpen = ref(false);
+const failed = reactive({});   // 封面加载失败的 id，失败一次就不再重试
 const cards = ref([]);
 const loading = ref(false);
 const onlyPrompt = ref(false);
@@ -117,9 +135,20 @@ const copy = (t) => navigator.clipboard?.writeText(t);
 
 .card-cover { position: relative; aspect-ratio: 1; background: var(--vf-bg-3); }
 .card-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.cover-fallback { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--vf-text-4); }
+.cover-ph {
+  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(120% 120% at 30% 20%,
+      color-mix(in srgb, var(--vf-primary) 22%, transparent), transparent 60%),
+    var(--vf-bg-3);
+}
+.ph-char {
+  font-size: 44px; font-weight: 300; line-height: 1;
+  color: color-mix(in srgb, var(--vf-primary) 55%, transparent);
+}
+.cover-badges { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; justify-content: space-between; gap: 6px; }
 .badge-src {
-  position: absolute; top: 8px; left: 8px; font-size: 11px; padding: 2px 8px;
+  font-size: 11px; padding: 2px 8px; backdrop-filter: blur(6px);
   border-radius: var(--vf-radius-full, 999px);
 }
 /* 自制 ≠ AI 生成。这个区分不是装饰：发行时平台会问「是否 AI 生成」，
@@ -127,7 +156,7 @@ const copy = (t) => navigator.clipboard?.writeText(t);
 .badge-src.suno { background: var(--vf-primary-soft); color: var(--vf-primary); border: 1px solid var(--vf-primary); }
 .badge-src.self { background: var(--vf-ok-soft); color: var(--vf-ok); border: 1px solid var(--vf-ok); }
 .badge-inst {
-  position: absolute; top: 8px; right: 8px; font-size: 11px; padding: 2px 8px;
+  font-size: 11px; padding: 2px 8px; backdrop-filter: blur(6px);
   border-radius: var(--vf-radius-full, 999px);
   background: var(--vf-primary-soft); color: var(--vf-primary);
   border: 1px solid var(--vf-primary);
@@ -141,12 +170,14 @@ const copy = (t) => navigator.clipboard?.writeText(t);
 .copy-mini { background: none; border: none; color: var(--vf-primary); font-size: 11px; cursor: pointer; padding: 0; }
 .prompt-text {
   margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--vf-text-2);
+  height: 72px; overflow-y: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   word-break: break-word;
 }
-.prompt-empty { margin: 0; font-size: 11.5px; color: var(--vf-text-4); }
+.prompt-empty { margin: 0; font-size: 11.5px; color: var(--vf-text-4); height: 72px; }
 
 .card-meta { display: flex; gap: 10px; font-size: 11px; color: var(--vf-text-3); }
 .card-meta .stage { margin-left: auto; }
-.card-foot { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+.card-foot { display: flex; gap: 6px; margin-top: auto; overflow-x: auto; padding-top: 2px; }
+.card-foot::-webkit-scrollbar { height: 0; }
 </style>

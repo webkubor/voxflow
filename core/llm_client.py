@@ -306,7 +306,21 @@ def generate_tags(theme: str) -> str:
 示例输入：上班摸鱼的搞笑歌，年轻女生唱
 示例输出：electropop, hyperpop, bright young female vocal, gen-z, quirky, catchy hook, mandarin, 128 BPM"""
     out = _chat(sys_prompt, theme.strip(), action="tags", temperature=0.7, max_tokens=200)
-    return out.strip().strip('"').replace("\n", " ")
+    tags = out.strip().strip('"').replace("\n", " ")
+
+    # 兜底：BPM 决定快慢，缺了 Suno 会自己随机挑，同样的标签两次出来节奏差很远。
+    # 系统提示里已经要求必须带，但 LLM 时灵时不灵 —— **规则要在代码里保底，
+    # 不能只写在提示词里**。按主题的快慢线索补一个，猜不出就给中速。
+    # LLM 偶尔整个返回空，那时候只补个 BPM 就成了 ", 75 BPM" 这种废话 ——
+    # 宁可报错让人重试，也不要交一份看着像标签的空壳。
+    if not tags.strip(" ,"):
+        raise RuntimeError("没能生成风格标签，把主题写具体一点再试（比如加上乐器或场景）")
+    if "bpm" not in tags.lower():
+        t = theme.lower() + tags.lower()
+        fast = any(k in t for k in ("卡点", "燃", "运动", "健身", "嗨", "dance", "edm", "trap", "hyperpop"))
+        slow = any(k in t for k in ("安静", "助眠", "冥想", "伤感", "抒情", "ambient", "lo-fi", "sleep"))
+        tags += f", {140 if fast else 75 if slow else 110} BPM"
+    return tags
 
 
 def generate_lyrics(prompt: str, style: str = "") -> str:
