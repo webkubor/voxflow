@@ -2681,6 +2681,10 @@ def gallery(limit: int = 60, only_with_prompt: bool = False):
             "id": r["id"],
             "title": r["title"],
             "source": "suno" if is_ai else "self",
+            # Suno 原链：点进去听原版、对着看当时的提示词。
+            # **卡片墙是素材参考库，不是发布队列** —— 生成了不代表要发，
+            # 所以这里给的是「去听听看」的入口，不是「去发布」。
+            "suno_url": f"https://suno.com/song/{r['clip_id']}" if is_ai else "",
             "source_label": "AI 生成" if is_ai else "自制",
             "tags": tags,                         # ← 卡片的主角：风格提示词
             "has_lyrics": bool(lyr),
@@ -3385,6 +3389,54 @@ def _recent_clips_titled(title: str, since_ts) -> list[dict]:
     return out
 
 
+def _save_generated(clips: list, req, files: list) -> None:
+    """把刚生成的歌写进作品库。
+
+    ## 为什么必须在这里写
+
+    此前生成完只更新任务状态，**不写 tracks 表** —— 歌在 Suno 云端有、
+    本地磁盘有 mp3，唯独作品库里没有。后果是卡片墙、运营台、发行流程
+    全都看不见今天做的东西，要等人想起来手动跑 scripts/sync_suno.py。
+
+    2026-09-12 实测：当天生成的 10 首，一首都不在库里。
+
+    写库失败不能影响任务结果 —— 歌已经生成、积分已经扣了，这里只是记账。
+    """
+    from core import db as _db                                 # noqa: PLC0415
+
+    try:
+        _db.init()
+        by_clip = {}
+        for i, c in enumerate(clips):
+            by_clip[c["id"]] = files[i] if i < len(files) else ""
+        with _db.connect() as conn:
+            have = {r["clip_id"] for r in conn.execute(
+                "SELECT clip_id FROM tracks WHERE clip_id IS NOT NULL AND clip_id != ''")}
+            for c in clips:
+                if c["id"] in have:
+                    continue
+                rel = ""
+                f = by_clip.get(c["id"]) or ""
+                if f:
+                    try:
+                        rel = str(Path(f).relative_to(OUT_DIR.parent))
+                    except ValueError:
+                        rel = ""
+                md = c.get("metadata") or {}
+                conn.execute(
+                    """INSERT INTO tracks (title, stage, tags, lyrics, clip_id, audio_file,
+                                           duration, created_at, updated_at)
+                       VALUES (?, 'generated', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))""",
+                    (c.get("title") or req.title or "未命名",
+                     (md.get("tags") or req.tags or "").strip(),
+                     (md.get("prompt") or req.lyrics or "").strip(),
+                     c["id"], rel, md.get("duration")),
+                )
+            conn.commit()
+    except Exception as e:  # noqa: BLE001
+        obs.log("track_save_failed", level="warn", error=str(e)[:200])
+
+
 def _run_suno_task(task_id: str, params: dict, update_fn):
     """执行 Suno 音乐生成：直连 Suno API → 产物拷回 out/music。
 
@@ -3515,6 +3567,7 @@ def _run_suno_task(task_id: str, params: dict, update_fn):
                 title=req.title[:40], clips=len(done_clips))
         return
 
+    _save_generated(done_clips, req, copied)
     update_fn(
         task_id, status="done", progress=100, stage="完成",
         result={"ok": True, "files": copied,

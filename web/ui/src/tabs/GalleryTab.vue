@@ -4,7 +4,8 @@
       <div>
         <h2 class="g-title"><Icon name="library" size="sm" /> 音乐卡片墙</h2>
         <p class="g-sub">
-          每张卡片摆着这首歌的<strong>风格提示词</strong>和成品。横着对比就知道：
+          这里是<strong>素材参考库</strong>，不是发布队列 —— 生成了不代表要发。
+          每张卡片摆着当时的<strong>风格提示词</strong>，可以点进去听、对着比：
           同样是搞笑，加 <code>bassoon</code> 和加 <code>ukulele</code> 差在哪。
         </p>
       </div>
@@ -67,6 +68,9 @@
           <div class="card-foot">
             <n-button v-if="c.audio" size="small" tag="a" :href="c.audio" target="_blank" rel="noopener">
               <Icon name="play" size="sm" /> 听
+            </n-button>
+            <n-button v-if="c.suno_url" size="small" tag="a" :href="c.suno_url" target="_blank" rel="noopener">
+              Suno 原版
             </n-button>
             <n-button
               v-for="p in c.platforms" :key="p.platform"
