@@ -2,9 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/) 规范。
 
-## [未发布] - 0.6.0 草稿
-
-> tag `v0.5.0` 之后的提交，尚未发版。
+## [0.6.0] - 2026-09-12
 
 ### 🔌 甩掉 suno CLI：音乐生成改直连 Suno API
 
