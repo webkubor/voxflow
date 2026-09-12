@@ -2070,7 +2070,7 @@ def publish_preflight(platform: str = "qishui"):
         except Exception as e:  # noqa: BLE001
             cs = {"can_generate": False, "detail": str(e)[:120]}
     add("封面出图（museav）", cs.get("can_generate"),
-        cs.get("detail") or "museav 未就绪 —— 终端跑 `museav login`，或检查积分")
+        cs.get("detail") or "museav 未就绪 —— 跑一次 `museav login`（登录一次，出图和文案一起通），或检查积分")
 
     # 2) 自动填表要用的浏览器工具
     harness = _sh.which("browser-harness")
@@ -2431,7 +2431,7 @@ async def capabilities():
         from core import cover as _cover                       # noqa: PLC0415
         if not _cover.available():
             return {"ready": False, "identity": "",
-                    "detail": "museav CLI 未登录（museav login）"}
+                    "detail": "museav 未登录 —— 跑 `museav login`，出图和文案一起通"}
         try:
             bal = _cover.balance()
             credits = bal.get("credits", 0)
@@ -2948,7 +2948,7 @@ def cover_generate(req: CoverRequest):
     """
     from core import cover
     if not cover.available():
-        raise HTTPException(400, "museav CLI 未登录。终端跑一次 `museav login` 即可。")
+        raise HTTPException(400, "museav 未登录。跑一次 `museav login` 即可（登录一次，出图和文案一起通）。")
     if not (req.prompt.strip() or req.title.strip()):
         raise HTTPException(400, "至少要有标题或提示词")
     # 比例写错是用户输入问题，要在提交时就 400 挡掉 —— 丢进任务队列再失败的话，
@@ -3131,7 +3131,7 @@ def cover_generate(req: CoverRequest):
     """
     from core import cover
     if not cover.available():
-        raise HTTPException(400, "museav CLI 未登录。终端跑一次 `museav login` 即可。")
+        raise HTTPException(400, "museav 未登录。跑一次 `museav login` 即可（登录一次，出图和文案一起通）。")
     if not (req.prompt.strip() or req.title.strip()):
         raise HTTPException(400, "至少要有标题或提示词")
     # 比例写错是用户输入问题，要在提交时就 400 挡掉 —— 丢进任务队列再失败的话，

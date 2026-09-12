@@ -44,7 +44,8 @@ _env_key = os.environ.get("VOXFLOW_LLM_API_KEY", "")
 # **没跑 run.sh 的人（Windows 没有 bash、或直接 `voice web`）会拿 auto 去打
 # 中台，AI 文案直接报错**，而错误信息只说模型不存在，看不出是启动方式的差别。
 # 配置的默认值不该藏在某个平台的启动脚本里。
-_MODEL_BY_SOURCE = {"museav": "deepseek-v4-flash", "freellm": "auto"}
+_MODEL_BY_SOURCE = {"museav": "deepseek-v4-flash", "museav-cli": "deepseek-v4-flash",
+                    "freellm": "auto"}
 _env_model = os.environ.get("VOXFLOW_LLM_MODEL", "")
 
 
@@ -55,6 +56,29 @@ def default_model(source: str = "") -> str:
     if not source:
         source = resolve_backend()[2]
     return _MODEL_BY_SOURCE.get(source, "auto")
+
+
+def _museav_cli_creds() -> tuple[str, str]:
+    """读 museav CLI 登录后存的凭据。返回 (apiKey, base_url)，没有就 ("", "")。
+
+    baseUrl 存的是站点根（https://manager.museav.top），而 OpenAI 兼容端点在
+    /api 下面，所以要补一截 —— 直接拿站点根当 base_url 会 404。
+    """
+    import json as _json  # noqa: PLC0415
+    from pathlib import Path as _Path  # noqa: PLC0415
+
+    cfg = _Path.home() / ".museav.json"
+    if not cfg.is_file():
+        return "", ""
+    try:
+        d = _json.loads(cfg.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return "", ""
+    key = d.get("apiKey") or d.get("api_key") or d.get("token") or ""
+    base = (d.get("baseUrl") or "").rstrip("/")
+    if not key:
+        return "", ""
+    return key, (f"{base}/api" if base and not base.endswith("/api") else (base or _MUSEAV_BASE))
 
 
 def resolve_backend() -> tuple[str, str, str]:
@@ -70,6 +94,17 @@ def resolve_backend() -> tuple[str, str, str]:
             return _MUSEAV_BASE, key, "museav"
     except Exception:  # noqa: BLE001 - 拿不到就往下走兜底，不该让文案功能整个挂掉
         pass
+    # museav CLI 登录后的凭据（~/.museav.json）。
+    #
+    # **一次登录应该覆盖所有 AI 能力。** 封面出图早就在读这个文件了
+    # （core/cover.py 的 _museav_logged_in），文案却另走一套应用授权 ——
+    # 于是「我明明登录过 museav」的人，出图能用、文案报未连接，
+    # 而界面上两个徽章还长得一模一样，看不出差别在哪。
+    #
+    # 现在文案也认它：CLI 登录一次，出图和文案一起通。
+    cli_key, cli_base = _museav_cli_creds()
+    if cli_key:
+        return cli_base, cli_key, "museav-cli"
     # 只给了其中一个环境变量时，缺的那半用本地兜底值补齐
     return (_env_base or _FREELLM_BASE), (_env_key or _FREELLM_KEY), "freellm"
 
