@@ -78,14 +78,25 @@ Electron 再塞一个 Chromium 进来，只会让人搞不清「到底登在哪�
 
 这一步不产出安装包，但它是后面所有事的前提。已定位的硬编码：
 
-| 位置 | 问题 | 改法 |
+> 2026-09-12 更新：下表前六项已做完（见 ✅）。剩下的都标了原因。
+
+| 位置 | 问题 | 状态 |
 |---|---|---|
-| `web/app.py:2546` | `SUNO_BIN = ~/.cargo/bin/suno` 写死 Unix 路径 | `shutil.which` + 各平台候选路径表 |
-| `web/app.py:2568` | `lsof` 只有 Unix 有（用来清残留的验证码 Chrome） | Windows 走 `netstat -ano`，或统一改 `psutil` |
-| `core/version.py:93` | 提示语写着 `./install.sh` | 按平台给不同命令 |
-| `core/processor.py`<br>`core/modes/dialogue.py` | `pydub` 依赖 `audioop`（Python 3.13 起被移除） | 音频处理收敛到一处，直接调 ffmpeg |
-| `run.sh` | 用 `cs kyvault` 注密钥 —— **那是作者的私人工具，别人没有** | 换系统钥匙串（`keyring` 库：Mac Keychain / Windows Credential Manager） |
-| `core/paths.py:39` | `~/.voxflow` 在 Windows 上不是标准位置 | Windows 用 `%LOCALAPPDATA%\VoxFlow`，保留 `VOXFLOW_HOME` 覆盖 |
+| `web/app.py` | `SUNO_BIN = ~/.cargo/bin/suno` 写死 Unix 路径 | ✅ **整个 CLI 依赖已删除**，改直连 HTTP（`core/suno_api.py`） |
+| `web/app.py` | `lsof` 只有 Unix 有（清残留的验证码 Chrome） | ✅ 随 `_clear_stale_solver` 一并删除 —— 直连之后没有要清的子进程 |
+| `run.sh` | 用 `cs kyvault` 注密钥 —— 那是作者的私人工具 | ✅ 已改应用授权（`voice museav login`），脚本里不再有密钥 |
+| `core/paths.py` | `~/.voxflow` 在 Windows 上不是标准位置 | ✅ Windows 走 `%LOCALAPPDATA%\VoxFlow`，`VOXFLOW_HOME` 仍可覆盖 |
+| `cli/commands/voice.py` | `afplay` 是 macOS 专属播放命令 | ✅ 按平台分支（afplay / start / xdg-open），播不出来不算失败 |
+| `run.sh` | 启动前检查只有 bash 有，Windows 拿不到 | ✅ 搬进 `voice web`（三平台共用），补 `run.ps1` |
+| `core/llm_client.py` | 模型名默认 `auto`，对的值 export 在 run.sh 里 | ✅ 改成按后端解析 —— 这是跨平台暴露出的**真 bug**，不走 run.sh 就报错 |
+| `core/version.py:93` | 提示语写着 `./install.sh` | ⬜ 待改：按平台给不同命令 |
+| `core/processor.py`<br>`core/modes/dialogue.py` | `pydub` 依赖 `audioop`（3.13 起被移除） | ⬜ 待改：音频处理收敛到一处，直接调 ffmpeg |
+| `install.sh` | 只有 bash 版，Windows 没有安装脚本 | ⬜ 待补：`install.ps1`，或改成 `pip install -e .` 一条命令 |
+
+**仍未验证的那件事**：以上都是「代码里不再写死 macOS」，但**没有任何人在真
+Windows 上跑过**。跨平台的分支逻辑有 `tests/test_platform.py` 注入环境做单测
+（数据根落点、模型名解析），单测过不等于装得上 —— torch / onnxruntime 在
+Windows 上的 wheel 能不能装、TTS 走 CPU 快不快，这两条只能真机验。
 
 **验收**：在一台干净的 Windows 上 `pip install -e .`（不含 tts 组）后，
 `voice web` 能起来，「自动化发布 / 发歌记录 / 运营台」三屏都能用。

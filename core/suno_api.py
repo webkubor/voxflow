@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import subprocess
 import time
 import urllib.error
@@ -52,7 +53,7 @@ from pathlib import Path
 from typing import Any
 
 from core.net import opener
-from core.paths import DATA_DIR
+from core.paths import DATA_DIR, IS_WINDOWS
 
 _UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
        "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
@@ -60,7 +61,13 @@ BASE = "https://studio-api-prod.suno.com"
 SITEKEY = "d65453de-3f1a-4aac-9366-a0f06e52b2ce"
 CRED_FILE = DATA_DIR / "suno.json"
 # 一次性导入源：suno CLI 的凭据。导入后不再读它，CLI 删掉也不影响。
-_LEGACY_CLI_AUTH = Path.home() / "Library/Application Support/com.suno-cli.suno-cli/auth.json"
+# 它自己按平台放在不同位置（Rust 的 directories crate 约定），路径不存在就
+# 走「跑 login」那条分支，不会崩 —— 所以没装过 CLI 的机器也正常。
+_LEGACY_CLI_AUTH = (
+    Path(os.environ.get("APPDATA", Path.home())) / "com.suno-cli.suno-cli" / "data" / "auth.json"
+    if IS_WINDOWS
+    else Path.home() / "Library/Application Support/com.suno-cli.suno-cli/auth.json"
+)
 
 CLERK_BASE = "https://auth.suno.com"
 _CLERK_V = "?__clerk_api_version=2025-11-10&_clerk_js_version=5.117.0"

@@ -216,9 +216,20 @@ def voice_preview(
 
     console.print(f"[green]✓[/green] 试听音频已生成：{out_path.name}")
 
+    # 三个平台各有各的播放方式：afplay 是 macOS 专属，Windows 用 start 交给
+    # 默认播放器，Linux 用 xdg-open。播不出来不是错误 —— 文件已经生成好了，
+    # 提示路径让人自己打开即可，不要因为播放失败就让命令以非零码退出。
+    from core.paths import IS_MACOS, IS_WINDOWS   # noqa: PLC0415
+
+    if IS_MACOS:
+        cmd = ["afplay", str(out_path)]
+    elif IS_WINDOWS:
+        cmd = ["cmd", "/c", "start", "", str(out_path)]
+    else:
+        cmd = ["xdg-open", str(out_path)]
     try:
-        subprocess.run(["afplay", str(out_path)], check=True)
-    except subprocess.CalledProcessError:
+        subprocess.run(cmd, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
         console.print(f"[yellow]⚠ 无法自动播放，请手动打开：{out_path}[/yellow]")
 
 

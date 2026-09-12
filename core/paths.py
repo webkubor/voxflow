@@ -29,14 +29,37 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 # 代码根：这个文件在 <项目>/core/paths.py
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 
-# 数据根：默认 ~/.voxflow。
+# 平台判断的唯一出处 —— 别在别处再写 sys.platform 比较，
+# 散开之后「哪些地方需要按平台分支」就没人说得清了。
+IS_WINDOWS = sys.platform.startswith("win")
+IS_MACOS = sys.platform == "darwin"
+
+
+def _default_data_dir() -> Path:
+    """数据根。
+
+    Windows 上 `~/.voxflow` 不是标准位置 —— 点开头的目录在资源管理器里默认
+    隐藏，用户找不到自己的作品和模型；而且漫游配置会把它同步到域账户。
+    所以走 `%LOCALAPPDATA%\\VoxFlow`，那是「本机应用数据」的标准落点。
+
+    Mac/Linux 保持 `~/.voxflow` 不变 —— 已有用户的 8.4 G 模型和作品库都在
+    那儿，换位置等于让他们重下一遍。
+    """
+    if IS_WINDOWS:
+        base = os.environ.get("LOCALAPPDATA")
+        if base:
+            return Path(base) / "VoxFlow"
+    return Path.home() / ".voxflow"
+
+
 # VOXFLOW_HOME 可以覆盖 —— 测试要隔离数据、或者想把数据放到外置盘时用得上。
-DATA_DIR = Path(os.environ.get("VOXFLOW_HOME") or (Path.home() / ".voxflow")).expanduser()
+DATA_DIR = Path(os.environ.get("VOXFLOW_HOME") or _default_data_dir()).expanduser()
 
 # ── 数据（跨版本继承，不进 git）──────────────────────────
 CONFIG_DIR = DATA_DIR / "configs"          # 台账、音色库、艺人档案

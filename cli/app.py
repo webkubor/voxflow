@@ -30,6 +30,61 @@ app.command("logs")(logs)
 app.command("backfill-costs")(backfill)
 
 
+def _ensure_frontend_built() -> None:
+    """源码比产物新就自动重新编译前端。
+
+    浏览器不认 .vue，改了前端必须先 build。而「改完忘记编译」是必然会发生的
+    事：页面显示旧的、不报错，于是开始怀疑是不是缓存、是不是没保存 ——
+    这个项目已经踩过一次。所以别靠人记得，多花两秒换掉一整类假问题。
+
+    2026-09-12 从 run.sh 搬进来。原来那段用 `find -newer`，Windows 上没有
+    bash 也就没有这个保护，等于换个平台就退回「靠人记得」。搬到 Python 里
+    之后三个平台共用一份，run.sh 只剩一行调用。
+    """
+    import shutil
+    import subprocess
+
+    from core.paths import IS_WINDOWS, PROJECT_DIR
+
+    src = PROJECT_DIR / "web" / "ui" / "src"
+    built = PROJECT_DIR / "web" / "static" / "index.html"
+    if not src.is_dir():
+        return                                  # 没有前端源码（纯产物分发），不用管
+
+    if built.exists():
+        newest = max((f.stat().st_mtime for f in src.rglob("*") if f.is_file()), default=0)
+        if newest <= built.stat().st_mtime:
+            return                              # 产物是新的
+
+    npm = shutil.which("npm.cmd") if IS_WINDOWS else shutil.which("npm")
+    npm = npm or shutil.which("npm")
+    if not npm:
+        typer.echo(typer.style("⚠ 前端有改动但没找到 npm，页面可能是旧的", fg=typer.colors.YELLOW))
+        return
+    ui = PROJECT_DIR / "web" / "ui"
+    if not (ui / "node_modules").is_dir():
+        typer.echo("  安装前端依赖…")
+        subprocess.run([npm, "install"], cwd=ui, check=False)
+    typer.echo("  前端有改动，重新编译…")
+    r = subprocess.run([npm, "run", "build"], cwd=ui, capture_output=True, text=True)
+    if r.returncode != 0:
+        typer.echo(typer.style(f"✗ 前端编译失败：{r.stderr[-300:]}", fg=typer.colors.RED))
+
+
+def _hint_museav() -> None:
+    """没连 MUSE AV 就提示一句。**不拦启动** —— TTS、克隆、混音都不依赖它，
+    只有 AI 文案那几个功能会退回本地 FreeLLMAPI（多数人没起那个容器）。"""
+    import os
+
+    from core.paths import DATA_DIR
+
+    if (DATA_DIR / "museav.json").exists() or os.environ.get("VOXFLOW_LLM_API_KEY"):
+        return
+    typer.echo(typer.style("  提示：AI 文案还没连 MUSE AV —— 跑一次 `voice museav login`",
+                           fg=typer.colors.YELLOW))
+    typer.echo("")
+
+
 @app.command("web")
 def web(
     port: int = typer.Option(8866, "--port", "-p", help="端口号"),
@@ -37,6 +92,9 @@ def web(
 ):
     """启动 Web UI（本地浏览器操作）"""
     import uvicorn
+
+    _ensure_frontend_built()
+    _hint_museav()
     typer.echo(typer.style("=" * 50, fg=typer.colors.BRIGHT_YELLOW))
     typer.echo(typer.style("  VoxFlow 声流 Web UI", fg=typer.colors.BRIGHT_YELLOW, bold=True))
     typer.echo(typer.style(f"  http://localhost:{port}", fg=typer.colors.CYAN))

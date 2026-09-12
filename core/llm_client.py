@@ -37,7 +37,24 @@ _MUSEAV_BASE = "https://manager.museav.top/api"
 
 _env_base = os.environ.get("VOXFLOW_LLM_BASE_URL", "")
 _env_key = os.environ.get("VOXFLOW_LLM_API_KEY", "")
-_default_model = os.environ.get("VOXFLOW_LLM_MODEL", "auto")
+# 模型名跟着**后端**走，不能只有一个全局默认：
+#   · museav 中台认具体模型名，不认 "auto"（那是 FreeLLMAPI 的路由约定）
+#   · 本地 FreeLLMAPI 认 "auto"，让它自己路由
+# 此前默认值写死 "auto"，真正对的那个值 export 在 run.sh 里 —— 于是
+# **没跑 run.sh 的人（Windows 没有 bash、或直接 `voice web`）会拿 auto 去打
+# 中台，AI 文案直接报错**，而错误信息只说模型不存在，看不出是启动方式的差别。
+# 配置的默认值不该藏在某个平台的启动脚本里。
+_MODEL_BY_SOURCE = {"museav": "deepseek-v4-flash", "freellm": "auto"}
+_env_model = os.environ.get("VOXFLOW_LLM_MODEL", "")
+
+
+def default_model(source: str = "") -> str:
+    """当前该用哪个模型名。显式设了环境变量就一律听它的。"""
+    if _env_model:
+        return _env_model
+    if not source:
+        source = resolve_backend()[2]
+    return _MODEL_BY_SOURCE.get(source, "auto")
 
 
 def resolve_backend() -> tuple[str, str, str]:
@@ -134,7 +151,7 @@ def check_status(force: bool = False) -> dict:
         #
         # max_tokens=1 让开销可以忽略：一次探活约 10 token。
         client.chat.completions.create(
-            model=_default_model,
+            model=default_model(),
             messages=[{"role": "user", "content": "hi"}],
             max_tokens=1,
         )
@@ -143,8 +160,8 @@ def check_status(force: bool = False) -> dict:
             "available": True,
             "base_url": base,
             "source": source,
-            "model": _default_model,
-            "models": [_default_model],
+            "model": default_model(),
+            "models": [default_model()],
             "error": "",
         }
         _status_cache.update(at=now, value=result)
@@ -160,8 +177,8 @@ def check_status(force: bool = False) -> dict:
                 "throttled": True,
                 "base_url": base,
                 "source": source,
-                "model": _default_model,
-                "models": [_default_model],
+                "model": default_model(),
+                "models": [default_model()],
                 "error": "请求太频繁，稍等一下再试",
             }
         base, _, source = resolve_backend()
@@ -174,7 +191,7 @@ def check_status(force: bool = False) -> dict:
             "available": False,
             "base_url": base,
             "source": source,
-            "model": _default_model,
+            "model": default_model(),
             "models": [],
             "error": err,
         }
@@ -197,7 +214,7 @@ def _chat(system: str, user: str, *, action: str, temperature: float = 0.8,
     t0 = time.perf_counter()
     try:
         resp = client.chat.completions.create(
-            model=_default_model,
+            model=default_model(),
             messages=[{"role": "system", "content": system},
                       {"role": "user", "content": user}],
             temperature=temperature,
@@ -206,13 +223,13 @@ def _chat(system: str, user: str, *, action: str, temperature: float = 0.8,
     except Exception as e:
         obs.meter("llm", action, qty=1, credits=0, ok=False,
                   duration_ms=int((time.perf_counter() - t0) * 1000),
-                  model=_default_model, error=str(e)[:120])
+                  model=default_model(), error=str(e)[:120])
         raise
     usage = getattr(resp, "usage", None)
     obs.meter("llm", action, qty=1,
               credits=getattr(usage, "total_tokens", 0) or 0,
               duration_ms=int((time.perf_counter() - t0) * 1000),
-              model=_default_model,
+              model=default_model(),
               prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
               completion_tokens=getattr(usage, "completion_tokens", 0) or 0)
     return resp.choices[0].message.content.strip()
