@@ -166,6 +166,17 @@ export const api = {
   // ── 专辑与平台 ──
   albums: (platform?: string) =>
     get<{ albums: Record<string, Album> }>('albums', platform ? { platform } : undefined),
+  createAlbum: (body: { title: string; platform: string; track_ids?: string[]; description?: string }) =>
+    post<{ ok: boolean; album: Album }>('albums', body),
+  albumAddTracks: (albumId: string, body: { platform: string; track_ids: string[] }) =>
+    post<{ ok: boolean; album: Album }>(`albums/${albumId}/tracks`, body),
+  albumRemoveTrack: (albumId: string, trackId: string, platform: string) =>
+    del<{ ok: boolean; album: Album }>(`albums/${albumId}/tracks/${trackId}?platform=${platform}`),
+  albumCover: (albumId: string, body: { platform: string; prompt?: string; force?: boolean }) =>
+    post<{ task_id?: string; skipped?: string; album?: Album }>(`albums/${albumId}/cover`, body),
+  albumPublish: (albumId: string, body: { platform: string; auto_cover?: boolean; wait?: boolean }) =>
+    post<{ ok: boolean; album: Album; steps: Array<{ step: string; ok: boolean; detail: string }>; next: string }>(
+      `albums/${albumId}/publish`, body),
   platformAccounts: () => get<PlatformAccountsResponse>('platform-accounts'),
   publishBoard: () => get<{ accounts: unknown[]; tracks: Track[] }>('publish-board'),
 

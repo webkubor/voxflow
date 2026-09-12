@@ -53,6 +53,7 @@
         </header>
         <div class="col-body cover" :class="{ empty: !coverUrl }">
           <img v-if="coverUrl" :src="coverUrl" alt="封面" />
+          <template v-else-if="busy.cover">出图中…… {{ coverStage }}（要等几十秒，别重复点，每点一次都扣积分）</template>
           <template v-else>出图会扣 museav 积分，所以要你自己点。</template>
         </div>
       </section>
@@ -77,6 +78,7 @@ const tags = ref('');
 const lyrics = ref('');
 const coverUrl = ref('');
 const busy = reactive({ tags: false, lyrics: false, cover: false });
+const coverStage = ref('');
 const busyAll = ref(false);
 
 const post = async (url, body) => {
@@ -105,14 +107,43 @@ const genLyrics = async () => {
 };
 
 // 出图单独放，不进「一键」—— 它花的是 museav 积分，得由人点
+// 出图是**异步任务**：接口只回 { task_id, status:'queued' }，图要等几十秒。
+// 原来这里直接读 d.url / d.cover_url / d.file —— 三个字段都不存在，
+// coverUrl 永远是空串，界面毫无变化，看着就像「点了没反应」。
+// 而积分其实已经扣了、图也真出了，只是没人来取。所以必须轮询任务。
 const genCover = async () => {
   if (!theme.value.trim()) return;
   busy.cover = true;
+  coverStage.value = '提交中…';
   try {
     const d = await post('/api/cover/generate', { prompt: theme.value, title: theme.value.slice(0, 20) });
-    coverUrl.value = d.url || d.cover_url || d.file || '';
-  } catch (e) { coverUrl.value = ''; alert(`出图失败：${e.message}`); }
-  finally { busy.cover = false; }
+    if (!d.task_id) throw new Error('没拿到任务号');
+    for (let i = 0; i < 100; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      const raw = await (await fetch('/api/tasks')).json();
+      const list = Array.isArray(raw) ? raw : (raw.tasks || []);
+      const t = list.find((x) => x.id === d.task_id);
+      if (!t) continue;
+      coverStage.value = t.stage || (t.progress ? `${t.progress}%` : '出图中…');
+      if (t.status === 'done') {
+        const r = t.result || {};
+        // cdn_url 优先；没有就走 /api/media，它只认**相对 DATA_DIR** 的路径，
+        // 而任务给的是绝对路径，所以要切掉 ~/.voxflow/ 这段前缀。
+        const rel = r.path ? r.path.split('/.voxflow/').pop() : '';
+        coverUrl.value = r.cdn_url || (rel ? `/api/media?path=${encodeURIComponent(rel)}` : '');
+        if (!coverUrl.value) throw new Error('任务完成了但没给图片地址');
+        return;
+      }
+      if (t.status === 'error') throw new Error(t.error || '出图失败');
+    }
+    throw new Error('等了 5 分钟还没好，去「运营台」看任务队列');
+  } catch (e) {
+    coverUrl.value = '';
+    alert(`出图失败：${e.message}`);
+  } finally {
+    busy.cover = false;
+    coverStage.value = '';
+  }
 };
 
 const runAll = async () => {

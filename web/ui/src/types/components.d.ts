@@ -13,6 +13,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     AddPersonaModal: typeof import('./../components/AddPersonaModal.vue')['default']
     AIHelpSection: typeof import('./../components/AIHelpSection.vue')['default']
+    CoverArt: typeof import('./../components/player/CoverArt.vue')['default']
     CurrentPersonaChip: typeof import('./../components/CurrentPersonaChip.vue')['default']
     EditPersonaModal: typeof import('./../components/EditPersonaModal.vue')['default']
     ErrorLogPanel: typeof import('./../components/ErrorLogPanel.vue')['default']
@@ -59,6 +60,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ShortcutHelp: typeof import('./../components/ShortcutHelp.vue')['default']
+    SpectrumBars: typeof import('./../components/player/SpectrumBars.vue')['default']
     TaskPanel: typeof import('./../components/TaskPanel.vue')['default']
     TaskTypeBadge: typeof import('./../components/TaskTypeBadge.vue')['default']
     WarnBanner: typeof import('./../components/WarnBanner.vue')['default']

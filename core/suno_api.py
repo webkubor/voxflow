@@ -147,7 +147,8 @@ def _browser_token() -> str:
     return json.dumps({"token": base64.b64encode(payload.encode()).decode()}, separators=(",", ":"))
 
 
-def _request(path: str, body: dict | None = None, timeout: int = 60, _retried: bool = False) -> Any:
+def _request(path: str, body: dict | None = None, timeout: int = 60, _retried: bool = False,
+             method: str = "") -> Any:
     a = _load()
     headers = {
         "Authorization": f"Bearer {a['jwt']}",
@@ -161,7 +162,7 @@ def _request(path: str, body: dict | None = None, timeout: int = 60, _retried: b
     }
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(f"{BASE}{path}", data=data, headers=headers,
-                                 method="POST" if data else "GET")
+                                 method=method or ("POST" if data else "GET"))
     try:
         with opener().open(req, timeout=timeout) as r:
             return json.loads(r.read().decode())
@@ -171,7 +172,7 @@ def _request(path: str, body: dict | None = None, timeout: int = 60, _retried: b
         # 只重试一次：__client 也失效时会连着 401，无限重试会把人卡死在这。
         if e.code == 401 and not _retried:
             refresh_jwt()
-            return _request(path, body, timeout, _retried=True)
+            return _request(path, body, timeout, _retried=True, method=method)
         if e.code == 401:
             raise SunoError("凭据失效 —— 跑一次 `voice suno login` 重新授权") from e
         raise SunoError(f"HTTP {e.code}: {detail}") from e
@@ -190,43 +191,99 @@ def credits() -> dict[str, Any]:
             "plan": (d.get("plan") or {}).get("name", "")}
 
 
-def solve_captcha(timeout_s: int = 90) -> str:
-    """在日常 Chrome 里解一个 hCaptcha token。
-
-    走 browser-harness 而不是自己起浏览器：登录态和"真人信誉"都在那个
-    Chrome 上，另起一个干净实例反而更容易被 hCaptcha 挡。
-    """
-    script = f"""
-ensure_real_tab()
-import time, json as _j
-if "suno.com" not in (page_info().get("url") or ""):
-    goto_url("https://suno.com/create"); time.sleep(6)
-js('''(() => {{
-  window.__vfCap = {{state:'start'}};
-  try {{
-    let el = document.getElementById('vf-cap');
-    if (!el) {{ el = document.createElement('div'); el.id='vf-cap'; el.style.display='none'; document.body.appendChild(el); }}
-    const id = window.hcaptcha.render('vf-cap', {{sitekey:'{SITEKEY}', size:'invisible'}});
-    window.hcaptcha.execute(id, {{async:true}})
-      .then(r => {{ window.__vfCap = {{state:'ok', token:(r && r.response) ? r.response : String(r)}}; }})
-      .catch(e => {{ window.__vfCap = {{state:'err', err:String(e).slice(0,160)}}; }});
-  }} catch(e) {{ window.__vfCap = {{state:'throw', err:String(e).slice(0,160)}}; }}
-  return 'started';
-}})()''')
-for _ in range({timeout_s // 3}):
-    time.sleep(3)
-    s = _j.loads(js("JSON.stringify(window.__vfCap)"))
-    if s.get("state") != "start":
-        print("VFCAP:" + _j.dumps(s)); break
-else:
-    print('VFCAP:{{"state":"timeout"}}')
-"""
-    p = subprocess.run(["browser-harness"], input=script, capture_output=True,
-                       text=True, timeout=timeout_s + 30)
-    line = next((l for l in p.stdout.splitlines() if l.startswith("VFCAP:")), "")
+def _solve_via_ego(timeout_s: int) -> str:
+    """在 ego-browser 的隔离浏览器里解 token。返回 VFCAP: 那行的 JSON。"""
+    script = _EGO_SCRIPT.replace("__SITEKEY__", SITEKEY).replace(
+        "__POLLS__", str(max(3, timeout_s // 2)))
+    env = {**os.environ, "PATH": f"{Path.home()}/.local/bin:" + os.environ.get("PATH", "")}
+    p = subprocess.run(["ego-browser", "nodejs"], input=script, capture_output=True,
+                       text=True, timeout=timeout_s + 90, env=env)
+    # ego-browser 的 console.log 有时落在 stderr，两个流都要找
+    lines = (p.stdout + "\n" + p.stderr).splitlines()
+    line = next((l for l in lines if l.startswith("VFCAP:")), "")
     if not line:
-        raise SunoError(f"解验证码失败，browser-harness 没有回话：{p.stderr[-300:]}")
-    s = json.loads(line[len("VFCAP:"):])
+        raise SunoError(f"ego-browser 没有回话：{(p.stderr or p.stdout)[-300:]}")
+    return line[len("VFCAP:"):]
+
+
+_EGO_SCRIPT = """
+// 不新建空间 —— 全新的 ego 空间是干净 profile，suno 上的 hcaptcha 脚本
+// 迟迟注入不进来（实测轮询 60 秒仍是 no-hcaptcha），而一个已经打开过
+// suno 的空间里 window.hcaptcha 一直在。所以：优先挑「已经热了」的空间复用，
+// 一个都没有时才新建并耐心等它热起来。解完不 finish，留着给下次用。
+const CAP_SPACE = "suno captcha";
+const spaces = await listTaskSpaces();
+const mine = spaces.filter(s => s.ownership !== "user");
+
+let page = null;
+for (const s of mine) {
+  try {
+    const t = await taskSpace(s.spaceId ?? s.id);
+    const pg = t.page("p1");
+    const url = await pg.url();
+    if (!url.includes("suno.com")) continue;
+    if (await pg.evaluate(() => typeof window.hcaptcha !== "undefined")) { page = pg; break; }
+  } catch (e) { /* 空间没了/页面不可用，换下一个 */ }
+}
+
+if (!page) {
+  const known = mine.find(s => s.name === CAP_SPACE);
+  const task = known ? await taskSpace(known.spaceId ?? known.id) : await taskSpace(CAP_SPACE);
+  page = task.page("p1");
+  if (!(await page.url()).includes("suno.com")) {
+    await page.goto("https://suno.com/create");
+    await page.waitForLoadState();
+  }
+  for (let i = 0; i < 90; i++) {
+    if (await page.evaluate(() => typeof window.hcaptcha !== "undefined")) break;
+    if (i === 30 || i === 60) { await page.reload(); await page.waitForLoadState(); }
+    await page.waitForTimeout(1000);
+  }
+}
+
+if (!(await page.evaluate(() => typeof window.hcaptcha !== "undefined"))) {
+  console.log("VFCAP:" + JSON.stringify({ state: 'no-hcaptcha', url: await page.url() }));
+} else {
+  // page.evaluate() 有 15 秒硬超时：启动和取结果分两步，等待一律在 Node 侧轮询。
+  await page.evaluate((sitekey) => {
+    window.__vfCap = { state: 'start' };
+    try {
+      let el = document.getElementById('vf-cap');
+      if (!el) { el = document.createElement('div'); el.id = 'vf-cap'; el.style.display = 'none'; document.body.appendChild(el); }
+      const id = window.hcaptcha.render('vf-cap', { sitekey, size: 'invisible' });
+      window.hcaptcha.execute(id, { async: true })
+        .then(x => { window.__vfCap = { state: 'ok', token: (x && x.response) ? x.response : String(x) }; })
+        .catch(e => { window.__vfCap = { state: 'err', err: String(e).slice(0, 160) }; });
+    } catch (e) { window.__vfCap = { state: 'throw', err: String(e).slice(0, 160) }; }
+  }, "__SITEKEY__");
+
+  let out = { state: 'timeout' };
+  for (let i = 0; i < __POLLS__; i++) {
+    await page.waitForTimeout(2000);
+    const s = await page.evaluate(() => window.__vfCap || { state: 'start' });
+    if (s.state !== 'start') { out = s; break; }
+  }
+  console.log("VFCAP:" + JSON.stringify(out));
+}
+"""
+
+
+def solve_captcha(timeout_s: int = 90) -> str:
+    """解一个 hCaptcha token。
+
+    2026-09-12 从 browser-harness 换成 ego-browser。browser-harness 那条路
+    依赖用户日常 Chrome 开着远程调试端口，而那个开关默认是关的 ——
+    表现为 `Runtime.evaluate timed out`，整条生成流水线（单首/批量/翻唱）
+    全线卡死，且错误信息完全看不出是浏览器侧的问题。
+    ego-browser 自带隔离浏览器，不依赖用户 Chrome 的任何开关。
+
+    **token 只证明「是真人」，跟 Suno 登录态无关** —— 身份走 __client
+    cookie 在 _request 里单独带，所以 ego 空间没登录 Suno 也照样有效，
+    不要为了「先登录」在这里加一步。2026-09-12 实测未登录空间解出的
+    token 被 /api/generate/v2-web/ 正常接受。
+    """
+    raw = _solve_via_ego(timeout_s)
+    s = json.loads(raw)
     if s.get("state") != "ok":
         raise SunoError(f"解验证码失败：{s}")
     return s["token"]
@@ -342,6 +399,75 @@ def list_clips(limit: int = 20, cursor: str = "") -> dict:
         body["cursor"] = cursor
     r = _request("/api/feed/v3", body)
     return {"clips": r.get("clips") or [], "next_cursor": r.get("next_cursor")}
+
+
+def upload_audio(file_path: str, *, title: str = "", timeout_s: int = 240) -> str:
+    """把**本地音频文件**传进 Suno，返回可直接喂给 cover()/extend() 的 clip_id。
+
+    **上传本身不花积分**（花钱的是之后那步 cover/extend）。
+
+    这是「翻唱自己的歌」唯一的入口：cover() 只认 Suno 库里已有的 clip id，
+    本地文件必须先过这一趟，拿到 clip_id 才谈得上翻唱。
+
+    三步，缺一步都拿不到 clip_id：
+      1. POST /api/uploads/audio/ 申请一个槽 → 拿 S3 预签名表单
+      2. multipart 直传 S3（这一步不带 Suno 认证，签名自带授权）
+      3. upload-finish 通知服务端开始转码，再轮询到 status=complete
+    """
+    import requests  # noqa: PLC0415 —— 只有这条路径要它，不拖累模块导入
+
+    path = Path(file_path).expanduser()
+    if not path.exists():
+        raise SunoError(f"文件不存在：{path}")
+    ext = path.suffix.lstrip(".").lower() or "mp3"
+
+    # Suno 的解码器挑食：Content-Type 明明给对了（m4a → audio/mp4），
+    # 它照样回 "Can't parse uploaded audio. Source is corrupted."。
+    # 统一转成 mp3 最省事 —— 这一步纯本地，不花钱。
+    tmp = None
+    if ext not in ("mp3", "wav"):
+        import tempfile  # noqa: PLC0415
+        tmp = Path(tempfile.mkdtemp()) / (path.stem + ".mp3")
+        r = subprocess.run(["ffmpeg", "-y", "-i", str(path), "-vn",
+                            "-codec:a", "libmp3lame", "-b:a", "192k", str(tmp)],
+                           capture_output=True, text=True)
+        if r.returncode != 0 or not tmp.exists():
+            raise SunoError(f"转 mp3 失败（需要 ffmpeg）：{r.stderr[-200:]}")
+        path, ext = tmp, "mp3"
+
+    slot = _request("/api/uploads/audio/", {"extension": ext})
+    upload_id, url, fields = slot["id"], slot["url"], slot.get("fields") or {}
+
+    with path.open("rb") as fh:
+        r = requests.post(url, data=fields,
+                          files={"file": (f"{upload_id}.{ext}", fh, fields.get("Content-Type"))},
+                          timeout=300)
+    if r.status_code not in (200, 201, 204):
+        raise SunoError(f"传 S3 失败 HTTP {r.status_code}：{r.text[:200]}")
+
+    _request(f"/api/uploads/audio/{upload_id}/upload-finish/",
+             {"upload_type": "file_upload", "upload_filename": title or path.stem})
+
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        st = _request(f"/api/uploads/audio/{upload_id}/")
+        status = str(st.get("status", "")).lower()
+        if status == "complete":
+            clip_id = st.get("clip_id") or st.get("id")
+            if not clip_id:
+                raise SunoError(f"转码完成却没给 clip_id：{json.dumps(st, ensure_ascii=False)[:300]}")
+            return clip_id
+        if status in ("error", "failed"):
+            raise SunoError(f"Suno 处理上传失败：{json.dumps(st, ensure_ascii=False)[:300]}")
+        time.sleep(4)
+    raise SunoError(f"上传转码超时（{timeout_s}s），upload_id={upload_id}")
+
+
+# 改 Suno 云端标题：端点还没摸到（/api/gen/{id}/ 的 POST 和 PATCH 都是 404），
+# 别再盲试了 —— 要补就用 req 抓一次网页端改名的真实请求。
+# 现成可用的是 Rust CLI：`suno set <clip_id> --title "新名字"`（实测有效、免费）。
+# 而且发行用的**不是**它：平台上架名存在本地 tracks.release_title，
+# 走 pipeline.submit_release()，跟 Suno 侧标题互不影响。
 
 
 def cover(clip_id: str, *, tags: str = "", model: str = DEFAULT_MODEL,

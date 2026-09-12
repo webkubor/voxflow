@@ -305,8 +305,18 @@ def generate_tags(theme: str) -> str:
 
 示例输入：上班摸鱼的搞笑歌，年轻女生唱
 示例输出：electropop, hyperpop, bright young female vocal, gen-z, quirky, catchy hook, mandarin, 128 BPM"""
-    out = _chat(sys_prompt, theme.strip(), action="tags", temperature=0.7, max_tokens=200)
-    tags = out.strip().strip('"').replace("\n", " ")
+    # max_tokens 给足 —— 标签本身只要 ~40 token，但会思考的模型（deepseek-v4-flash）
+    # 要先花几百 token 推理才吐正文。原来卡在 200，思考还没完就被截断，
+    # content 返回空字符串 → 直接报「没能生成风格标签」，而用户的主题其实写得挺好。
+    # 2026-09-12 实测：失败那几次 completion_tokens 都正好等于 200（打满上限），
+    # 成功那次只有 33。**上限撞满 = 被截断，不是模型不会答。**
+    def _once() -> str:
+        out = _chat(sys_prompt, theme.strip(), action="tags", temperature=0.7, max_tokens=800)
+        return out.strip().strip('"').replace("\n", " ")
+
+    tags = _once()
+    if not tags.strip(" ,"):
+        tags = _once()   # LLM 偶发空响应，重试一次比让人手点「重出」强
 
     # 兜底：BPM 决定快慢，缺了 Suno 会自己随机挑，同样的标签两次出来节奏差很远。
     # 系统提示里已经要求必须带，但 LLM 时灵时不灵 —— **规则要在代码里保底，
@@ -314,7 +324,7 @@ def generate_tags(theme: str) -> str:
     # LLM 偶尔整个返回空，那时候只补个 BPM 就成了 ", 75 BPM" 这种废话 ——
     # 宁可报错让人重试，也不要交一份看着像标签的空壳。
     if not tags.strip(" ,"):
-        raise RuntimeError("没能生成风格标签，把主题写具体一点再试（比如加上乐器或场景）")
+        raise RuntimeError("AI 连着两次都没返回内容 —— 是模型侧的问题，不是你的主题写得不好。稍等再点一次「重出」。")
     if "bpm" not in tags.lower():
         t = theme.lower() + tags.lower()
         fast = any(k in t for k in ("卡点", "燃", "运动", "健身", "嗨", "dance", "edm", "trap", "hyperpop"))

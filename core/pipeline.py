@@ -34,6 +34,7 @@ VoxFlow 的价值是一条链：克隆声音 → 出歌 → 选定 → 发版 �
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -444,6 +445,59 @@ def submit_release(track_id: str, platform: str, release_title: str) -> dict[str
     return set_platform_status(track_id, platform, "preparing", platform_title=title)
 
 
+# 改名的门槛线：到了这些状态，歌已经在平台后台了，名字不能再动
+# （平台那边的曲目信息已经提交，本地改了只会两边对不上）。
+LOCKED_FOR_RENAME = ("uploaded", "reviewing", "online", "published")
+
+
+def rename_release(track_id: str, new_title: str) -> dict[str, Any]:
+    """发行前改发行歌名。
+
+    submit_release() 把歌名一次性锁死（"必须统一，不能改"），可人往往是
+    先占个名字备料、真要发之前才想好最终叫什么。这里放开那段窗口：
+    **只要还没交到平台后台（uploaded 及以后），就允许改**。
+
+    唯一性照旧 —— 发行名全局唯一这条是平台规则，不是本地偏好。
+    """
+    title = (new_title or "").strip()
+    if not title:
+        raise ValueError("发行歌名不能空")
+
+    track = get_track(track_id)
+    if not track:
+        raise ValueError(f"没有这首作品: {track_id}")
+
+    db.init()
+    with db.connect() as c:
+        locked = c.execute(
+            "SELECT platform, status FROM track_platforms "
+            "WHERE track_id=? AND status IN ({})".format(",".join("?" * len(LOCKED_FOR_RENAME))),
+            (track_id, *LOCKED_FOR_RENAME)).fetchall()
+    if locked:
+        where = "、".join(f"{_plat_label(r['platform'])}（{r['status']}）" for r in locked)
+        raise ValueError(f"已经交到平台后台了，名字不能再改：{where}。"
+                         f"真要改得先去平台后台撤回。")
+
+    owner = find_title_owner(title, except_id=track_id)
+    if owner:
+        raise ValueError(f"「{title}」已经被另一首占了（{owner['title']}），发行名必须唯一")
+
+    old = track.get("release_title") or ""
+    now = _now()
+    with db.connect() as c:
+        c.execute("UPDATE tracks SET release_title=?, updated_at=? WHERE id=?",
+                  (title, now, track_id))
+        # 备料中的平台记录一起改，否则本地两处名字打架
+        c.execute("UPDATE track_platforms SET platform_title=?, updated_at=? "
+                  "WHERE track_id=? AND status IN ('draft','preparing')",
+                  (title, now, track_id))
+        c.execute("INSERT INTO publish_events (track_id, platform, from_status, to_status, "
+                  "actor, note, ts) VALUES (?,?,?,?,?,?,?)",
+                  (track_id, track.get("release_platform") or "", "", "renamed",
+                   "voxflow", f"发行名 {old or '（未定）'} → {title}", now))
+    return get_track(track_id) or {}
+
+
 def set_stage(track_id: str, stage: str) -> dict[str, Any]:
     """
     推进状态。**不做自动跃迁** —— 每一步都是显式的。
@@ -479,7 +533,7 @@ def set_platform_status(track_id: str, platform: str, status: str, **extra: Any)
         listing = None
         if song_id:
             listing = c.execute(
-                "SELECT id, track_id FROM track_platforms WHERE platform=? AND song_id=?",
+                "SELECT id, track_id, status FROM track_platforms WHERE platform=? AND song_id=?",
                 (platform, song_id)).fetchone()
         if listing is None:
             listing = c.execute(
@@ -746,17 +800,202 @@ def list_albums(platform: str | None = None) -> list[dict[str, Any]]:
 
 
 def upsert_album(key: str, **fields: Any) -> None:
-    """同步脚本用：写一张专辑。"""
+    """写一张专辑。**支持局部更新** —— 只给 cover_local 也能更新已有记录。
+
+    原来是一条 `INSERT ... ON CONFLICT DO UPDATE`，看着优雅，但局部更新时
+    INSERT 那半边缺 NOT NULL 的 platform/album_id/title，**SQLite 在冲突检测
+    之前就先炸 NOT NULL**，压根走不到 UPDATE 分支。报错还是
+    `NOT NULL constraint failed: albums.platform`，完全看不出真实意图是更新。
+    2026-09-12 专辑封面出了两张都回填不上（白烧 2 积分），就是这个。
+    """
     db.init()
     fields.setdefault("synced_at", _now())
     cols = ("platform", "album_id", "title", "track_count", "publish_date", "company",
             "description", "tags", "cover_url", "cover_local", "url", "synced_at")
     given = {k: v for k, v in fields.items() if k in cols}
+    if not given:
+        return
     with db.connect() as c:
-        c.execute(f"""
-            INSERT INTO albums (key, {', '.join(given)}) VALUES (?{', ?' * len(given)})
-            ON CONFLICT(key) DO UPDATE SET {', '.join(f'{k}=excluded.{k}' for k in given)}
-        """, (key, *given.values()))
+        if c.execute("SELECT 1 FROM albums WHERE key=?", (key,)).fetchone():
+            c.execute(f"UPDATE albums SET {', '.join(f'{k}=?' for k in given)} WHERE key=?",
+                      (*given.values(), key))
+            return
+        # 新建：三个 NOT NULL 的列必须齐。key 就是 <platform>-<album_id>，能推就推，
+        # 省得每个调用方都重复传一遍自己已经编码在 key 里的东西。
+        plat, _, aid = key.partition("-")
+        given.setdefault("platform", plat)
+        given.setdefault("album_id", aid)
+        given.setdefault("title", aid or key)
+        c.execute(f"INSERT INTO albums (key, {', '.join(given)}) "
+                  f"VALUES (?{', ?' * len(given)})", (key, *given.values()))
+
+
+# 本地草稿专辑的 album_id 前缀。albums 表原本只装**平台同步回来的**专辑
+# （key = <platform>-<平台给的 album_id>），所以发行之前根本没法把几首歌
+# 组成一张辑 —— 而平台后台上传时要填专辑信息，这一步以前只能在浏览器里手打。
+# 草稿用 local-xxxxxxxx 占住 album_id 的位置，发行后拿到平台真 id 再换。
+DRAFT_ALBUM_PREFIX = "local-"
+
+
+def album_key(platform: str, album_id: str) -> str:
+    return f"{platform}-{album_id}"
+
+
+def create_album(title: str, platform: str, track_ids: "list[str] | tuple" = (),
+                 *, description: str = "", publish_date: str = "",
+                 tags: str = "") -> dict[str, Any]:
+    """把几首本地作品组成一张尚未发行的专辑，返回专辑详情。
+
+    曲序按传入顺序排。同一首歌同时只能属于一张专辑（平台也是这个规矩）。
+    """
+    title = (title or "").strip()
+    if not title:
+        raise ValueError("专辑名不能空")
+    if platform not in PLATFORMS:
+        raise ValueError(f"未知平台: {platform}")
+
+    db.init()
+    with db.connect() as c:
+        dup = c.execute("SELECT key FROM albums WHERE platform=? AND title=?",
+                        (platform, title)).fetchone()
+    if dup:
+        raise ValueError(f"{_plat_label(platform)}上已经有一张叫「{title}」的专辑了")
+
+    aid = DRAFT_ALBUM_PREFIX + uuid.uuid4().hex[:8]
+    upsert_album(album_key(platform, aid), platform=platform, album_id=aid, title=title,
+                 description=description, publish_date=publish_date, tags=tags,
+                 track_count=0)
+    if track_ids:
+        add_to_album(aid, platform, list(track_ids))
+    return get_album(aid, platform)
+
+
+def add_to_album(album_id: str, platform: str, track_ids: "list[str]") -> dict[str, Any]:
+    """把作品加进专辑，追加在末尾。已经在别的专辑里的会被拒绝。"""
+    db.init()
+    key = album_key(platform, album_id)
+    with db.connect() as c:
+        if not c.execute("SELECT 1 FROM albums WHERE key=?", (key,)).fetchone():
+            raise ValueError(f"没有这张专辑: {album_id}")
+        start = (c.execute(
+            "SELECT MAX(COALESCE(track_no,0)) n FROM track_platforms "
+            "WHERE platform=? AND album_id=?", (platform, album_id)).fetchone()["n"] or 0)
+
+    for i, tid in enumerate(track_ids, start=start + 1):
+        t = get_track(tid)
+        if not t:
+            raise ValueError(f"没有这首作品: {tid}")
+        with db.connect() as c:
+            row = c.execute("SELECT status, album_id FROM track_platforms "
+                            "WHERE track_id=? AND platform=?", (tid, platform)).fetchone()
+        other = row["album_id"] if row else ""
+        if other and other != album_id:
+            raise ValueError(f"「{t['title']}」已经在另一张专辑里了，先移出来")
+        # status 保持原样 —— 加进专辑不该把 preparing 的歌打回 draft
+        set_platform_status(tid, platform, (row["status"] if row else "draft"),
+                            album_id=album_id, album=_album_title(key), track_no=i)
+    _sync_track_count(key, platform, album_id)
+    return get_album(album_id, platform)
+
+
+# 发行表单上那几项「其实不用人想」的字段。
+# 它们每次发布都要填，但答案完全由这首歌怎么来的决定 ——
+# Suno 生成的就是原创、没歌词就是纯音乐、生成通道就是 AI 工具、没发过就是未发行。
+# 2026-09-12 那次发布卡了七八轮，有一半时间耗在人站在发布页现场想这几项上。
+PUBLISH_DEFAULTS = {
+    "music_type": "原创",          # 原创 / 原创伴奏 / 翻唱 / Remix
+    "ai_tool": "Suno",
+    "already_released": False,
+}
+
+
+def publish_fields(track_id: str) -> dict[str, Any]:
+    """推出发行表单要的那几项，备料阶段就能定死，发布时纯搬运。
+
+    推导规则（都只看作品自身，不需要人判断）：
+      - 是否纯音乐 ← 有没有歌词
+      - 音乐类型   ← note 里标了翻唱/Remix 就按标的，否则原创
+      - AI 工具    ← 有 Suno clip 就是 Suno，本地合成的留空
+      - 是否已发行 ← 这首在别的平台有没有 online 记录
+
+    `note` 里写「翻唱」或「Remix」可以覆盖音乐类型 —— 翻唱是少数情况，
+    让它走人工标注比让每次发布都问一遍划算。
+    """
+    t = get_track(track_id)
+    if not t:
+        raise ValueError(f"没有这首作品: {track_id}")
+
+    note = (t.get("note") or "") + " " + (t.get("tags") or "")
+    if "Remix" in note or "remix" in note:
+        mtype = "Remix"
+    elif "翻唱" in note or "cover" in note.lower():
+        mtype = "翻唱"
+    else:
+        mtype = PUBLISH_DEFAULTS["music_type"]
+
+    online = any((v or {}).get("status") in ("online", "published")
+                 for v in (t.get("platforms") or {}).values())
+
+    return {
+        "music_type": mtype,
+        "is_instrumental": not (t.get("lyrics") or "").strip(),
+        "ai_tool": PUBLISH_DEFAULTS["ai_tool"] if t.get("clip_id") else "",
+        "already_released": online,
+    }
+
+
+def sync_album_cover(album_id: str, platform: str) -> int:
+    """把专辑封面铺到辑内每首歌的 cover_file，返回铺了几首。
+
+    为什么要铺而不是让下游去查专辑：**发布脚本、卡片墙、发歌记录读的都是
+    `tracks.cover_file`**。封面挂在专辑上是对的（一辑一张、省积分），但如果
+    只存在专辑那一层，发布脚本就会报「封面缺失」直接退出 —— 人明明看见
+    专辑页上有封面，却发不出去，最难排查的就是这种。
+    """
+    album = get_album(album_id, platform)
+    cover = album.get("cover_local") or ""
+    if not cover:
+        return 0
+    n = 0
+    for t in album["tracks"]:
+        tr = get_track(t["id"]) or {}
+        if tr.get("cover_file") == cover:
+            continue
+        upsert(t["id"], cover_file=cover)
+        n += 1
+    return n
+
+
+def remove_from_album(album_id: str, platform: str, track_id: str) -> dict[str, Any]:
+    """把一首移出专辑。曲序不重排 —— 空号不影响平台上传，重排反而会让人对不上。"""
+    db.init()
+    with db.connect() as c:
+        c.execute("UPDATE track_platforms SET album_id='', album_name='', track_no=NULL, "
+                  "updated_at=? WHERE track_id=? AND platform=? AND album_id=?",
+                  (_now(), track_id, platform, album_id))
+    _sync_track_count(album_key(platform, album_id), platform, album_id)
+    return get_album(album_id, platform)
+
+
+def get_album(album_id: str, platform: str) -> dict[str, Any]:
+    key = album_key(platform, album_id)
+    for a in list_albums(platform):
+        if a["key"] == key:
+            return a
+    raise ValueError(f"没有这张专辑: {album_id}")
+
+
+def _album_title(key: str) -> str:
+    with db.connect() as c:
+        r = c.execute("SELECT title FROM albums WHERE key=?", (key,)).fetchone()
+    return r["title"] if r else ""
+
+
+def _sync_track_count(key: str, platform: str, album_id: str) -> None:
+    with db.connect() as c:
+        n = c.execute("SELECT COUNT(*) n FROM track_platforms WHERE platform=? AND album_id=?",
+                      (platform, album_id)).fetchone()["n"]
+        c.execute("UPDATE albums SET track_count=? WHERE key=?", (n, key))
 
 
 def list_platform_accounts() -> dict[str, Any]:

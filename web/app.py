@@ -2392,6 +2392,22 @@ def pipeline_release(req: PipelineReleaseRequest):
         raise HTTPException(400, str(e))
 
 
+class PipelineRenameRequest(BaseModel):
+    track_id: str
+    release_title: str
+
+
+@app.post("/api/pipeline/rename")
+def pipeline_rename(req: PipelineRenameRequest):
+    """发行前改发行歌名 —— 交到平台后台之前都能改，之后锁死。"""
+    from core import pipeline
+    try:
+        track = pipeline.rename_release(req.track_id, req.release_title)
+        return {"ok": True, "track": track}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 class PipelinePlatformRequest(BaseModel):
     track_id: str
     platform: str
@@ -3156,6 +3172,9 @@ class CoverRequest(BaseModel):
     出封面。prompt 留空时由 title/tags 拼一句 —— 大多数时候不需要人自己想词。
     """
     track_id: str = ""
+    # 给整张专辑出封面时填它（形如 qishui-local-a1b2c3d4）。一辑一张、整辑共用，
+    # 比每首歌各出一张省积分 —— 平台本来也是按专辑挂封面的。
+    album_key: str = ""
     title: str = ""
     tags: str = ""
     prompt: str = ""
@@ -3176,28 +3195,192 @@ class CoverRequest(BaseModel):
     quality: str = ""
 
 
-@app.post("/api/cover/generate")
-def cover_generate(req: CoverRequest):
-    """
-    提交封面出图任务（异步）。
 
-    为什么走任务队列而不是同步等：中台出图要几十秒到几分钟，同步等会让
-    前端一直转圈、还占着一个线程池的位置。而队列这套（进度、取消、失败原因）
-    早就为 Suno 和 TTS 建好了，封面是第五种任务而已。
-    """
-    from core import cover
-    if not cover.available():
-        raise HTTPException(400, "museav 未登录。跑一次 `museav login` 即可（登录一次，出图和文案一起通）。")
-    if not (req.prompt.strip() or req.title.strip()):
-        raise HTTPException(400, "至少要有标题或提示词")
-    # 比例写错是用户输入问题，要在提交时就 400 挡掉 —— 丢进任务队列再失败的话，
-    # 人得等到任务跑起来才看到「看不懂的比例」，中间还白等一次调度。
+
+# ── 专辑（本地草稿）──────────────────────────────────
+#
+# 发行前就要能把几首歌组成一张辑：平台后台上传时要填专辑信息，
+# 而本地以前只存「从平台同步回来的」专辑，等于这一步只能在浏览器里手打。
+# 封面也挂在**专辑**上而不是每首歌 —— 一辑一张，三首歌共用一张，
+# 省的是真金白银（每张 1 积分）。
+
+
+class AlbumCreateRequest(BaseModel):
+    title: str
+    platform: str = "qishui"
+    track_ids: list[str] = []
+    description: str = ""
+    publish_date: str = ""
+    tags: str = ""
+
+
+class AlbumTracksRequest(BaseModel):
+    platform: str = "qishui"
+    track_ids: list[str] = []
+
+
+@app.post("/api/albums")
+def album_create(req: AlbumCreateRequest):
+    from core import pipeline
     try:
-        cover.normalize_ratio(req.ratio)
-    except cover.CoverError as e:
+        return {"ok": True, "album": pipeline.create_album(
+            req.title, req.platform, req.track_ids,
+            description=req.description, publish_date=req.publish_date, tags=req.tags)}
+    except ValueError as e:
         raise HTTPException(400, str(e))
-    label = f"🖼 封面：{req.title or req.track_id or '未命名'}"
-    return {"task_id": _submit_task("cover", label, req.model_dump()), "status": "queued"}
+
+
+@app.post("/api/albums/{album_id}/tracks")
+def album_add_tracks(album_id: str, req: AlbumTracksRequest):
+    from core import pipeline
+    try:
+        return {"ok": True, "album": pipeline.add_to_album(album_id, req.platform, req.track_ids)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/albums/{album_id}/tracks/{track_id}")
+def album_remove_track(album_id: str, track_id: str, platform: str = "qishui"):
+    from core import pipeline
+    try:
+        return {"ok": True, "album": pipeline.remove_from_album(album_id, platform, track_id)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class AlbumCoverRequest(BaseModel):
+    platform: str = "qishui"
+    prompt: str = ""
+    ratio: str = "1:1"
+    force: bool = False       # 已有封面时是否重出（重出要再花 1 积分）
+
+
+@app.post("/api/albums/{album_id}/cover")
+def album_cover_generate(album_id: str, req: AlbumCoverRequest):
+    """给整张专辑出一张封面（**花 1 积分**），整辑共用。
+
+    已经有封面就直接返回，不重复扣费 —— 要重出得显式 force=true。
+    """
+    from core import cover, pipeline
+    try:
+        album = pipeline.get_album(album_id, req.platform)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    if album.get("cover_local") and not req.force:
+        return {"ok": True, "skipped": "已有封面，没有重复扣积分", "album": album}
+    if not cover.available():
+        raise HTTPException(400, "museav 未登录。跑一次 `museav login`。")
+
+    prompt = req.prompt.strip() or (
+        f"{album['title']}，专辑封面，{album.get('description') or ''}".strip("，"))
+    label = f"🖼 专辑封面：{album['title']}"
+    params = {"title": album["title"], "prompt": prompt, "ratio": req.ratio,
+              "album_key": album["key"], "track_id": ""}
+    return {"task_id": _submit_task("cover", label, params), "status": "queued",
+            "cost": "1 积分"}
+
+
+class AlbumPublishRequest(BaseModel):
+    platform: str = "qishui"
+    auto_cover: bool = True     # 缺封面就自动出（1 积分/辑，已有则跳过）
+    wait: bool = True           # 等封面出完再返回
+    timeout_sec: int = 300
+
+
+@app.post("/api/albums/{album_id}/publish")
+def album_publish(album_id: str, req: AlbumPublishRequest):
+    """把一张专辑备到「可以去平台后台上传」的状态 —— 一次调用跑完全流程。
+
+    人工做这件事要点四五次（挨个确认音频、出封面、挨个定发行名、挨个提交），
+    每一步都可能漏；漏掉的那步往往到了平台后台才发现，得整个退回来重做。
+
+    做完这四件：
+      1. 查每首有没有可用音频（没有就直接拦下，别等到后台才发现）
+      2. 整张辑出一张封面（**1 积分**，已有则跳过、不重复扣）
+      3. 每首绑定平台 + 发行名（沿用已定的，没定就用曲名）
+      4. 汇报还差什么
+
+    **不会**替你把歌传到平台 —— 汽水没有上传 API，那一步只能你在后台点。
+    """
+    import time as _t                                            # noqa: PLC0415
+    from core import cover, pipeline                             # noqa: PLC0415
+
+    try:
+        album = pipeline.get_album(album_id, req.platform)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    if not album["tracks"]:
+        raise HTTPException(400, "这张专辑还没有曲目")
+
+    steps: list[dict] = []
+
+    # 1. 音频体检 —— 缺音频是硬伤，先拦下
+    missing = []
+    for t in album["tracks"]:
+        tr = pipeline.get_track(t["id"]) or {}
+        if not tr.get("audio_file"):
+            missing.append(tr.get("title") or t["id"])
+    if missing:
+        raise HTTPException(400, f"这些还没有可用音频，先去 Suno 解锁下载：{'、'.join(missing)}")
+    steps.append({"step": "音频体检", "ok": True, "detail": f"{len(album['tracks'])} 首都有音频"})
+
+    # 2. 封面 —— 挂在专辑上，一辑一张
+    cover_task = ""
+    if album.get("cover_local"):
+        steps.append({"step": "封面", "ok": True, "detail": "已有，没重复扣积分"})
+    elif not req.auto_cover:
+        steps.append({"step": "封面", "ok": False, "detail": "没有封面（auto_cover=false）"})
+    elif not cover.available():
+        steps.append({"step": "封面", "ok": False, "detail": "museav 未登录，跑 `museav login`"})
+    else:
+        prompt = f"{album['title']}，专辑封面，{album.get('description') or ''}".strip("，")
+        cover_task = _submit_task("cover", f"🖼 专辑封面：{album['title']}",
+                                  {"title": album["title"], "prompt": prompt, "ratio": "1:1",
+                                   "album_key": album["key"], "track_id": ""})
+        if req.wait:
+            deadline = _t.time() + req.timeout_sec
+            while _t.time() < deadline:
+                _t.sleep(3)
+                task = _tasks.get(cover_task) or {}
+                if task.get("status") == "done":
+                    album = pipeline.get_album(album_id, req.platform)
+                    steps.append({"step": "封面", "ok": bool(album.get("cover_local")),
+                                  "detail": album.get("cover_local") or "出完了但没回填"})
+                    break
+                if task.get("status") == "error":
+                    steps.append({"step": "封面", "ok": False,
+                                  "detail": str(task.get("error"))[:160]})
+                    break
+            else:
+                steps.append({"step": "封面", "ok": False, "detail": "等超时了，去任务队列看"})
+        else:
+            steps.append({"step": "封面", "ok": True, "detail": f"已提交（task {cover_task}）"})
+
+    # 3. 挨个绑定平台与发行名
+    bound, failed = [], []
+    for t in album["tracks"]:
+        tr = pipeline.get_track(t["id"]) or {}
+        title = (tr.get("release_title") or "").strip() or (tr.get("title") or "").strip()
+        try:
+            pipeline.submit_release(t["id"], req.platform, title)
+            pipeline.set_stage(t["id"], "publishing")
+            bound.append(title)
+        except ValueError as e:
+            # 已经绑过同名同平台不算错，其它情况要如实报
+            if "已定为" in str(e) or "已发往" in str(e):
+                bound.append(title)
+            else:
+                failed.append(f"{title}：{e}")
+    steps.append({"step": "绑定发行名", "ok": not failed,
+                  "detail": "、".join(bound) + ("；失败：" + "；".join(failed) if failed else "")})
+
+    album = pipeline.get_album(album_id, req.platform)
+    ready = bool(album.get("cover_local")) and not failed
+    return {
+        "ok": ready, "album": album, "steps": steps, "cover_task": cover_task,
+        "next": ("备料齐了 —— 去汽水后台上传，记得勾 AI 生成标识"
+                 if ready else "还差东西，看 steps 里 ok=false 那几条"),
+    }
 
 
 class CoverUpscaleRequest(BaseModel):
@@ -3272,189 +3455,19 @@ def _run_cover_task(task_id: str, params: dict, update_fn):
         except Exception as e:                                    # noqa: BLE001
             obs.log("cover_ledger_write_failed", level="warn",
                     track_id=req.track_id, error=str(e)[:200])
-
-    # 比例被上游改掉时把话说明白 —— 图是好图，但画幅不是要的那个，
-    # 拿去当封面会被平台裁掉或留白。不静默通过。
-    note = ""
-    if result.get("ratio_ok") is False:
-        note = (f"⚠️ 上游没按 {result['ratio_requested']} 出图，"
-                f"实际 {result.get('width')}×{result.get('height')} —— "
-                f"换个上游重出可能就对了")
-
-    update_fn(task_id, status="done", progress=100, stage="完成",
-              result={"ok": True, "prompt": prompt, "note": note, **result},
-              completed_at=datetime.now().strftime("%H:%M:%S"))
-
-
-def _run_cover_upscale_task(task_id: str, params: dict, update_fn):
-    """本地 GPU 超分现有封面到 1440，回填台账。不花中台积分。"""
-    from pathlib import Path
-    from core import cover, pipeline
-    from core.paths import DATA_DIR, PUBLISH_DIR
-
-    tid = (params.get("track_id") or "").strip()
-    t = pipeline.get_track(tid)
-    if not t or not t.get("cover_file"):
-        raise ValueError("这首还没有封面可超分")
-    src = Path(t["cover_file"])
-    if not src.is_absolute():
-        src = DATA_DIR / src
-    title = t.get("release_title") or t.get("title") or tid
-    dest = PUBLISH_DIR / "covers" / f"{title}_1440.jpg"
-    result = cover.upscale_local(
-        src, dest,
-        on_progress=lambda pct, stage: update_fn(task_id, progress=pct, stage=stage),
-    )
-    rel = str(result.relative_to(DATA_DIR)) if str(result).startswith(str(DATA_DIR)) else str(result)
-    pipeline.upsert(tid, cover_file=rel)
-    update_fn(task_id, status="done", progress=100, stage="完成",
-              result={"ok": True, "path": rel},
-              completed_at=datetime.now().strftime("%H:%M:%S"))
-
-
-def _clip_ids_from(stdout: str) -> list[dict]:
-    """从 `suno generate --json` 的回包里取 clip 列表。
-
-    回包结构在不同版本里换过几次，所以这里**认字段不认路径**：
-    递归找带 id 的对象。写死路径的话，Suno 一改 schema 就静默拿不到 ——
-    而拿不到的表现是「提交成功但没有 id」，看起来像生成失败。
-    """
-    try:
-        data = json.loads(stdout or "{}")
-    except json.JSONDecodeError:
-        return []
-    out: list[dict] = []
-
-    def walk(node):
-        if isinstance(node, dict):
-            cid = node.get("id") or node.get("clip_id")
-            if isinstance(cid, str) and len(cid) == 36 and cid.count("-") == 4:
-                out.append({"id": cid, "title": node.get("title", ""),
-                            "status": node.get("status", "")})
-            for v in node.values():
-                walk(v)
-        elif isinstance(node, list):
-            for v in node:
-                walk(v)
-
-    walk(data)
-    seen, uniq = set(), []
-    for c in out:
-        if c["id"] not in seen:
-            seen.add(c["id"])
-            uniq.append(c)
-    return uniq
-
-
-def _clip_status(ids: list[str]) -> list[dict]:
-    """查一批 clip 的状态。查不到就返回空 —— 调用方按「还没好」处理，
-    不当成失败（网络抖一下不该让一次成功的生成前功尽弃）。"""
-    from core import suno_api                                  # noqa: PLC0415
-
-    if not ids:
-        return []
-    try:
-        return suno_api.get_clips(ids)
-    except Exception:
-        return []
-
-
-@app.post("/api/cover/generate")
-def cover_generate(req: CoverRequest):
-    """
-    提交封面出图任务（异步）。
-
-    为什么走任务队列而不是同步等：中台出图要几十秒到几分钟，同步等会让
-    前端一直转圈、还占着一个线程池的位置。而队列这套（进度、取消、失败原因）
-    早就为 Suno 和 TTS 建好了，封面是第五种任务而已。
-    """
-    from core import cover
-    if not cover.available():
-        raise HTTPException(400, "museav 未登录。跑一次 `museav login` 即可（登录一次，出图和文案一起通）。")
-    if not (req.prompt.strip() or req.title.strip()):
-        raise HTTPException(400, "至少要有标题或提示词")
-    # 比例写错是用户输入问题，要在提交时就 400 挡掉 —— 丢进任务队列再失败的话，
-    # 人得等到任务跑起来才看到「看不懂的比例」，中间还白等一次调度。
-    try:
-        cover.normalize_ratio(req.ratio)
-    except cover.CoverError as e:
-        raise HTTPException(400, str(e))
-    label = f"🖼 封面：{req.title or req.track_id or '未命名'}"
-    return {"task_id": _submit_task("cover", label, req.model_dump()), "status": "queued"}
-
-
-class CoverUpscaleRequest(BaseModel):
-    track_id: str
-
-
-@app.post("/api/cover/upscale")
-def cover_upscale(req: CoverUpscaleRequest):
-    """本地 GPU 超分现有封面到 1440，不花中台积分。"""
-    from core import pipeline
-    t = pipeline.get_track(req.track_id)
-    if not t or not t.get("cover_file"):
-        raise HTTPException(400, "这首还没有封面可超分")
-    label = f"🖼 超分：{t.get('title') or req.track_id}"
-    return {"task_id": _submit_task("cover_upscale", label, req.model_dump()),
-            "status": "queued"}
-
-
-@app.get("/api/cover/status")
-def cover_status():
-    """中台能不能出图、一张多少积分。界面用它决定按钮是可点还是灰掉。"""
-    from core import cover
-    unit = obs.unit_price("museav")
-    bal = cover.balance()
-    est = round(cover.CREDITS_PER_COVER * unit, 2)
-    return {
-        "available": cover.available(),
-        # 给界面填下拉用。**不是白名单** —— 用户填别的照样放行，
-        # 能不能出由中台判定。
-        "common_ratios": [{"value": v, "label": lb} for v, lb in cover.COMMON_RATIOS],
-        # 目标边长与各比例算出的实际尺寸 —— 界面能直接告诉人「你会拿到多大的图」
-        "cover_side": cover.COVER_SIDE,
-        "sizes": {v: cover._size_for(v) for v, _ in cover.COMMON_RATIOS},
-        "credits_per_cover": cover.CREDITS_PER_COVER,
-        "est_cny": est,
-        "credits": bal["credits"],
-        "unmetered": bal.get("unmetered", False),
-        "covers_left": bal.get("covers_left", 0),
-        # 能不能真的出图 = 接了中台**且**（不受额度约束 或 余额够）。
-        #
-        # 只看 available 的话按钮是亮的、点下去必然失败；只看余额的话，
-        # 自家租户余额恒为 0 但出图正常，按钮会一直是灰的 —— 两种误判
-        # 都会让人朝错误方向排查。
-        "can_generate": bool(cover.available() and
-                             (bal.get("unmetered") or bal["credits"] >= cover.CREDITS_PER_COVER)),
-        "detail": (f"{bal['detail']}，一张约 ¥{est:.2f}"
-                   if cover.available() else "museav CLI 未登录"),
-    }
-
-
-def _run_cover_task(task_id: str, params: dict, update_fn):
-    """执行封面出图：中台出图 → 下载 → 回填台账的 cover_file。"""
-    from core import cover, pipeline
-
-    req = CoverRequest(**params)
-    prompt = req.prompt.strip() or cover.build_prompt(req.title, req.tags)
-
-    result = cover.generate(
-        prompt,
-        track_id=req.track_id,
-        ratio=req.ratio,
-        size=req.size,
-        quality=req.quality,
-        on_progress=lambda pct, stage: update_fn(task_id, progress=pct, stage=stage),
-    )
-
-    # 回填台账。出了图不落台账等于没出 —— 下次打开看板还是没封面，
-    # 人会以为失败了然后再出一张，白烧一次积分。
-    if req.track_id:
+    elif req.album_key:
+        # 专辑封面挂在专辑上，整辑共用 —— 不回填的话下次打开还是「没封面」，
+        # 人会再出一张，白烧一次积分。
         try:
-            pipeline.upsert(req.track_id, cover_file=result["path"])
+            pipeline.upsert_album(req.album_key, cover_local=result["path"],
+                                  cover_url=result.get("cdn_url", ""))
+            # 再铺到辑内每首歌：发布脚本和各个看板读的都是 tracks.cover_file，
+            # 只写专辑那一层的话，专辑页明明有封面、发布却报「封面缺失」。
+            plat, _, aid = req.album_key.partition("-")
+            pipeline.sync_album_cover(aid, plat)
         except Exception as e:                                    # noqa: BLE001
-            obs.log("cover_ledger_write_failed", level="warn",
-                    track_id=req.track_id, error=str(e)[:200])
+            obs.log("album_cover_write_failed", level="warn",
+                    album_key=req.album_key, error=str(e)[:200])
 
     # 比例被上游改掉时把话说明白 —— 图是好图，但画幅不是要的那个，
     # 拿去当封面会被平台裁掉或留白。不静默通过。
