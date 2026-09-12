@@ -1001,7 +1001,22 @@ def economics(days: int = 30):
     tracks.sort(key=lambda x: (x["earned_cny"] is None, -(x["earned_cny"] or 0), -x["cost_cny"]))
 
     priced = [t for t in tracks if t["cost_cny"] > 0]
-    avg = round(sum(t["cost_cny"] for t in priced) / len(priced), 2) if priced else 0.0
+
+    # ⚠️ **均价要按「打算发的」算，不能按全部算。**
+    #
+    # 生成 ≠ 要发：库里大部分是试验（试提示词、试风格），人根本没打算上架。
+    # 把它们混进分母，「每首成本」就被摊薄成一个谁也用不上的数 ——
+    # 既不代表一首作品真实花了多少，也不能拿来算回本播放量。
+    #
+    # 分界线是人点的那一下（generated → selected，见
+    # /api/tracks/{id}/stage）。所以这里分两栏：
+    #   · works —— 已选中/已发布的，这才是「作品成本」，回本要按它算
+    #   · trials —— 还停在 generated 的，是「试验成本」，该看总额不是均价
+    WORK_STAGES = ("selected", "publishing", "published")
+    works = [t for t in priced if t.get("stage") in WORK_STAGES]
+    trials = [t for t in priced if t.get("stage") not in WORK_STAGES]
+    avg = round(sum(t["cost_cny"] for t in works) / len(works), 2) if works else 0.0
+    avg_all = round(sum(t["cost_cny"] for t in priced) / len(priced), 2) if priced else 0.0
 
     # 盈亏。**收入是累计的、成本只统计最近 N 天** —— 两个口径不同，
     # 不能直接相减当成「这个月赚了多少」，所以字段名写清楚是 lifetime，
@@ -1020,7 +1035,14 @@ def economics(days: int = 30):
             # 单位经济学的那个数：每一次播放实际带来多少钱。
             "cny_per_1k_plays_measured": round(earned / plays * 1000, 4) if plays else 0.0,
         },
-        "avg_cost_per_track_cny": avg,
+        "avg_cost_per_track_cny": avg,          # 只算作品（已选中/已发布）
+        "cost_split": {
+            "works_n": len(works),
+            "works_cost_cny": round(sum(t["cost_cny"] for t in works), 2),
+            "trials_n": len(trials),
+            "trials_cost_cny": round(sum(t["cost_cny"] for t in trials), 2),
+            "avg_all_cny": avg_all,             # 混在一起的旧口径，仅供对照
+        },
         "avg_breakeven_plays": obs.breakeven_plays(
             avg, "netease", rate_override=rates.get("netease")),
         "tracks": tracks[:100],
@@ -2634,6 +2656,34 @@ def media_file(path: str):
     if not target.is_file():
         raise HTTPException(404, "文件不存在")
     return FileResponse(str(target), headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.post("/api/tracks/{track_id}/stage")
+def set_track_stage(track_id: str, req: dict):   # id 是 UUID 字符串，不是自增整数
+    """把一首歌标成「要发」或退回「只是生成过」。
+
+    ## 这一步必须由人点
+
+    生成 ≠ 要发。库里大部分作品是试验（试提示词、试风格），它们的价值是
+    让人知道「加 bassoon 和加 ukulele 差在哪」，不是都得上架。
+
+    所以程序**不替人做选择**：没有「自动挑出最好的」、没有「达到某分数
+    就进发布队列」。stage 从 generated 变成 selected，只能是人在卡片上
+    点了「选它去发」。这条也是成本口径的分界线 —— 见 /api/economics。
+    """
+    from core import db as _db                                 # noqa: PLC0415
+
+    stage = (req or {}).get("stage", "")
+    if stage not in ("generated", "selected"):
+        raise HTTPException(400, "stage 只能是 generated 或 selected")
+    _db.init()
+    with _db.connect() as c:
+        cur = c.execute("UPDATE tracks SET stage=?, updated_at=datetime('now') WHERE id=?",
+                        (stage, track_id))
+        c.commit()
+        if not cur.rowcount:
+            raise HTTPException(404, "没有这首曲目")
+    return {"ok": True, "stage": stage}
 
 
 @app.get("/api/gallery")

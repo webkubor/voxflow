@@ -72,6 +72,14 @@
             <n-button v-if="c.suno_url" size="small" tag="a" :href="c.suno_url" target="_blank" rel="noopener">
               Suno 原版
             </n-button>
+            <!-- 选不选由人点。程序不替人挑歌，见 /api/tracks/{id}/stage 的注释 -->
+            <n-button
+              size="small" :type="c.stage === 'generated' ? 'default' : 'primary'"
+              :class="c.stage === 'generated' ? '' : 'glow'"
+              :loading="staging[c.id]" @click="toggleStage(c)"
+            >
+              {{ c.stage === 'generated' ? '选它去发' : '已选中' }}
+            </n-button>
             <n-button
               v-for="p in c.platforms" :key="p.platform"
               size="small" tag="a" :href="p.url" target="_blank" rel="noopener"
@@ -92,7 +100,8 @@ import Icon from '../components/Icon.vue';
 import PrepModal from '../components/PrepModal.vue';
 
 const prepOpen = ref(false);
-const failed = reactive({});   // 封面加载失败的 id，失败一次就不再重试
+const failed = reactive({});
+const staging = reactive({});   // 封面加载失败的 id，失败一次就不再重试
 const cards = ref([]);
 const loading = ref(false);
 const onlyPrompt = ref(false);
@@ -115,6 +124,21 @@ const load = async () => {
 onMounted(load);
 
 const fmtDur = (s) => (s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}` : '');
+// 只在 generated ↔ selected 之间切；已经 published 的不给动，
+// 那是上架事实，不该在这里被一个按钮改掉
+const toggleStage = async (c) => {
+  if (!['generated', 'selected'].includes(c.stage)) return;
+  const next = c.stage === 'generated' ? 'selected' : 'generated';
+  staging[c.id] = true;
+  try {
+    const r = await fetch(`/api/tracks/${c.id}/stage`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage: next }),
+    });
+    if (r.ok) c.stage = next;
+  } finally { staging[c.id] = false; }
+};
+
 const copy = (t) => navigator.clipboard?.writeText(t);
 </script>
 
