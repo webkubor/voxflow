@@ -5,6 +5,7 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import { api, toMessage } from '../api';
+import { audioBus } from './audioBus';
 import type { Persona, PersonasResponse } from '../types/api';
 import { useSynthStore } from './synth';
 import type { DesignPreset } from './synth';

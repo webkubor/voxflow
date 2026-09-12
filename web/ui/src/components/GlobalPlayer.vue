@@ -4,8 +4,54 @@
     <transition v-if="!minimized" name="slide-up">
       <div class="player-bar">
         <div class="player-grid">
-          <!-- 左：曲目信息 -->
+          <!-- 左：封面 + 曲目信息 -->
           <div class="track-info">
+            <CoverArt
+              :seed="player.filename"
+              :playing="isPlaying"
+              :title="player.filename"
+              icon="library"
+              size="md"
+              class="track-cover"
+            />
+            <div class="track-text">
+              <div class="track-name" :title="player.filename">{{ player.filename || '未命名' }}</div>
+              <div class="track-sub">产物试听 · 高清音频</div>
+            </div>
+          </div>
+
+          <!-- 中：进度 + 光谱条 -->
+          <div class="progress-area">
+            <!-- 光谱条：播放中才动 -->
+            <SpectrumBars
+              :playing="isPlaying"
+              size="md"
+              class="progress-spectrum"
+            />
+            <div class="progress-row">
+              <span class="time">{{ formatTime(currentTime) }}</span>
+              <div
+                class="progress-track"
+                role="slider"
+                tabindex="0"
+                :aria-valuemin="0"
+                :aria-valuemax="Math.round(duration)"
+                :aria-valuenow="Math.round(currentTime)"
+                :aria-label="`音频进度，${formatTime(currentTime)}/${formatTime(duration)}`"
+                @click="clickProgress"
+                @mousedown="startDragProgress"
+                @keydown="onProgressKeydown"
+              >
+                <div class="progress-fill" :class="{ active: isPlaying }" :style="{ width: progressPercent + '%' }"></div>
+                <div class="progress-thumb" :style="{ left: progressPercent + '%' }"></div>
+              </div>
+              <span class="time">{{ formatTime(duration) }}</span>
+            </div>
+          </div>
+
+          <!-- 右：控制 + 音量 + 操作 -->
+          <div class="right-area">
+            <!-- 中央大播放按钮 -->
             <button
               class="play-toggle"
               :class="{ playing: isPlaying }"
@@ -13,46 +59,16 @@
               :title="isPlaying ? '暂停' : '播放'"
               @click="togglePlay"
             >
-              <svg v-if="!isPlaying" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+              <svg v-if="!isPlaying" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
                 <path d="M8 5V19L19 12L8 5Z"/>
               </svg>
-              <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                <rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>
+              <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                <rect x="6" y="5" width="4" height="14" rx="1"/>
+                <rect x="14" y="5" width="4" height="14" rx="1"/>
               </svg>
             </button>
-            <div v-if="isPlaying" class="equalizer" aria-hidden="true">
-              <span></span><span></span><span></span><span></span>
-            </div>
-            <div v-else class="music-note" aria-hidden="true">♪</div>
-            <div class="track-text">
-              <div class="track-name" :title="player.filename">{{ player.filename }}</div>
-              <div class="track-sub">产物试听 · 高清音频</div>
-            </div>
-          </div>
 
-          <!-- 中：进度条 -->
-          <div class="progress-area">
-            <span class="time">{{ formatTime(currentTime) }}</span>
-            <div
-              class="progress-track"
-              role="slider"
-              tabindex="0"
-              :aria-valuemin="0"
-              :aria-valuemax="Math.round(duration)"
-              :aria-valuenow="Math.round(currentTime)"
-              :aria-label="`音频进度，${formatTime(currentTime)}/${formatTime(duration)}`"
-              @click="clickProgress"
-              @mousedown="startDragProgress"
-              @keydown="onProgressKeydown"
-            >
-              <div class="progress-fill" :class="{ active: isPlaying }" :style="{ width: progressPercent + '%' }"></div>
-              <div class="progress-thumb" :style="{ left: progressPercent + '%' }"></div>
-            </div>
-            <span class="time">{{ formatTime(duration) }}</span>
-          </div>
-
-          <!-- 右：音量 + 操作 -->
-          <div class="right-area">
+            <!-- 音量 -->
             <div class="volume-area">
               <button class="vol-btn" :title="isMuted ? '取消静音' : '静音'" @click="toggleMute">
                 <Icon :name="isMuted || volume === 0 ? 'mute' : 'volume'" size="sm" />
@@ -73,15 +89,21 @@
               </div>
             </div>
 
+            <!-- 操作 -->
             <div class="actions-area">
-              <a class="action-pill" :href="player.url" :download="player.filename" title="下载">
+              <a
+                v-if="player.url"
+                class="action-pill"
+                :href="player.url"
+                :download="player.filename || 'audio'"
+                title="下载"
+              >
                 <Icon name="download" size="sm" />
-                <span>下载</span>
               </a>
               <button class="action-icon" title="最小化" @click="minimized = true">
                 <Icon name="chevron-down" size="sm" />
               </button>
-              <button class="action-icon" title="关闭" @click="closePlayer">
+              <button class="action-icon danger" title="关闭" @click="closePlayer">
                 <Icon name="close" size="sm" />
               </button>
             </div>
@@ -100,7 +122,7 @@
       </div>
     </transition>
 
-    <!-- 最小化条：56x56 浮窗，右下角 -->
+    <!-- 最小化浮窗：黑胶唱片样式 -->
     <button
       v-else
       class="player-mini"
@@ -108,66 +130,57 @@
       title="展开播放器"
       @click="minimized = false"
     >
-      <div class="mini-icon">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-          <path d="M8 5V19L19 12L8 5Z" v-if="!isPlaying"/>
-          <g v-else>
-            <rect x="6" y="5" width="4" height="14"/>
-            <rect x="14" y="5" width="4" height="14"/>
-          </g>
-        </svg>
-      </div>
-      <div v-if="isPlaying" class="mini-eq" aria-hidden="true">
-        <span></span><span></span><span></span>
-      </div>
+      <CoverArt
+        :seed="player.filename"
+        :playing="isPlaying"
+        :title="player.filename"
+        icon="library"
+        size="sm"
+      />
+      <SpectrumBars
+        v-if="isPlaying"
+        :playing="true"
+        size="sm"
+        color="white"
+        class="mini-eq"
+      />
+      <span v-else class="mini-pause-icon">▶</span>
     </button>
   </div>
 </template>
 
 <script setup>
 /**
- * 全局播放器。
+ * 全局播放器（重做版）。
  *
- * ## 最小化
+ * ## 架构
  *
- * 之前关掉就找不到入口。改成「最小化」：缩成右下角 56×56 浮窗，
- * 还在播的音频不会被打断；想找回来点一下就回弹成完整播放器。
- * 完全关闭时（closePlayer）才走 library store 把 player 清空。
+ * 通过 audioBus 注册 'global-player' 频道 —— 播这首歌时自动暂停 PersonaSidebar
+ * 试听，反之亦然。同一时间只有一首音频在响。
  *
- * ## 路由切暂停
+ * ## 视觉升级（相比上一版）
  *
- * 用户切到「资产库」浏览时还听旧音频，体验割裂。监听路由变化：
- * 切到 LibraryTab（浏览列表）时自动暂停，但其他 Tab 不主动暂停 —
- * 创作 Tab 时用户往往一边听参考音一边写文案。
- *
- * ## 键盘可达
- *
- * 进度条 / 音量条加 role="slider" + tabindex + 方向键调节，
- * 不再用鼠标硬点。
+ *   - 专辑封面（CoverArt）：黑胶唱片造型，文件名哈希取色，播放时慢转 + 发光
+ *   - 光谱条（SpectrumBars）：28 根 bar 错峰动画，纯 CSS 无音频分析开销
+ *   - 中央大播放按钮：白底圆形 + 阴影 hover scale，播放时变紫
+ *   - 进度条：保留流光效果，hover 显示 thumb
+ *   - 最小化浮窗：60×60 黑胶唱片，封面跟着转
+ *   - hover/transition 全部 token 化的 var(--vf-ease) cubic-bezier
  */
 import { ref, watch, nextTick, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRoute } from 'vue-router';
+import { audioBus } from '../stores/audioBus';
 import { useLibraryStore } from '../stores/library';
 import { useTasksStore } from '../stores/tasks';
 import Icon from './Icon.vue';
+import CoverArt from './player/CoverArt.vue';
+import SpectrumBars from './player/SpectrumBars.vue';
 
 const { player, closePlayer } = useLibraryStore();
 const { showToast } = useTasksStore();
 const audioPlayer = ref(null);
 
-/*
- * ⚠️ `player` 是 store 里的 **reactive 对象**（`reactive({url, filename, visible})`），
- * 不是 ref —— 所以取值是 `player.url`，**不能写 `player.value?.url`**。
- *
- * 写成 `.value` 的后果：那是 undefined，`visible` 恒为 false，
- * **整个播放器永远不渲染** —— 资产库点播放没反应、没有报错、
- * 连 audio 元素都不存在。而模板里其它地方（player.filename / player.url）
- * 用法都是对的，只有这一行错，所以格外难发现。
- *
- * 旁证：同文件 304 行的 watch 用的就是 `() => player.url`。
- */
 const visible = computed(() => !!player.url);
-
 const isPlaying = ref(false);
 const currentTime = ref(0);
 const duration = ref(0);
@@ -245,26 +258,14 @@ const startDragProgress = (e) => {
   window.addEventListener('mouseup', onUp);
 };
 
-/** 键盘调进度：← / → 5 秒，Home / End 跳头尾 */
 const onProgressKeydown = (e) => {
   if (!duration.value) return;
   const step = e.shiftKey ? 10 : 5;
-  if (e.key === 'ArrowLeft') {
-    seekTo((currentTime.value - step) / duration.value);
-    e.preventDefault();
-  } else if (e.key === 'ArrowRight') {
-    seekTo((currentTime.value + step) / duration.value);
-    e.preventDefault();
-  } else if (e.key === 'Home') {
-    seekTo(0);
-    e.preventDefault();
-  } else if (e.key === 'End') {
-    seekTo(1);
-    e.preventDefault();
-  } else if (e.key === ' ' || e.key === 'Spacebar') {
-    togglePlay();
-    e.preventDefault();
-  }
+  if (e.key === 'ArrowLeft') { seekTo((currentTime.value - step) / duration.value); e.preventDefault(); }
+  else if (e.key === 'ArrowRight') { seekTo((currentTime.value + step) / duration.value); e.preventDefault(); }
+  else if (e.key === 'Home') { seekTo(0); e.preventDefault(); }
+  else if (e.key === 'End') { seekTo(1); e.preventDefault(); }
+  else if (e.key === ' ' || e.key === 'Spacebar') { togglePlay(); e.preventDefault(); }
 };
 
 const setVolume = (v) => {
@@ -295,19 +296,10 @@ const startDragVolume = (e) => {
 
 const onVolumeKeydown = (e) => {
   const step = e.shiftKey ? 0.1 : 0.05;
-  if (e.key === 'ArrowLeft') {
-    setVolume(volume.value - step);
-    e.preventDefault();
-  } else if (e.key === 'ArrowRight') {
-    setVolume(volume.value + step);
-    e.preventDefault();
-  } else if (e.key === 'Home') {
-    setVolume(0);
-    e.preventDefault();
-  } else if (e.key === 'End') {
-    setVolume(1);
-    e.preventDefault();
-  }
+  if (e.key === 'ArrowLeft') { setVolume(volume.value - step); e.preventDefault(); }
+  else if (e.key === 'ArrowRight') { setVolume(volume.value + step); e.preventDefault(); }
+  else if (e.key === 'Home') { setVolume(0); e.preventDefault(); }
+  else if (e.key === 'End') { setVolume(1); e.preventDefault(); }
 };
 
 // 新曲目 → 展开 + 播放
@@ -328,26 +320,29 @@ watch(
   },
 );
 
-// 路由变化：切到「资产库 / 看板」这种浏览型 tab 时暂停
-// 创作型 tab（克隆 / 设计 / 剧本 / 音乐）用户往往一边听一边写，不主动打断
+// 路由切到浏览型 tab 时暂停；audioBus 会自动暂停 persona-preview
 let stopRouteWatch = null;
 onMounted(() => {
+  if (audioPlayer.value) {
+    audioBus.register('global-player', audioPlayer.value, {
+      onPlay: () => { isPlaying.value = true; },
+      onPause: () => { isPlaying.value = false; },
+    });
+  }
   stopRouteWatch = watch(
     () => route.name,
     (newName) => {
       if (!isPlaying.value || !audioPlayer.value) return;
-      const PAUSE_ON_ROUTE = new Set(['library', 'works', 'publish']);
-      if (PAUSE_ON_ROUTE.has(newName)) {
-        audioPlayer.value.pause();
-      }
+      const browseTabs = new Set(['library', 'works', 'publish']);
+      if (browseTabs.has(newName)) audioPlayer.value.pause();
     },
   );
 });
 onBeforeUnmount(() => {
-  if (stopRouteWatch) stopRouteWatch();
+  stopRouteWatch?.();
+  audioBus.unregister('global-player');
 });
 
-// 关闭时记得停掉音频
 watch(visible, (v) => {
   if (!v && audioPlayer.value) audioPlayer.value.pause();
 });
@@ -357,6 +352,7 @@ defineExpose({ togglePlay, toggleMute });
 </script>
 
 <style scoped>
+/* ── 容器 ── */
 .player-root {
   position: fixed;
   bottom: 0;
@@ -366,114 +362,87 @@ defineExpose({ togglePlay, toggleMute });
   z-index: 90;
   pointer-events: none;
 }
-.player-root > * {
-  pointer-events: auto;
-}
+.player-root > * { pointer-events: auto; }
 
-/* 完整播放器 */
+/* ── 完整播放器 ── */
 .player-bar {
   height: 100%;
-  background: rgba(10, 10, 14, 0.78);
+  background: rgba(10, 10, 14, 0.82);
   backdrop-filter: blur(28px) saturate(180%);
   -webkit-backdrop-filter: blur(28px) saturate(180%);
   border-top: 1px solid var(--vf-border-strong);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 -8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 -8px 24px rgba(0, 0, 0, 0.5);
   padding: 0 var(--vf-space-6);
 }
 
 .player-grid {
   display: grid;
-  grid-template-columns: minmax(200px, 1fr) 2fr minmax(200px, 1fr);
+  grid-template-columns: minmax(220px, 1fr) 1.4fr minmax(240px, 1fr);
   align-items: center;
-  gap: var(--vf-space-4);
+  gap: var(--vf-space-5);
   height: 100%;
   max-width: 1400px;
   margin: 0 auto;
 }
 
-/* 曲目信息 */
+/* ── 左：曲目信息 ── */
 .track-info {
   display: flex;
   align-items: center;
   gap: var(--vf-space-3);
   min-width: 0;
 }
-.play-toggle {
-  background: white;
-  border: none;
-  color: black;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex: none;
-  transition: all 0.15s var(--vf-ease);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-}
-.play-toggle:hover {
-  transform: scale(1.08);
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
-}
-.play-toggle.playing {
-  box-shadow: 0 0 14px color-mix(in srgb, var(--vf-primary) 50%, transparent);
-}
-.equalizer {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 16px;
-}
-.equalizer span {
-  width: 2px;
-  background: white;
-  border-radius: 99px;
-  animation: eq-bounce 0.8s infinite alternate ease-in-out;
-  box-shadow: 0 0 4px rgba(255, 255, 255, 0.6);
-}
-.equalizer span:nth-child(1) { height: 5px; animation-delay: 0s; }
-.equalizer span:nth-child(2) { height: 14px; animation-delay: 0.15s; }
-.equalizer span:nth-child(3) { height: 8px; animation-delay: 0.3s; }
-.equalizer span:nth-child(4) { height: 12px; animation-delay: 0.45s; }
-.music-note { font-size: 14px; color: var(--vf-text-2); }
-@keyframes eq-bounce {
-  from { height: 3px; }
-  to { height: 14px; }
-}
-
+.track-cover { flex: none; }
 .track-text {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 .track-name {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: white;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: -0.01em;
 }
 .track-sub {
   font-size: 11px;
   color: var(--vf-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* 进度条 */
+/* ── 中：光谱 + 进度 ── */
 .progress-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.progress-spectrum {
+  color: var(--vf-primary);
+  height: 18px;
+  opacity: 0.85;
+}
+.progress-row {
   display: flex;
   align-items: center;
   gap: var(--vf-space-2);
+  width: 100%;
 }
 .time {
   font-size: 11px;
   color: var(--vf-text-3);
   font-variant-numeric: tabular-nums;
-  width: 40px;
+  width: 42px;
   text-align: center;
 }
 .progress-track {
@@ -484,7 +453,7 @@ defineExpose({ togglePlay, toggleMute });
   position: relative;
   cursor: pointer;
   outline: none;
-  transition: height 0.15s;
+  transition: height 0.15s var(--vf-ease);
 }
 .progress-track:hover,
 .progress-track:focus-visible {
@@ -492,12 +461,16 @@ defineExpose({ togglePlay, toggleMute });
 }
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--vf-primary-active) 0%, var(--vf-primary) 35%, var(--vf-primary-hover) 70%, white 100%);
+  background: linear-gradient(90deg,
+    var(--vf-primary-active) 0%,
+    var(--vf-primary) 35%,
+    var(--vf-primary-hover) 70%,
+    white 100%);
   border-radius: var(--vf-radius-full);
   position: absolute;
   left: 0;
   top: 0;
-  box-shadow: 0 0 8px color-mix(in srgb, var(--vf-primary) 50%, transparent);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
 }
 .progress-fill.active {
   background-size: 200% 100%;
@@ -515,7 +488,9 @@ defineExpose({ togglePlay, toggleMute });
   position: absolute;
   top: 50%;
   transform: translate(-50%, -50%) scale(0);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vf-primary) 50%, transparent), 0 0 8px rgba(255, 255, 255, 0.8);
+  box-shadow:
+    0 0 0 2px rgba(99, 102, 241, 0.5),
+    0 0 8px rgba(255, 255, 255, 0.8);
   transition: transform 0.15s var(--vf-ease);
 }
 .progress-track:hover .progress-thumb,
@@ -523,13 +498,44 @@ defineExpose({ togglePlay, toggleMute });
   transform: translate(-50%, -50%) scale(1.3);
 }
 
-/* 右区 */
+/* ── 右：控制 ── */
 .right-area {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--vf-space-3);
+  gap: var(--vf-space-4);
 }
+
+/* 中央大播放按钮 */
+.play-toggle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: white;
+  color: black;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  transition: all 0.18s var(--vf-ease);
+}
+.play-toggle:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.35);
+}
+.play-toggle:active { transform: scale(0.96); }
+.play-toggle.playing {
+  background: var(--vf-primary);
+  color: white;
+  box-shadow:
+    0 0 0 4px rgba(99, 102, 241, 0.15),
+    0 4px 16px rgba(99, 102, 241, 0.5);
+}
+
+/* 音量 */
 .volume-area {
   display: flex;
   align-items: center;
@@ -541,11 +547,15 @@ defineExpose({ togglePlay, toggleMute });
   border: none;
   color: var(--vf-text-3);
   cursor: pointer;
-  padding: 2px;
+  padding: 4px;
   display: flex;
-  transition: color 0.15s;
+  border-radius: var(--vf-radius-xs);
+  transition: color 0.15s, background 0.15s;
 }
-.vol-btn:hover { color: white; }
+.vol-btn:hover {
+  color: white;
+  background: var(--vf-bg-hover);
+}
 .volume-track {
   flex: 1;
   height: 3px;
@@ -557,109 +567,111 @@ defineExpose({ togglePlay, toggleMute });
   transition: height 0.15s;
 }
 .volume-track:hover,
-.volume-track:focus-visible {
-  height: 5px;
-}
+.volume-track:focus-visible { height: 5px; }
 .volume-fill {
   height: 100%;
   background: rgba(255, 255, 255, 0.7);
   border-radius: var(--vf-radius-full);
   transition: background 0.15s;
 }
-.volume-track:hover .volume-fill {
-  background: white;
-}
+.volume-track:hover .volume-fill { background: white; }
 
+/* 操作按钮 */
 .actions-area {
   display: flex;
   align-items: center;
   gap: var(--vf-space-2);
 }
-.action-pill {
+.action-pill,
+.action-icon {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  border-radius: var(--vf-radius-sm);
   font-size: 12px;
-  color: white;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s var(--vf-ease);
+}
+.action-pill {
+  width: 32px;
+  height: 32px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 4px 10px;
-  border-radius: var(--vf-radius-sm);
-  text-decoration: none;
-  transition: all 0.15s;
+  color: white;
 }
 .action-pill:hover {
   background: white;
   color: black;
-  border-color: white;
+  transform: translateY(-1px);
 }
 .action-icon {
+  width: 32px;
+  height: 32px;
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   color: var(--vf-text-3);
-  width: 28px;
-  height: 28px;
-  border-radius: var(--vf-radius-xs);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s;
 }
 .action-icon:hover {
-  background: var(--vf-bg-hover);
   color: var(--vf-text-1);
+  background: var(--vf-bg-hover);
+}
+.action-icon.danger:hover {
+  color: var(--vf-err);
+  background: var(--vf-err-soft);
 }
 
-/* 最小化态 */
+/* ── 最小化浮窗（60×60 黑胶）── */
 .player-mini {
   position: fixed;
   right: var(--vf-space-3);
   bottom: var(--vf-space-3);
-  width: 56px;
-  height: 56px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
-  background: rgba(10, 10, 14, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--vf-border-strong);
-  color: white;
+  background: transparent;
+  border: none;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  box-shadow: var(--vf-shadow-elevated);
-  transition: all 0.2s var(--vf-ease);
+  padding: 0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  transition: transform 0.2s var(--vf-ease);
 }
-.player-mini:hover {
-  transform: translateY(-2px);
-  border-color: var(--vf-primary);
-}
+.player-mini:hover { transform: scale(1.05) translateY(-2px); }
 .player-mini.playing {
-  border-color: var(--vf-primary);
-  box-shadow: 0 0 16px color-mix(in srgb, var(--vf-primary) 40%, transparent);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.5),
+    0 0 24px rgba(99, 102, 241, 0.4);
 }
-.mini-icon { display: flex; }
 .mini-eq {
   position: absolute;
-  bottom: 8px;
-  right: 8px;
+  bottom: -2px;
+  right: -2px;
+  width: 24px;
+  height: 14px;
+  background: rgba(0, 0, 0, 0.65);
+  border-radius: var(--vf-radius-full);
+  padding: 0 2px;
+  color: var(--vf-primary);
+}
+.mini-pause-icon {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 24px;
+  height: 24px;
+  background: rgba(0, 0, 0, 0.65);
+  border-radius: 50%;
+  color: var(--vf-text-2);
   display: flex;
-  gap: 1.5px;
-  align-items: flex-end;
-  height: 12px;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
 }
-.mini-eq span {
-  width: 2px;
-  background: var(--vf-primary);
-  border-radius: 99px;
-  animation: eq-bounce 0.8s infinite alternate ease-in-out;
-}
-.mini-eq span:nth-child(1) { height: 4px; animation-delay: 0s; }
-.mini-eq span:nth-child(2) { height: 12px; animation-delay: 0.15s; }
-.mini-eq span:nth-child(3) { height: 7px; animation-delay: 0.3s; }
 
-/* slide-up animation */
+/* ── 进场动画 ── */
 .slide-up-enter-active,
 .slide-up-leave-active {
   transition: transform 0.25s var(--vf-ease), opacity 0.25s;
@@ -668,5 +680,18 @@ defineExpose({ togglePlay, toggleMute });
 .slide-up-leave-to {
   transform: translateY(100%);
   opacity: 0;
+}
+
+/* ── 响应式 ── */
+@media (max-width: 900px) {
+  .player-grid {
+    grid-template-columns: 1fr auto;
+    gap: var(--vf-space-3);
+  }
+  .progress-area { display: none; }
+}
+@media (max-width: 600px) {
+  .volume-area, .actions-area { display: none; }
+  .track-text { max-width: 160px; }
 }
 </style>

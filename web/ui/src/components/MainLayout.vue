@@ -178,6 +178,7 @@
             <n-tab-pane name="library" tab="音频"><LibraryTab /></n-tab-pane>
             <n-tab-pane name="suno" tab="音乐"><SunoTab /></n-tab-pane>
             <n-tab-pane name="intake" tab="入库"><IntakeTab /></n-tab-pane>
+            <n-tab-pane name="albums" tab="专辑"><AlbumsTab /></n-tab-pane>
             <n-tab-pane name="works" tab="发歌"><PipelineBoard /></n-tab-pane>
             <n-tab-pane name="gallery" tab="卡片墙"><GalleryTab /></n-tab-pane>
             <n-tab-pane name="publish" tab="发行"><PublishTab /></n-tab-pane>
@@ -212,6 +213,7 @@
         style="display: none;"
         @timeupdate="onPreviewProgress"
         @ended="onPreviewEnded"
+        @pause="onPreviewPause"
       ></audio>
     </n-layout>
   </n-spin>
@@ -293,6 +295,7 @@ const lazyTab = (loader, label) => defineAsyncComponent({
   },
 });
 
+const AlbumsTab = lazyTab(() => import('../tabs/AlbumsTab.vue'), '专辑');
 const CloneTab = lazyTab(() => import('../tabs/CloneTab.vue'), '声音克隆');
 const DesignTab = lazyTab(() => import('../tabs/DesignTab.vue'), '音色设计');
 const DialogueTab = lazyTab(() => import('../tabs/DialogueTab.vue'), '剧本创作');
@@ -314,6 +317,7 @@ import ShortcutHelp from './ShortcutHelp.vue';
 import Icon from './Icon.vue';
 
 import { setCurrentTab } from '../api';
+import { audioBus } from '../stores/audioBus';
 import { useShortcuts } from '../composables/useShortcuts';
 import { useCapabilitiesStore } from '../stores/capabilities';
 import { useErrorLogStore } from '../stores/errorLog';
@@ -402,10 +406,14 @@ const TAB_GROUPS = [
   },
   {
     key: 'release', title: '发行', icon: 'publish',
+    // 顺序 = 一次发行真实的做事顺序：**在卡片墙挑歌 → 组成专辑 → 发行 → 回头看记录**。
+    // 卡片墙是这条链的**起点**（选歌就在那儿翻），不是末尾的素材库 ——
+    // 把它排到最后，等于让人从流程中段开始找入口。
     tabs: [
-      { name: 'intake', label: '自动化发布', icon: 'upload', hint: '拿到音频从这里进：贴链接自动入库备料' },
+      { name: 'gallery', label: '卡片墙 · 选歌', icon: 'library', hint: '翻所有做好的歌，挑出要发的' },
+      { name: 'albums', label: '专辑', icon: 'board', hint: '把选中的歌组成一张辑：定辑名、排曲序、出一张共用封面' },
+      { name: 'intake', label: '发行', icon: 'upload', hint: '备料齐了从这里走发行' },
       { name: 'works', label: '发歌记录', icon: 'board', hint: '哪些发过、哪些没发、谁负责' },
-      { name: 'gallery', label: '卡片墙', icon: 'library', hint: '每首歌的风格提示词 + 成品 + 线上地址，横着对比' },
       { name: 'publish', label: '全网发行', icon: 'publish', hint: '各平台账号与已上架作品' },
       { name: 'ops', label: '运营台', icon: 'pulse', hint: '成本、收益、回本播放量' },
     ],
@@ -496,6 +504,8 @@ const previewKey = computed(() => voicesStore.previewKey);
 const previewProgress = computed(() => voicesStore.previewProgress);
 const onPreviewProgress = (e) => voicesStore.onPreviewProgress(e);
 const onPreviewEnded = () => voicesStore.onPreviewEnded();
+// audioBus 暂停时也会触发（其他源播的时候），同步清掉 UI 状态
+const onPreviewPause = () => voicesStore.onPreviewEnded();
 
 const togglePreview = (key) => voicesStore.togglePreview(key);
 
@@ -513,6 +523,12 @@ const confirmDeletePersona = (key) => {
 
 let pollTimer = null;
 onMounted(async () => {
+  // 把两个 audio 源注册到 audioBus，确保同一时间只有一个在播
+  // （GlobalPlayer 播歌时暂停 PersonaSidebar 试听，反之亦然）
+  if (previewPlayer.value) {
+    audioBus.register('persona-preview', previewPlayer.value);
+  }
+
   // 用 allSettled 不用 all：Promise.all 里**任何一个 reject，后面的全不执行**。
   // 每项独立起来，一个上游挂了只影响它自己；而且失败要说出来，不能吞。
   const jobs = [
@@ -536,6 +552,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   if (pollTimer) clearInterval(pollTimer);
+  audioBus.unregister('persona-preview');
 });
 
 // 给 SunoTab 这种需要刷新状态的子组件用的 expose 触发器
