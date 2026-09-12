@@ -29,10 +29,10 @@
           <option value="suno">音乐</option>
           <option value="cover">翻唱</option>
         </select>
-        <button class="ghost-btn" @click="loadAudioList">
+        <n-button @click="loadAudioList">
           <Icon name="refresh" size="sm" />
           <span>刷新</span>
-        </button>
+        </n-button>
       </div>
     </header>
 
@@ -87,7 +87,7 @@
       class="lib-empty"
     >
       <template #extra>
-        <button class="ghost-btn" @click="keyword = ''">清除搜索</button>
+        <n-button @click="keyword = ''">清除搜索</n-button>
       </template>
     </n-empty>
   </div>

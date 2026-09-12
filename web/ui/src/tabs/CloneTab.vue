@@ -120,19 +120,18 @@
               <n-switch v-model:value="cloneForm.emotionPriority" size="small" />
               <span>情绪控制优先</span>
             </label>
-            <button class="ghost-btn" @click="saveScript">
+            <n-button @click="saveScript">
               <Icon name="save" size="sm" />
               <span>保存为草稿</span>
-            </button>
+            </n-button>
           </div>
-          <button
-            class="primary-btn"
+          <n-button type="primary" class="glow"
             :disabled="!selectedPersona || !cloneForm.text.trim()"
             @click="handleSynthesize"
           >
             <Icon name="play" size="sm" />
             <span>立即合成音频</span>
-          </button>
+          </n-button>
         </div>
       </section>
     </div>

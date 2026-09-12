@@ -215,9 +215,9 @@
             <div class="section-title">
               <Icon name="pulse" size="sm" />
               <span>体检项</span>
-              <button class="ghost-btn" @click="refresh">
+              <n-button  @click="refresh">
                 <Icon name="refresh" size="sm" /> 刷新
-              </button>
+              </n-button>
             </div>
             <div class="check-grid">
               <div
@@ -654,7 +654,7 @@ onUnmounted(() => { clearInterval(fastTimer); clearInterval(slowTimer); });
 
 /* 这颗刷新按钮靠 margin 推到标题行右端 —— 布局，不是按钮样式，
    所以留在组件里；按钮本身的样式在 main.css 全局那一份。 */
-.section-title .ghost-btn { margin-left: auto; }
+.section-title .n-button { margin-left: auto; }
 
 /* ── 日志 ── */
 .log-list {

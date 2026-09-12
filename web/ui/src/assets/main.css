@@ -330,3 +330,28 @@ a:hover { color: var(--vf-primary); }
 .line-label > .vf-icon {
   color: var(--vf-text-3);
 }
+
+
+/* ── 品牌辉光 ──────────────────────────────────────────────
+ *
+ * naive 的 Button 主题变量里没有 box-shadow 字段，这是**唯一**配不进
+ * themeOverrides 的东西。所以它以 class 形式附加在 <n-button> 上，
+ * 而不是成为再手写一个 .primary-btn 的理由。
+ *
+ *   <n-button type="primary" class="glow">生成音乐</n-button>
+ */
+.glow:not(:disabled) { box-shadow: var(--vf-glow); }
+.glow:not(:disabled):hover {
+  box-shadow: var(--vf-glow-strong);
+  transform: translateY(-1px);
+}
+
+/* naive 的 Button 内容区默认不给 gap，而这个项目几乎每颗按钮都是
+ * 「图标 + 文字」—— 不补的话全站按钮都是 ▶生成音乐 这样挤在一起。
+ * 原来手写 <button> 时 gap 写在 .primary-btn 里，换成组件后那条没了。 */
+.n-button .n-button__content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.n-button--small-type .n-button__content { gap: 4px; }

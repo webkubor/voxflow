@@ -27,10 +27,10 @@
                （汽水 ≥1440、网易云 ≥1400），光给个比例人判断不了够不够。 -->
           <span v-if="coverSize" class="ratio-size">→ {{ coverSize }}</span>
         </label>
-        <button class="ghost-btn" @click="openInbox">
+        <n-button @click="openInbox">
           <Icon name="upload" size="sm" />
           <span>从下载导入</span>
-        </button>
+        </n-button>
         <!-- 曲库有两百多首（Suno 云端全量同步进来的），而一个人通常只负责
              其中两三首。不筛的话得在两百行里找自己那几首，找错就是替别人
              发了歌 —— 这个筛选不是方便，是防错。 -->
@@ -38,10 +38,10 @@
           <input v-model="onlyMine" type="checkbox" />
           <span>只看我负责的{{ mineCount ? `（${mineCount}）` : '' }}</span>
         </label>
-        <button class="ghost-btn" @click="load">
+        <n-button @click="load">
           <Icon name="refresh" size="sm" />
           <span>刷新</span>
-        </button>
+        </n-button>
       </div>
     </header>
 
@@ -62,10 +62,10 @@
     >
       <template #extra>
         <p class="empty-hint">去「AI 音乐」出一首，会自动登记到这里。</p>
-        <button class="ghost-btn" @click="openInbox">
+        <n-button @click="openInbox">
           <Icon name="upload" size="sm" />
           <span>或从下载目录导入</span>
-        </button>
+        </n-button>
       </template>
     </n-empty>
 
@@ -73,10 +73,10 @@
       <!-- 批量工具条 -->
       <div v-if="selectedIds.size" class="batch-bar">
         <span class="batch-count">已选 {{ selectedIds.size }} 首</span>
-        <button class="ghost-btn small" @click="selectedIds = new Set()">取消选择</button>
-        <button class="primary-btn small" :disabled="batchBusy" @click="batchAdvance">
+        <n-button size="small" @click="selectedIds = new Set()">取消选择</n-button>
+        <n-button type="primary" size="small" class="glow" :disabled="batchBusy" @click="batchAdvance">
           {{ batchBusy ? '推进中…' : '批量推进到下一步' }}
-        </button>
+        </n-button>
         <span class="batch-hint">发版那步（selected → publishing）需单独选平台</span>
       </div>
 
@@ -165,44 +165,28 @@
           <div class="track-actions">
             <!-- 只在**缺封面**时出现：已经有封面的曲目再放一个出图按钮，
                  唯一的作用就是让人误点、白烧 2 积分。 -->
-            <button
-              v-if="!t.cover_url"
-              class="ghost-btn small"
-              :disabled="!coverCaps.can_generate || !!coverJob(t.id)"
+            <n-button v-if="!t.cover_url" size="small" :disabled="!coverCaps.can_generate || !!coverJob(t.id)"
               :title="coverCaps.detail"
-              @click="genCover(t)"
-            >
+              @click="genCover(t)">
               <Icon name="sparkles" size="sm" />
               <span>{{ coverJob(t.id) ? '出图中…' : coverBtnLabel }}</span>
-            </button>
-            <button
-              v-else
-              class="ghost-btn small"
-              :disabled="!!coverJob(t.id)"
+            </n-button>
+            <n-button v-else size="small" :disabled="!!coverJob(t.id)"
               title="本地 GPU 超分到 1440，不花中台积分"
-              @click="upscaleCover(t)"
-            >
+              @click="upscaleCover(t)">
               <Icon name="sparkles" size="sm" />
               <span>{{ coverJob(t.id)?.type === 'cover_upscale' ? '超分中…' : '超分封面' }}</span>
-            </button>
-            <button
-              v-if="t.lyrics || Object.keys(t.platforms || {}).length"
-              class="ghost-btn small"
-              @click="toggleExpand(t.id)"
-            >
+            </n-button>
+            <n-button v-if="t.lyrics || Object.keys(t.platforms || {}).length" size="small" @click="toggleExpand(t.id)">
               <Icon :name="expanded.has(t.id) ? 'chevron-up' : 'chevron-down'" size="sm" />
               <span>{{ expanded.has(t.id) ? '收起' : '详情' }}</span>
-            </button>
-            <button
-              v-if="nextAction(t)"
-              class="primary-btn small"
-              :class="`action-${nextAction(t).type}`"
+            </n-button>
+            <n-button v-if="nextAction(t)" type="primary" size="small" class="glow" :class="`action-${nextAction(t).type}`"
               :disabled="busyId === t.id"
-              @click="advance(t)"
-            >
+              @click="advance(t)">
               <Icon name="arrow-right" size="sm" />
               <span>{{ nextAction(t).label }}</span>
-            </button>
+            </n-button>
           </div>
         </div>
 
@@ -233,7 +217,7 @@
             <template v-if="info.status === 'preparing'">
               <span class="detail-label">{{ platformLabel(pk) }} 备料清单</span>
               <div v-if="!readiness[`${t.id}|${pk}`]" class="detail-meta">
-                <button class="ghost-btn small" @click="checkReady(t.id, pk)">检查还缺什么</button>
+                <n-button size="small" @click="checkReady(t.id, pk)">检查还缺什么</n-button>
               </div>
               <template v-else>
                 <div class="detail-body">
@@ -246,17 +230,14 @@
                 <div class="ready-foot">
                   <!-- 备料齐了就直接开跑，不再只给一句命令让人自己去终端粘贴。
                        「发布中」此前是个死状态：点了什么都不会发生，人只能干等。 -->
-                  <button v-if="readiness[`${t.id}|${pk}`].ok"
-                          class="primary-btn small"
-                          :disabled="publishBusy === t.id"
+                  <n-button v-if="readiness[`${t.id}|${pk}`].ok" type="primary" size="small" class="glow" :disabled="publishBusy === t.id"
                           @click="runPublish(t.id, pk)">
                     <Icon name="upload" size="sm" />
                     <span>{{ publishBusy === t.id ? '填表中…' : '开始自动填表' }}</span>
-                  </button>
-                  <button v-if="readiness[`${t.id}|${pk}`].ok && readiness[`${t.id}|${pk}`].发布命令"
-                          class="ghost-btn small" @click="copyPublish(t.id, pk)">
+                  </n-button>
+                  <n-button v-if="readiness[`${t.id}|${pk}`].ok && readiness[`${t.id}|${pk}`].发布命令" size="small" @click="copyPublish(t.id, pk)">
                     <Icon name="save" size="sm" /><span>复制命令</span>
-                  </button>
+                  </n-button>
                   <span v-else-if="!readiness[`${t.id}|${pk}`].ok" class="ready-hint">
                     还缺 {{ readiness[`${t.id}|${pk}`].缺口数 }} 项，补齐了才能发
                   </span>
@@ -1144,18 +1125,12 @@ const waitedDays = (info) => {
 
 /* buttons */
 
-/* 流水线里的按钮是小号：只覆盖尺寸，颜色走 main.css 的全局 .primary-btn */
-.primary-btn {
-  gap: 4px;
-  padding: 6px 12px;
-  font-size: 12px;
-}
-.primary-btn.small { padding: 5px 10px; font-size: 11px; }
-.primary-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.primary-btn.action-success { background: var(--vf-ok); border-color: var(--vf-ok); box-shadow: 0 0 0 1px rgba(34,197,94,.35), 0 6px 24px -4px rgba(34,197,94,.4); }
-.primary-btn.action-success:hover:not(:disabled) { background: #16a34a; border-color: #16a34a; }
-.primary-btn.action-default { background: var(--vf-bg-3); color: var(--vf-text-1); border-color: var(--vf-border); box-shadow: none; }
-.primary-btn.action-default:hover:not(:disabled) { background: var(--vf-bg-hover); border-color: var(--vf-border-strong); }
+/* 语义变体：尺寸和基础配色已经由 App.vue 的 themeOverrides.Button 接管，
+   这里只保留 naive 主题变量表达不了的「成功态按钮」配色。 */
+.action-success { background: var(--vf-ok); border-color: var(--vf-ok); box-shadow: 0 0 0 1px rgba(34,197,94,.35), 0 6px 24px -4px rgba(34,197,94,.4); }
+.action-success:hover:not(:disabled) { background: #16a34a; border-color: #16a34a; }
+.action-default { background: var(--vf-bg-3); color: var(--vf-text-1); border-color: var(--vf-border); box-shadow: none; }
+.action-default:hover:not(:disabled) { background: var(--vf-bg-hover); border-color: var(--vf-border-strong); }
 
 /* detail */
 .track-detail {

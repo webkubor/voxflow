@@ -43,10 +43,10 @@
           <template v-else-if="login.可验证">✗ 未登录 —— 先去登录再继续</template>
           <template v-else>? {{ login.说明 }}</template>
         </span>
-        <button class="ghost-btn small" :disabled="loginBusy" @click="checkLogin">
+        <n-button size="small" :disabled="loginBusy" @click="checkLogin">
           {{ loginBusy ? '检查中…' : '检查登录' }}
-        </button>
-        <a v-if="consoleUrl" class="ghost-btn small" :href="consoleUrl" target="_blank" rel="noopener">去登录</a>
+        </n-button>
+        <n-button tag="a" size="small" :href="consoleUrl" target="_blank" rel="noopener" v-if="consoleUrl">去登录</n-button>
       </div>
 
       <!-- ② 这台机器的其它前置条件（毫秒级，页面加载就查）
@@ -54,7 +54,7 @@
       <div v-if="pre" class="pre" :class="{ blocked: !pre.可以发布 }">
         <div class="pre-head">
           <b>{{ pre.可以发布 ? '这台机器可以发布' : '还发不了：' + pre.阻塞项.join('、') }}</b>
-          <button class="ghost-btn small" @click="loadPre">重新检查</button>
+          <n-button size="small" @click="loadPre">重新检查</n-button>
         </div>
         <div v-for="i in pre.items" :key="i.项" class="pre-row" :class="{ bad: i.可自动验证 && !i.就绪 }">
           <span class="pre-mark">{{ i.就绪 ? '✓' : (i.可自动验证 ? '✗' : '?') }}</span>
@@ -97,9 +97,9 @@
 
         <div class="row">
           <span class="lb"></span>
-          <button class="primary-btn" :disabled="busy || !form.url.trim() || loginBlocked" @click="submit">
+          <n-button type="primary" class="glow" :disabled="busy || !form.url.trim() || loginBlocked" @click="submit">
             {{ busy ? '处理中…' : '导入并备料' }}
-          </button>
+          </n-button>
         </div>
       </div>
 

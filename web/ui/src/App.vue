@@ -58,5 +58,44 @@ const themeOverrides = {
     fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif',
   },
   Tag: { borderRadius: readVar('--vf-radius-full', '999px') },
+
+  // ── 组件段 ──
+  //
+  // 2026-09-12 补。此前这里只有 common + Tag，组件段是空的 —— naive 组件
+  // 长不出这个项目要的样子，于是 44 处按钮被手写成 <button class="primary-btn">，
+  // 散在各组件 scoped style 里反复分叉（.ghost-btn 一度有 4 种尺寸）。
+  //
+  // 能用主题变量表达的（尺寸、圆角、色板、hover）一律配在这里；
+  // 主题变量表达不了的只有品牌辉光（box-shadow，naive Button 没有这个字段），
+  // 那一条用 .glow class 附加。**不要再为了改外观回去手写 <button>。**
+  Button: {
+    heightMedium: '34px',
+    heightSmall: '28px',
+    fontSizeMedium: '13px',
+    fontSizeSmall: '12px',
+    fontWeight: '500',
+    borderRadiusMedium: readVar('--vf-radius-sm', '8px'),
+    borderRadiusSmall: readVar('--vf-radius-xs', '4px'),
+    paddingMedium: '0 18px',
+    paddingSmall: '0 12px',
+    // 次级按钮（默认态）对齐原来的 .ghost-btn
+    color: readVar('--vf-bg-3', '#18181d'),
+    colorHover: readVar('--vf-bg-hover', '#1f1f26'),
+    border: `1px solid ${readVar('--vf-border', 'rgba(255,255,255,.07)')}`,
+    borderHover: `1px solid ${readVar('--vf-border-strong', 'rgba(255,255,255,.14)')}`,
+    borderFocus: `1px solid ${readVar('--vf-primary', '#6366f1')}`,
+    borderPressed: `1px solid ${readVar('--vf-primary-active', '#4f46e5')}`,
+    textColor: readVar('--vf-text-2', '#a1a1aa'),
+    textColorHover: readVar('--vf-text-1', '#ffffff'),
+    textColorPrimary: '#fff',
+    textColorHoverPrimary: '#fff',
+    textColorPressedPrimary: '#fff',
+    textColorFocusPrimary: '#fff',
+  },
+  Radio: {
+    buttonBorderRadius: readVar('--vf-radius-sm', '8px'),
+    buttonColorActive: readVar('--vf-primary-soft', 'rgba(99,102,241,.12)'),
+    buttonTextColorActive: readVar('--vf-primary', '#6366f1'),
+  },
 };
 </script>

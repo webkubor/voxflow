@@ -113,18 +113,17 @@
 
     <!-- 底部控制 -->
     <div class="dialogue-footer">
-      <button class="ghost-btn" @click="importConfig">
+      <n-button @click="importConfig">
         <Icon name="upload" size="sm" />
         <span>载入本地样例剧本</span>
-      </button>
-      <button
-        class="primary-btn"
+      </n-button>
+      <n-button type="primary" class="glow"
         :disabled="form.lines.length === 0 || !modelStatus.base.ready"
         @click="submitDialogue"
       >
         <Icon name="dialogue" size="sm" />
         <span>一键合成多角色剧场配音</span>
-      </button>
+      </n-button>
     </div>
   </div>
 </template>

@@ -71,10 +71,10 @@
         <span class="trend-note">
           {{ mode === 'cover' ? '点击歌曲直接翻唱（带你的声音）' : '网易云热歌榜提炼 · 只学风格不抄作品' }}
         </span>
-        <button class="ghost-btn" :disabled="trendLoading" @click="loadTrending">
+        <n-button :disabled="trendLoading" @click="loadTrending">
           <Icon name="refresh" size="sm" />
           <span>{{ trend ? '刷新' : '看当前火什么' }}</span>
-        </button>
+        </n-button>
       </div>
 
       <div v-if="trendError" class="trend-error">{{ trendError }}</div>
@@ -136,10 +136,10 @@
         </div>
 
         <div v-if="mode === 'song'" class="trend-actions">
-          <button class="primary-btn" @click="useThemeForLyrics">
+          <n-button type="primary" class="glow" @click="useThemeForLyrics">
             <Icon name="sparkles" size="sm" />
             <span>用热点主题写歌词</span>
-          </button>
+          </n-button>
           <span class="trend-updated">更新于 {{ trendUpdated }} · 只学风格不抄作品</span>
         </div>
       </div>
@@ -181,22 +181,20 @@
             <div class="lyrics-head">
               <label class="form-label"><Icon name="edit" size="sm" />歌词（支持 [Verse] [Chorus] 结构）</label>
               <div class="lyrics-actions">
-                <button
-                  class="ghost-btn small"
+                <n-button size="small"
                   :disabled="lyricsGenerating"
                   @click="generateLyrics"
                 >
                   <Icon name="sparkles" size="sm" />
                   <span>{{ lyricsGenerating ? '生成中…' : 'AI 生成' }}</span>
-                </button>
-                <button
-                  class="ghost-btn small"
+                </n-button>
+                <n-button size="small"
                   :disabled="!sunoForm.lyrics.trim()"
                   @click="copyLyrics"
                 >
                   <Icon name="layers" size="sm" />
                   <span>复制歌词</span>
-                </button>
+                </n-button>
               </div>
             </div>
             <n-input
@@ -304,20 +302,20 @@
           </div>
 
           <div class="batch-actions">
-            <button class="ghost-btn" :disabled="batchRunning" @click="batchAddRow">
+            <n-button :disabled="batchRunning" @click="batchAddRow">
               <Icon name="plus" size="sm" />
               <span>添加一行</span>
-            </button>
-            <button class="primary-btn" :disabled="batchDisabled" @click="batchStart">
+            </n-button>
+            <n-button type="primary" class="glow" :disabled="batchDisabled" @click="batchStart">
               <Icon name="play" size="sm" />
               <span>{{ batchRunning ? `生成中 (${batchDoneCount}/${batchItems.length})` : `开始批量 (${batchItems.length} 首)` }}</span>
-            </button>
-            <button v-if="batchRunning" class="ghost-btn" @click="batchCancel">
+            </n-button>
+            <n-button v-if="batchRunning" @click="batchCancel">
               取消
-            </button>
-            <button v-if="!batchRunning && batchHasResult" class="ghost-btn" @click="batchReset">
+            </n-button>
+            <n-button v-if="!batchRunning && batchHasResult" @click="batchReset">
               重置状态
-            </button>
+            </n-button>
             <span class="batch-cost" v-if="batchItems.length > 0">
               预计 {{ batchItems.length * 35 }}-{{ batchItems.length * 100 }} credits
             </span>
@@ -404,10 +402,10 @@
                   <Icon name="music" size="sm" />翻唱源（必填）
                   <span class="form-label-optional">从你的 Suno 库里选</span>
                 </label>
-                <button class="ghost-btn small" :disabled="clipsLoading" @click="loadClips">
+                <n-button size="small" :disabled="clipsLoading" @click="loadClips">
                   <Icon name="refresh" size="sm" />
                   <span>{{ clipsLoading ? '读取中…' : '刷新' }}</span>
-                </button>
+                </n-button>
               </div>
               <n-select
                 v-model:value="coverClipId"
@@ -430,22 +428,20 @@
               <div class="lyrics-head">
                 <label class="form-label"><Icon name="edit" size="sm" />歌词</label>
                 <div class="lyrics-actions">
-                  <button
-                    class="ghost-btn small"
+                  <n-button size="small"
                     :disabled="lyricsGenerating"
                     @click="generateCoverLyrics"
                   >
                     <Icon name="sparkles" size="sm" />
                     <span>{{ lyricsGenerating ? '生成中…' : 'AI 改写' }}</span>
-                  </button>
-                  <button
-                    class="ghost-btn small"
+                  </n-button>
+                  <n-button size="small"
                     :disabled="!sunoForm.lyrics.trim()"
                     @click="copyLyrics"
                   >
                     <Icon name="layers" size="sm" />
                     <span>复制</span>
-                  </button>
+                  </n-button>
                 </div>
               </div>
               <n-input
@@ -472,7 +468,7 @@
             <span>翻唱历史</span>
             <span class="history-count">{{ coverHistory.items.length }}</span>
           </div>
-          <button class="ghost-btn small" @click="coverHistory.clear()">清空历史</button>
+          <n-button size="small" @click="coverHistory.clear()">清空历史</n-button>
         </header>
         <div class="history-list">
           <article
@@ -503,46 +499,41 @@
               </div>
             </div>
             <div class="history-actions">
-              <button
-                v-if="c.status === 'done' && c.urls[0]"
-                class="ghost-btn small"
-                title="试听"
-                @click="playCover(c)"
-              >
+              <n-button v-if="c.status === 'done' && c.urls[0]" size="small" title="试听"
+                @click="playCover(c)">
                 <Icon name="play" size="sm" />
                 <span>试听</span>
-              </button>
-              <a
+              </n-button>
+              <n-button
                 v-if="c.status === 'done' && c.urls[0]"
-                class="ghost-btn small"
+                tag="a"
+                size="small"
                 :href="c.urls[0]"
                 :download="c.files?.[0] || c.title"
               >
                 <Icon name="download" size="sm" />
                 <span>下载</span>
-              </a>
-              <button
-                class="ghost-btn small danger-hover"
+              </n-button>
+              <n-button size="small" class="danger-hover"
                 title="从历史移除"
                 @click="coverHistory.remove(c.id)"
               >
                 <Icon name="close" size="sm" />
-              </button>
+              </n-button>
             </div>
           </article>
         </div>
       </section>
 
       <div class="form-footer">
-        <button
-          class="primary-btn"
+        <n-button type="primary" class="glow"
           :loading="suno.submitting"
           :disabled="submitDisabled"
           @click="handleSubmit"
         >
           <Icon :name="mode === 'bgm' ? 'library' : mode === 'cover' ? 'layers' : 'suno'" size="sm" />
           <span>{{ SUBMIT_LABELS[mode] }}</span>
-        </button>
+        </n-button>
         <span class="cost-tip">{{ COST_TIPS[mode] }} · 产物进「音频文件」</span>
       </div>
       <p v-if="suno.error" class="suno-error">{{ suno.error }}</p>

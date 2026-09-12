@@ -91,14 +91,13 @@
               <span>满意后存入标准样音库</span>
               <span class="commit-tip">合成完成自动入库并带上 ✓ 样音标识</span>
             </label>
-            <button
-              class="primary-btn"
+            <n-button type="primary" class="glow"
               :disabled="!designForm.name.trim() || !designForm.text.trim() || !modelStatus.design.ready"
               @click="doDesign"
             >
               <Icon name="design" size="sm" />
               <span>合成并设计音色</span>
-            </button>
+            </n-button>
           </div>
         </section>
       </main>

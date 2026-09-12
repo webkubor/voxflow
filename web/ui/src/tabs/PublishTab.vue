@@ -251,10 +251,10 @@ const fmtDuration = (sec) => {
         </h3>
         <p class="tab-subtitle">每个平台的账号、专辑与已上架作品</p>
       </div>
-      <button class="ghost-btn" :disabled="loading" @click="load">
+      <n-button :disabled="loading" @click="load">
         <Icon name="refresh" size="sm" />
         <span>{{ loading ? '刷新中…' : '刷新' }}</span>
-      </button>
+      </n-button>
     </div>
 
     <!-- 发行主体：三个平台的账号都归这个艺名，不要让人去每张卡上猜。 -->
