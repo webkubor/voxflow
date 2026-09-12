@@ -4,6 +4,12 @@
 
 ## [未发布]
 
+（暂无累积改动）
+
+---
+
+## [0.7.0] - 2026-09-12
+
 ### 🔊 音频能自动下回本地了 —— 之前的结论是错的
 
 `/api/inbox` 的注释里写着「CDN 直链 403，硬绕这层反爬性价比极低」，据此把
@@ -139,6 +145,28 @@ AI 文案一律报错。配置的默认值不该藏在某个平台的启动脚�
 `templates/music-cover-prompt.md` + `scripts/gen_cover_prompt.py`：
 24 个占位符 + 4 个 preset（治愈系傍晚 / 热血系正午 / 伤感深夜 / 抖音热门卡点）。
 脚本**只产出 prompt + 打印 museav gen 命令**，绝不自动跑（花钱红线）。
+
+### 🎵 全局播放器重做 + AudioBus 单音频协调
+
+之前 GlobalPlayer 和 PersonaSidebar 各自有独立 `<audio>` 元素，
+**同时点两首会叠加播放**。重构两件事：
+
+- **`stores/audioBus.ts`**（新）：单例协调器，谁先 `play()` 谁占线，
+  其他源自动 `pause()`。`activeChannelId` 响应式可订阅。
+  PersonaSidebar 的 previewPlayer + GlobalPlayer 都注册成频道。
+- **`components/player/CoverArt.vue`**（新）：黑胶唱片造型 —— 同心圆凹槽
+  + 中心彩色标签 + 中心图标。颜色按 filename 哈希取一对互补色（djb2），
+  每首歌不同；播放时 8s/圈慢转 + 外发光呼吸。
+- **`components/player/SpectrumBars.vue`**（新）：28 根 CSS 动画 bar
+  错峰（每根动画时长 + delay 都不同），纯 CSS 无 Web Audio API 开销。
+  停止时全部归零高度。
+- **`GlobalPlayer.vue`**（重做）：三栏布局 —— 左（CoverArt + 曲目）｜
+  中（光谱条 + 进度条）｜右（大播放按钮 + 音量 + 操作）。大播放按钮
+  白底圆 44px，播放中变紫发光 + hover scale(1.08)。最小化浮窗 60×60
+  黑胶唱片 + 右下 mini 光谱条。键盘可达保留（方向键 / Home / End /
+  空格）。
+- **`PersonaSidebar` previewPlayer** 在 MainLayout 注册到 audioBus，
+  `@pause` 事件清掉 UI 状态 —— 切换源时两边 UI 同步。
 
 ---
 
