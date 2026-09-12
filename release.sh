@@ -54,5 +54,31 @@ else
     echo "⚠️ Warning: gh CLI not found. Please manually upload the files in dist/ to GitHub."
 fi
 
+# 6. 推群：版本更新
+#
+# notify.release() 早就写好了，但**从来没有任何地方调用它** —— 于是
+# 「这个 app 更新了什么」这一类通知一次都没发出去过。群里只看得到
+# 音乐进度，看不到工具本身在往哪走。
+#
+# 通知失败不能让发版失败：包也打了、tag 也推了，这只是广播。
+echo "📣 Pushing release note to Lark..."
+.venv/bin/python - "$VERSION" <<'PYEOF' || echo "⚠️ 群通知失败（不影响发版）"
+import re, sys
+from pathlib import Path
+from core import notify
+
+version = sys.argv[1]
+text = Path("CHANGELOG.md").read_text(encoding="utf-8")
+m = re.search(rf"## \[{re.escape(version)}\][^\n]*\n(.*?)(?=\n## \[|\Z)", text, re.S)
+body = (m.group(1) if m else "").strip()
+# 只取小标题当要点 —— 整段 changelog 推到群里没人看，标题才是「更新了什么」
+points = [ln.lstrip("# ").strip() for ln in body.splitlines() if ln.startswith("### ")]
+if not points:
+    points = [ln.strip("- ").strip() for ln in body.splitlines() if ln.startswith("- ")][:6]
+ok = notify.release(version, "VoxFlow 声流", points[:8],
+                    link="https://github.com/webkubor/voxflow/releases/tag/v" + version)
+print("  送达" if ok else "  未送达")
+PYEOF
+
 echo "=========================================================================="
 echo "✨ v$VERSION has been successfully packaged and tagged with changelog! ✨"

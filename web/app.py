@@ -1898,6 +1898,24 @@ def _run_publish_task(task_id: str, params: dict, update_fn):
                 f"账号对不上：这首歌归「{who}」发（账号 {want}），"
                 f"但浏览器现在登录的是「{st}」。换账号登录后再发，别发错人名下。")
 
+    # 进入发布流程 → 推一张卡片。
+    #
+    # publish_started 早就写好了，但**从来没有任何地方调用它** ——
+    # 于是「谁要把哪首歌发到哪个平台」这条最该让人知道的进度，
+    # 群里一次都没出现过。旁路，失败不影响发布。
+    try:
+        t = pipeline.get_track(track_id) or {}
+        notify.publish_started(
+            title=t.get("title") or track_id,
+            release_title=info.get("platform_title") or "",
+            platform=platform, account=who,
+            duration_s=t.get("duration") or 0,
+            clip_id=t.get("clip_id") or "",
+            album=info.get("album_name") or "",
+        )
+    except Exception as e:  # noqa: BLE001
+        obs.log("publish_notify_failed", level="warn", error=str(e)[:160])
+
     update_fn(task_id, progress=15, stage="拉起浏览器…")
     env = {**os.environ, "VF_BASE": str(PROJECT_DIR), "VF_TRACK": track_id}
     try:
@@ -2698,14 +2716,45 @@ def set_track_stage(track_id: str, req: dict):   # id 是 UUID 字符串，不�
         if not cur.rowcount:
             raise HTTPException(404, "没有这首曲目")
         row = dict(c.execute(
-            "SELECT title, tags, clip_id, duration FROM tracks WHERE id=?", (track_id,)).fetchone())
+            "SELECT title, tags, clip_id, duration, audio_file FROM tracks WHERE id=?",
+            (track_id,)).fetchone())
 
     # 人点了「要发」才广播 —— 这是流程里唯一值得惊动群和台账的时刻。
-    # 整段包在 try 里：通知是旁路，挂了不能让按钮点不动。
+    #
+    # 台账同样在这里写，不在生成时写：多维表格是**发行台账**，
+    # 记的是「打算发/正在发/已发」的东西。把每首试验都写进去，
+    # 那张表就没法用来回答「我现在有哪些在流程里」。
+    #
+    # 整段包在 try 里：通知和台账都是旁路，挂了不能让按钮点不动。
     if stage == "selected":
         try:
-            from core import notify                            # noqa: PLC0415
+            from core import notify, r2                        # noqa: PLC0415
             cid = row.get("clip_id") or ""
+
+            # 音频传 R2 拿公网直链 —— 台账里那一栏要能点开就听，
+            # 本地路径对别人没有意义。
+            audio_url = ""
+            af = (row.get("audio_file") or "").strip()
+            if af:
+                try:
+                    audio_url = r2.upload(str(OUT_DIR.parent / af))
+                except Exception:  # noqa: BLE001
+                    audio_url = ""
+            # ⚠️ 「音乐地址」是飞书的 URL 字段，**空串会被拒**
+            #（URLFieldConvFail，code 1254068）—— 不是所有曲目都有音频直链，
+            # 所以没有就整个字段不传，而不是传一个空串。
+            fields = {
+                "曲名": row.get("title") or "未命名",
+                "状态": "待发行",
+                "风格标签": (row.get("tags") or "")[:200],
+                "生成时间": int(time.time() * 1000),
+                # 只填机器知道的。发行歌名/授权方式/负责账号留空等人填 ——
+                # 机器猜个默认值，人扫一眼觉得「已经有了」就不会去改。
+                "备注": f"选中待发 · clip {cid[:8]}" + ("" if audio_url else " · 无音频直链"),
+            }
+            if audio_url:
+                fields["音乐地址"] = audio_url
+            notify.ledger_add(fields)
             notify.notify(
                 f"🎯 选中待发：{row.get('title') or '未命名'}",
                 {"风格提示词": (row.get("tags") or "")[:120],

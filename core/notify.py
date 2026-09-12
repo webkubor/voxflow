@@ -242,13 +242,21 @@ def ledger_add(fields: dict[str, Any], *, account_name: str = "") -> str:
     if not (acc.get("profile") and base.get("app_token") and base.get("table_id")):
         return ""
     root = f"/open-apis/bitable/v1/apps/{base['app_token']}/tables/{base['table_id']}"
-    known = {f["field_name"] for f in
-             (_lark_json(acc, "GET", f"{root}/fields").get("data") or {}).get("items", [])}
+    items = (_lark_json(acc, "GET", f"{root}/fields").get("data") or {}).get("items", [])
+    known = {f["field_name"] for f in items}
     if known:
         dropped = set(fields) - known
         if dropped:
             obs.log("ledger_field_unknown", level="warn", fields=",".join(sorted(dropped)))
         fields = {k: v for k, v in fields.items() if k in known}
+        # URL 字段（type 15）**只收对象**，传字符串整批被拒（1254068
+        # URLFieldConvFail）。ledger_sync 里早就处理了，ledger_add 一直没有 ——
+        # 于是单条写入只要带 URL 就必失败，而失败只记在日志里，界面上毫无迹象。
+        url_fields = {f["field_name"] for f in items if f.get("type") == 15}
+        for k in list(fields):
+            if k in url_fields and isinstance(fields[k], str):
+                fields[k] = {"link": fields[k], "text": fields[k]} if fields[k] else None
+        fields = {k: v for k, v in fields.items() if v is not None}
     r = _lark_json(acc, "POST", f"{root}/records", {"fields": fields})
     if not r.get("ok"):
         obs.log("ledger_add_failed", level="warn",
@@ -451,9 +459,17 @@ def release(version: str, title: str, changes: list[str], *,
     if highlight:
         fields["重点"] = highlight
     fields["更新内容"] = "\n" + "\n".join(f"· {c}" for c in changes)
+    btns = [{"text": "查看详情", "url": link, "type": "primary"}] if link else None
+    ok = notify(f"🚀 {title}", fields, level="start", event="release",
+                account_name="changelog", dedupe_key=f"vf-release-{version}", buttons=btns)
+    if ok:
+        return True
+    # changelog 那个群走的是 webhook，而 webhook 会因为「机器人被停用 / 被移出群 /
+    # 触发群安全设置」静默失效（实测 code 19007 Bot Not Enabled）。
+    # 版本更新是两类通知之一，不该因为一个群的机器人被停就整条没了 ——
+    # 回退到默认账号的 lark-cli 通道，那条路是以机器人身份发的，不受群 webhook 开关影响。
     return notify(f"🚀 {title}", fields, level="start", event="release",
-                  account_name="changelog", dedupe_key=f"vf-release-{version}",
-                  buttons=[{"text": "查看详情", "url": link, "type": "primary"}] if link else None)
+                  dedupe_key=f"vf-release-{version}-fb", buttons=btns)
 
 
 def publish_started(*, title: str, release_title: str = "", platform: str = "",
