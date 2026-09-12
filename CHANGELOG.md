@@ -39,6 +39,107 @@ AI 文案一律报错。配置的默认值不该藏在某个平台的启动脚�
 `scripts/sync_suno.py` / `sync_clip_meta.py` 改直连。修 `sync_suno.py` 里
 一个既有 bug：`renamed` 从未初始化，脚本跑到最后一行必崩。
 
+### 🎨 前端 UI 整体重做 + 设计系统收敛
+
+之前的 UI 是各 Tab 各自写样式，重复实现散落。这次重构成：
+
+- **设计系统单一真源**：`tokens.css` 收口颜色 / 阴影 / 圆角 / 间距 / 缓动曲线 /
+  布局常量（header / player 高度 / sidebar 宽度）。`App.vue` 通过
+  `getComputedStyle` 从 token 读，不再写死两套。改一处全站生效。
+- **图标库** `components/Icon.vue`：30 个 lucide 风格 SVG 图标替代跨系统
+  不一致的 emoji，描边色走 `currentColor` 跟主题。
+- **公共组件**：`WarnBanner`（4 类型统一警告条）/ `CurrentPersonaChip` /
+  `TaskTypeBadge` / `PersonaSidebar`（可折叠 + 搜索）。
+- **顶栏 Header**：去冗余信息（平台标签 / 版本号 / 构建时间），加任务铃铛 +
+  错误日志铃铛 + 能力 chip popover 看完整状态。
+- **Tab 导航**：图标 + 文字，自定义按钮（不依赖 n-tabs 默认胶囊样式）。
+- **侧栏 PersonaSidebar**：可折叠成 64px 窄条 + 5+ 音色自动出搜索框。
+- **全局播放器**：加最小化模式（右下角 56×56 浮窗）、键盘可达（方向键 /
+  Home / End / 空格）、路由切到浏览型 tab 自动暂停、修复 `tag="a"` 不渲染
+  a 标签的 bug。
+- **任务面板**：从右下半抽屉挪到右上角 + 加关闭按钮 + 阶段进度条。
+- **PipelineBoard**：进度可视化改成 n-steps 风格（圆点 + 文字 label + 勾），
+  当前阶段计数条高亮。
+- **资产库**：按今天 / 昨天 / 本周 / 更早分组 + 文件名搜索 + 类型筛选。
+- **性能**：每个 Tab 用 `defineAsyncComponent` 异步加载，首屏 index bundle
+  从 484KB → 363KB（-25%）。
+
+### 🔭 可观测体系
+
+- **`lib/errors.ts: VoxError`** —— 把 HTTP status / method / url / requestId /
+  stack / context 一次性打包。`toError()` 规整 ky 的 HTTPError / TimeoutError /
+  普通 Error，调用方不再需要 try/catch 时判类型。
+- **请求头透传**：`X-Client-Version` / `X-Client-Tab` / `X-Request-ID` 自动加
+  到每个请求。后端日志能按 tab 区分调用来源，前后端用同一 ID 串起来。
+- **`stores/errorLog.ts`** —— 持久化最近 200 条错误，60s 内同 fingerprint
+  去重合并计数。点击 header 警告铃铛打开面板：完整 HTTP 上下文 +
+  「复制详情」一键贴 issue。
+- **报告入口统一**：tasks store 新增 `reportError(err, ctx)`，替换之前散在 25
+  处的 `showToast(e.message, 'error')`。所有堆栈和 URL 都不再丢。
+- **Toast 时长按类型分**：info/success 3s · warning 5s · error 8s · fatal 不自动关。
+  `reportError` 落日志 + 弹可关闭 toast。
+
+### ⌨️ 全局快捷键（`composables/useShortcuts.ts`）
+
+| 键 | 动作 |
+|---|---|
+| `⌘K` / `Ctrl+K` / `/` | 聚焦音色搜索 |
+| `Space` | 播放 / 暂停 |
+| `M` | 静音 |
+| `T` | 任务面板 |
+| `E` | 错误日志 |
+| `1`-`7` | 切 tab |
+| `?` | 快捷键帮助 |
+| `Esc` | 关弹窗 |
+
+输入元素里全部失效不打断打字。
+
+### 🎵 Suno 三种生成模式 + 翻唱
+
+之前一个表单所有用户都要填歌词 + 选 persona，但用户意图分三种：
+歌曲 / BGM / 翻唱。混在一个表单里用户困惑。
+
+- **`MODES` 三模式切换器**：歌曲 / BGM / 翻唱 segmented control。
+- **BGM 模式**：隐藏歌词 / persona 字段，自动追加 `instrumental` 标签 +
+  `[Instrumental]` 占位歌词。加 6 个场景预设 chips（专注 / 咖啡 / 助眠 /
+  运动 / 影视 / 短视频），前 4 个是抖音热门（卡点 / 深夜伤感 / 励志燃 /
+  国潮古风）。
+- **翻唱模式**：热点风向每行加「翻唱这首」按钮，点击自动预填原曲名 +
+  tags + persona 提到主位「用你的声音翻唱」。
+- **`stores/coverHistory.ts`**：跟踪每次翻唱，原曲 / 艺人 / persona /
+  hasSourceAudio / 状态 / URL。Suno 任务轮询完成时按 task_id reconcile。
+- **翻唱历史面板**：「真翻唱 🎵」/「文本借鉴 📝」徽章区分是否上传了原曲音频。
+- **`POST /api/suno/cover`**（前端接通，后端待实现）：上传原曲音频做真
+  「同曲不同演绎」。Suno covers API 端点，前端 FormData 已就位。
+
+### ⚙️ Suno 额度可视化
+
+- **顶栏能力 chip** 显示 `Pro · 20/2500`（已用 / 总额）。
+- **popover** 完整信息：状态 / 套餐 / 剩余 / 已用 / 续费日。
+- **SunoTab 头部** 倒计时提示：「明日重置」「N 天后重置」「下月 M/D 重置」。
+- 后端 `/api/capabilities` 需返回 `credits_total` 和 `renew_date`，
+  前端**优雅降级** —— 字段缺失就不显示对应行，不报错。
+
+### 📦 批量生成（前端 + 后端 + 脚本）
+
+- **SunoTab BGM 模式批量面板** `commit cb561a7`：填多行（标题 + preset）→
+  点 1 次「开始批量」自动顺序提交，3 秒间隔避 Suno 速率限制。
+- **后端 `POST /api/suno/batch`** `commit 7cce7be`：≤20 首 / 任务，自动
+  间隔 2 秒，`wait=true` 同步轮询全部完成才返回。走现有 `_submit_task`
+  任务队列，跟单首 `/api/suno/generate` 同一条路径，不旁路。
+- **`scripts/batch_bgm.py`**：CLI 调 voxflow 后端 HTTP API，**不碰 suno CLI**。
+  用法：
+  `./scripts/batch_bgm.py "破晓:epic orchestral, ..." "长安月:..." "心跳节拍:..."`
+  支持 `--ai 主题` 用 LLM 自动生成 tags，支持 `--wait` 等完成。
+- **撤销 `voxsuno batch`** `commit ce30a78`：之前的实现绕过了 voxflow 项目
+  自身，直接调外部 suno CLI —— 与「自动化集成进项目」原则冲突，已 revert。
+
+### 🎨 音乐封面模板落地
+
+`templates/music-cover-prompt.md` + `scripts/gen_cover_prompt.py`：
+24 个占位符 + 4 个 preset（治愈系傍晚 / 热血系正午 / 伤感深夜 / 抖音热门卡点）。
+脚本**只产出 prompt + 打印 museav gen 命令**，绝不自动跑（花钱红线）。
+
 ---
 
 ## [0.6.0] - 2026-09-12
