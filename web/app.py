@@ -1563,17 +1563,19 @@ def inbox_scan():
     """
     扫下载目录里等着入库的音乐文件。
 
-    ## 为什么需要这一步
+    ## 为什么还需要这一步
 
-    Suno 刻意防自动下载：API 返回的 audio_url 写死 `api/forbidden`，
-    CDN 直链 403，网页播放走 blob/MSE 拿不到源地址，行内的下载菜单也不响应
-    合成事件。硬绕这层反爬性价比极低 —— 而且下载本来就是个一次性动作，
-    Suno 一次出两首，人本来就要听过才知道要哪首，顺手点一下下载的成本几乎为零。
+    ⚠️ 2026-09-12 更正：这段原本写着「CDN 直链 403，硬绕反爬性价比极低」，
+    **那个结论是错的**。API 返回的 `audio_url` 确实写死了 `api/forbidden`，
+    但网页播放器真正拉的是 CloudFront 上的
+    `/1/clip/<clip_id>.m4a` —— 无签名、无 Referer 校验，直接 GET 就有 200。
+    抓一次浏览器网络请求就能看到，谈不上「硬绕」。现在
+    `core/suno_api.download()` 走的就是它，生成完自动入库，不需要人点。
 
-    真正吃时间的是**后面那段**：填表、传文件、拼 Excel、三个平台各重复一遍。
-    所以分工改成：人在浏览器点一下下载，工具接管之后的全部环节。
+    这个端点因此从「必经之路」降级为**兜底**：CDN 哪天真关了、或者歌是从
+    别处拿到的（别人发的链接、手动下的文件），仍然要有个入口把本地音频收进来。
 
-    这个端点就是接管的入口 —— 列出下载目录里最近的音频，让人挑哪些入库。
+    列出下载目录里最近的音频，让人挑哪些入库。
     """
     import time
     from pathlib import Path as _P
@@ -2854,15 +2856,11 @@ def _run_suno_cover_task(task_id: str, params: dict, update_fn):
     update_fn(task_id, progress=85, stage="入库音频库...")
     copied = []
     for c in done_clips:
-        url = c.get("audio_url") or ""
-        if not url:
-            continue
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe = re.sub(r"[^\w\u4e00-\u9fff-]", "_", req.title or "cover")[:30]
-        dest = music_dir / f"[翻唱]{safe}_{c['id'][:8]}_{ts}.mp3"
+        dest = music_dir / f"[翻唱]{safe}_{c['id'][:8]}_{ts}.m4a"
         try:
-            with net.opener().open(url, timeout=120) as r, open(dest, "wb") as f:
-                shutil.copyfileobj(r, f)
+            suno_api.download(c["id"], dest)   # 同上：CDN 直链，不是 audio_url
             copied.append(str(dest))
         except Exception:
             continue
@@ -3354,15 +3352,13 @@ def _run_suno_task(task_id: str, params: dict, update_fn):
     update_fn(task_id, progress=85, stage="入库音频库...")
     copied = []
     for c in done_clips:
-        url = c.get("audio_url") or ""
-        if not url:
-            continue
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_title = re.sub(r"[^\w\u4e00-\u9fff-]", "_", req.title or c.get("title") or "untitled")[:30]
-        dest = music_dir / f"[Suno]{safe_title}_{c['id'][:8]}_{ts}.mp3"
+        dest = music_dir / f"[Suno]{safe_title}_{c['id'][:8]}_{ts}.m4a"
         try:
-            with net.opener().open(url, timeout=120) as r, open(dest, "wb") as f:
-                shutil.copyfileobj(r, f)
+            # 走 suno_api.download（CloudFront），**不是 clip 里的 audio_url** ——
+            # 那个字段现在返回 .../api/forbidden，Suno 把 API 侧直链关了。
+            suno_api.download(c["id"], dest)
             copied.append(str(dest))
         except Exception:
             # 取回失败不改变「已生成」这个事实，下面统一走手动下载分支。
@@ -3375,7 +3371,7 @@ def _run_suno_task(task_id: str, params: dict, update_fn):
         update_fn(task_id, status="done", progress=100,
                   stage=f"已生成 {len(done_clips)} 首 · 音频需在 suno.com 下载",
                   result={"ok": True, "files": [], "clips": done_clips,
-                          "warning": "音频直链取不回，请去网页端下载"})
+                          "warning": "音频 CDN 取回失败，可去网页端下载"})
         obs.log("suno_audio_not_pulled", level="warn",
                 title=req.title[:40], clips=len(done_clips))
         return

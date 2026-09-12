@@ -44,6 +44,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import pathlib
 import subprocess
 import time
 import urllib.error
@@ -294,6 +295,26 @@ def get_clips(clip_ids: list[str]) -> list[dict]:
         r = _request(f"/api/feed/?ids={chunk}")
         out.extend(r if isinstance(r, list) else r.get("clips") or [])
     return out
+
+
+# 音频 CDN。**不要用 clip 里的 audio_url** —— 那个字段现在返回
+# "https://studio-api.prod.suno.com/api/forbidden"，Suno 把 API 侧的直链关了。
+# 网页播放器实际拉的是这个 CloudFront 地址，无签名、无 Referer 校验，
+# 拿 clip id 拼出来就能下（2026-09-12 抓浏览器网络请求得到）。
+# 它要是哪天也关了，重新抓一次：playwright 打开歌曲页，看 .m4a 那条请求。
+_AUDIO_CDN = "https://d2lwuy8qc234o3.cloudfront.net/1/clip/{clip_id}.m4a"
+
+
+def download(clip_id: str, dest: "pathlib.Path | str") -> int:
+    """把一首歌的音频下到本地，返回字节数。只读 CDN，不花积分。"""
+    import shutil
+
+    dest = pathlib.Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    req = urllib.request.Request(_AUDIO_CDN.format(clip_id=clip_id), headers={"User-Agent": _UA})
+    with opener().open(req, timeout=300) as r, open(dest, "wb") as f:
+        shutil.copyfileobj(r, f)
+    return dest.stat().st_size
 
 
 def poll(clip_ids: list[str], timeout_s: int = 600, interval_s: int = 8) -> list[dict]:
