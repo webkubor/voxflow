@@ -178,6 +178,20 @@ def _notify_music_task(task_id: str):
         except (OSError, json.JSONDecodeError, AttributeError):
             pass
 
+        # ⚠️ **生成成功不推群。**
+        #
+        # 生成 ≠ 要发：库里大部分是试验（试提示词、试风格），每出一首就往
+        # AI 群推一张卡片、往多维表格写一行，等于把试验过程当成作品动态广播 ——
+        # 群里很快就没人看了，台账里也全是根本不打算发的东西。
+        #
+        # 真正值得广播的是**人做了决定**那一刻：点「选它去发」时才推
+        # （见 /api/tracks/{id}/stage）。
+        #
+        # 失败仍然推 —— 失败照样扣积分（近 30 天 18 次调用失败 8 次），
+        # 这是真金白银在漏，不说出来就只能靠翻日志发现。
+        if not failed:
+            return
+
         files = result.get("files") or []
         clips = result.get("clips") or []
         warning = result.get("warning") or ""
@@ -2683,6 +2697,28 @@ def set_track_stage(track_id: str, req: dict):   # id 是 UUID 字符串，不�
         c.commit()
         if not cur.rowcount:
             raise HTTPException(404, "没有这首曲目")
+        row = dict(c.execute(
+            "SELECT title, tags, clip_id, duration FROM tracks WHERE id=?", (track_id,)).fetchone())
+
+    # 人点了「要发」才广播 —— 这是流程里唯一值得惊动群和台账的时刻。
+    # 整段包在 try 里：通知是旁路，挂了不能让按钮点不动。
+    if stage == "selected":
+        try:
+            from core import notify                            # noqa: PLC0415
+            cid = row.get("clip_id") or ""
+            notify.notify(
+                f"🎯 选中待发：{row.get('title') or '未命名'}",
+                {"风格提示词": (row.get("tags") or "")[:120],
+                 "时长": f"{int((row.get('duration') or 0)) // 60}:{int((row.get('duration') or 0)) % 60:02d}"
+                         if row.get("duration") else "",
+                 "Clip ID": cid},
+                level="start", event="track_selected",
+                dedupe_key=f"vf-sel-{track_id}",
+                buttons=[{"text": "听原版", "url": f"https://suno.com/song/{cid}",
+                          "type": "primary"}] if cid else None,
+            )
+        except Exception as e:  # noqa: BLE001
+            obs.log("select_notify_failed", level="warn", error=str(e)[:160])
     return {"ok": True, "stage": stage}
 
 
