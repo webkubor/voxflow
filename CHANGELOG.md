@@ -4,7 +4,46 @@
 
 ## [未发布] - 0.6.0 草稿
 
-> tag `v0.5.0` 之后的 6 个提交，尚未发版。
+> tag `v0.5.0` 之后的提交，尚未发版。
+
+### 🔌 甩掉 suno CLI：音乐生成改直连 Suno API
+
+- **起因是被迫的**：2026-09-11 Suno 服务端强推 v6，老模型一律 403
+  `paid_upsell`（"Please switch to v6!"），而 `paperfoot/suno-cli` 0.9.0 的
+  `--model` 枚举最高只到 v5.5、上游 2026-07-20 起没再更新。等它 = 功能永久坏着。
+- **`core/suno_api.py`（新）** 接管全部五个子命令：`generate` / `credits` /
+  `list` / `status` / `cover`。`web/app.py` 里 `SUNO_BIN` 归零，
+  `/api/suno/status` 现在报 `backend: direct-api`。
+- **模型代号是挖出来的，不是猜的**：API 收的是 `chirp-hawk` 这种随机代号
+  （v5.5=`chirp-fenix`、v5=`chirp-crow`），命名毫无规律。做法是把 suno.com
+  首页的 99 个 JS chunk 全下下来，从 `[ModelTier.V6]:"chirp-hawk"` 那段
+  原始映射里读出来。文件头记了下次怎么重新挖 —— 这是唯一会过期的东西。
+- **认证自持，不再需要 `suno login`**：Clerk 两层凭据，`__client`（~7 天）
+  是身份、JWT **约 1 分钟就过期**。所以「登录一次能一直用」靠的是每次调用前
+  自动换 JWT，不是把 JWT 存下来。凭据存 `~/.voxflow/suno.json`(0600)，
+  首次从 CLI 的 auth.json 导入一次，之后 CLI 删掉也不影响。
+- **hCaptcha 借 browser-harness，没抄那 958 行**：`/api/c/check` 说这个账号
+  `required: true`，纯 HTTP 拿不到 token。suno-cli 为此写了 958 行 Chrome
+  生命周期管理 + headless 反检测，而项目里 browser-harness 附着的就是日常
+  那个 Chrome，实测 8 秒出 token。
+- 三个照抄源码会踩的坑，都已修并写进注释：按 id 查是 `/api/feed/` **不是**
+  `feed/v3`、响应体**直接是数组**、一次最多 2 个 id；`feed/v3` 的空字段必须
+  **整个不发**，发 `null` 直接 422。
+
+### 🧹 删掉 380 行死代码
+
+- `web/app.py` 里 `_run_suno_task` 和 `_recent_clips_titled` 各**定义了两次**，
+  Python 只有后一份生效 —— 前面约 180 行是死的，而且两份内容**不一样**，
+  意味着某次改动很可能改在了不生效的那份上。
+- `_suno_env()` 和 `_clear_stale_solver()` 一并删除：它们唯一的存在理由是
+  给 suno CLI 找 Chrome、清残留验证码进程，直连之后没这需求了。
+
+### 🖥 `scripts/make-app.sh`（新）
+
+生成 `~/Applications/VoxFlow.app` —— 双击启动后端并开一个无地址栏的窗口。
+不是桌面版，也不替代 `docs/DESKTOP_APP_PLAN.md`：那份计划解决「别人怎么装」，
+这 60 行只解决本机自用的「不想开终端、不想记 8866」。后端已在跑就直接开窗，
+不重启 —— 那进程加载着 8.4G 模型，幂等不等于可以随便重跑。
 
 ### 🔑 AI 文案改走应用授权，不再借用租户 Key
 - **租户模型对 VoxFlow 是错的**：`run.sh` 原来注入一把 voxcraft **租户** Key，

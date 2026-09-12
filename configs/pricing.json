@@ -10,7 +10,7 @@
       "billing": "subscription",
       "note": "Pro $10/月 ≈ ¥72，含 2500 credits。一次生成扣 10 credits（出两首）≈ ¥0.29/次。换套餐后改这个数。",
       "credits_per_call": 70,
-      "_note_calibrate": "一次 generate 出两首扣 10 credits（v5.5 实测）。换模型或套餐后用顶栏的 credits 前后差值校准这个数。",
+      "_note_calibrate": "2026-09-12 换 v6（chirp-hawk）后实测：连发 3 次生成（6 首），credits 接口的 total_credits_left 与 monthly_usage 都没变化 —— 要么 v6 结算有延迟，要么当前套餐这一档不单独计费。**70 这个数现在是 v5.5 时代的遗留值，未经 v6 校准**，下次生成前后各记一次 monthly_usage 再定。",
       "_credits_per_call_依据": "2026-09-06 实测：`suno doctor` 自己报「v5.5 generation ≈ 70 per call」。此前写的 10 是拍脑袋的，差七倍 —— 而所有成本、回本播放量都乘在这个数上，错了不会报错，只会安静地给出一个看着很合理的结论。换模型要重新核对：不同版本单价不一样，lyrics/write 是免费的。"
     },
     "museav": {
