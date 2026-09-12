@@ -286,6 +286,29 @@ def generate_script(prompt: str, word_count: Optional[int] = None) -> str:
     return _chat(_GEN_SYSTEM, user_msg, action="script")
 
 
+def generate_tags(theme: str) -> str:
+    """从一句话主题生成 Suno 能用的风格标签。
+
+    这是小白最不会写的一环 —— AI 认得 `bassoon`（低音管），认不出「搞笑」。
+    所以系统提示里把这条钉死：**只出乐器名、流派、音色、BPM，不要情绪词**。
+    """
+    sys_prompt = """你是 Suno AI 音乐的风格标签专家。根据用户给的主题，输出一行英文风格标签。
+
+严格规则：
+1. 只输出标签本身，逗号分隔，不要任何解释、不要引号、不要换行
+2. **必须是具体的乐器名、流派、音色描述**（如 ukulele, pizzicato strings, lo-fi）
+   **禁止情绪词**（如 funny, sad, epic）—— Suno 认乐器不认情绪
+3. 必须包含一个 BPM（60-80 慢 / 100-120 中 / 128-140 快）
+4. 中文歌要加 mandarin 或 chinese pop
+5. 需要人声就写明音色（如 bright young female vocal）；纯音乐则加 instrumental
+6. 总共 6-10 个标签
+
+示例输入：上班摸鱼的搞笑歌，年轻女生唱
+示例输出：electropop, hyperpop, bright young female vocal, gen-z, quirky, catchy hook, mandarin, 128 BPM"""
+    out = _chat(sys_prompt, theme.strip(), action="tags", temperature=0.7, max_tokens=200)
+    return out.strip().strip('"').replace("\n", " ")
+
+
 def generate_lyrics(prompt: str, style: str = "") -> str:
     """根据创作提示生成带 Suno 段落标记的歌词。"""
     style_hint = f"\n曲风参考：{style}" if style.strip() else ""

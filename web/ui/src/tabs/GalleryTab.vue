@@ -1,0 +1,152 @@
+<template>
+  <div class="gallery">
+    <header class="g-head">
+      <div>
+        <h2 class="g-title"><Icon name="library" size="sm" /> 音乐卡片墙</h2>
+        <p class="g-sub">
+          每张卡片摆着这首歌的<strong>风格提示词</strong>和成品。横着对比就知道：
+          同样是搞笑，加 <code>bassoon</code> 和加 <code>ukulele</code> 差在哪。
+        </p>
+      </div>
+      <div class="g-actions">
+        <n-switch v-model:value="onlyPrompt" size="small" />
+        <span class="g-switch-label">只看有提示词的</span>
+        <n-select v-model:value="srcFilter" size="small" style="width: 110px"
+                  :options="[{label:'全部来源',value:''},{label:'AI 生成',value:'suno'},{label:'自制',value:'self'}]" />
+        <n-button size="small" :loading="loading" @click="load">
+          <Icon name="refresh" size="sm" /> 刷新
+        </n-button>
+      </div>
+    </header>
+
+    <div v-if="loading && !cards.length" class="g-empty">加载中…</div>
+    <div v-else-if="!shown.length" class="g-empty">还没有作品。去「AI 音乐」生成第一首。</div>
+
+    <div v-else class="g-grid">
+      <article v-for="c in shown" :key="c.id" class="card">
+        <div class="card-cover">
+          <img v-if="c.cover" :src="c.cover" :alt="c.title" loading="lazy" />
+          <div v-else class="cover-fallback"><Icon name="suno" /></div>
+          <span v-if="c.instrumental" class="badge-inst">纯音乐</span>
+          <span class="badge-src" :class="c.source">{{ c.source_label }}</span>
+        </div>
+
+        <div class="card-body">
+          <h3 class="card-title" :title="c.title">{{ c.title }}</h3>
+
+          <!-- 卡片的主角：生成时用的提示词 -->
+          <div class="card-prompt">
+            <div class="prompt-head">
+              <span>风格提示词</span>
+              <button v-if="c.tags" class="copy-mini" @click="copy(c.tags)">复制</button>
+            </div>
+            <p v-if="c.tags" class="prompt-text">{{ c.tags }}</p>
+            <p v-else class="prompt-empty">（这首没记提示词）</p>
+          </div>
+
+          <div class="card-meta">
+            <span v-if="c.duration">{{ fmtDur(c.duration) }}</span>
+            <span v-if="c.has_lyrics">有歌词</span>
+            <span class="stage">{{ c.stage || '—' }}</span>
+          </div>
+
+          <div class="card-foot">
+            <n-button v-if="c.audio" size="small" tag="a" :href="c.audio" target="_blank" rel="noopener">
+              <Icon name="play" size="sm" /> 听
+            </n-button>
+            <n-button
+              v-for="p in c.platforms" :key="p.platform"
+              size="small" tag="a" :href="p.url" target="_blank" rel="noopener"
+            >
+              {{ p.platform }}<template v-if="p.plays"> · {{ p.plays }} 播</template>
+            </n-button>
+          </div>
+        </div>
+      </article>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { computed, onMounted, ref } from 'vue';
+import Icon from '../components/Icon.vue';
+
+const cards = ref([]);
+const loading = ref(false);
+const onlyPrompt = ref(false);
+
+const srcFilter = ref('');
+const shown = computed(() => cards.value.filter(
+  (c) => (!onlyPrompt.value || c.tags) && (!srcFilter.value || c.source === srcFilter.value),
+));
+
+const load = async () => {
+  loading.value = true;
+  try {
+    const r = await fetch('/api/gallery?limit=60');
+    const d = await r.json();
+    cards.value = d.cards || [];
+  } finally {
+    loading.value = false;
+  }
+};
+onMounted(load);
+
+const fmtDur = (s) => (s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}` : '');
+const copy = (t) => navigator.clipboard?.writeText(t);
+</script>
+
+<style scoped>
+.gallery { padding: 4px 2px 40px; }
+.g-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+.g-title { display: flex; align-items: center; gap: 8px; font-size: 16px; margin: 0 0 6px; }
+.g-sub { color: var(--vf-text-3); font-size: 12px; margin: 0; max-width: 620px; line-height: 1.7; }
+.g-sub code { background: var(--vf-bg-3); padding: 1px 5px; border-radius: 3px; color: var(--vf-primary); }
+.g-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.g-switch-label { font-size: 12px; color: var(--vf-text-3); }
+.g-empty { color: var(--vf-text-3); font-size: 13px; padding: 40px 0; text-align: center; }
+
+.g-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 14px; }
+
+.card {
+  background: var(--vf-bg-2); border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-md, 12px); overflow: hidden;
+  display: flex; flex-direction: column; transition: border-color .15s, transform .15s;
+}
+.card:hover { border-color: var(--vf-border-strong); transform: translateY(-2px); }
+
+.card-cover { position: relative; aspect-ratio: 1; background: var(--vf-bg-3); }
+.card-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cover-fallback { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--vf-text-4); }
+.badge-src {
+  position: absolute; top: 8px; left: 8px; font-size: 11px; padding: 2px 8px;
+  border-radius: var(--vf-radius-full, 999px);
+}
+/* 自制 ≠ AI 生成。这个区分不是装饰：发行时平台会问「是否 AI 生成」，
+   标错是合规问题。 */
+.badge-src.suno { background: var(--vf-primary-soft); color: var(--vf-primary); border: 1px solid var(--vf-primary); }
+.badge-src.self { background: var(--vf-ok-soft); color: var(--vf-ok); border: 1px solid var(--vf-ok); }
+.badge-inst {
+  position: absolute; top: 8px; right: 8px; font-size: 11px; padding: 2px 8px;
+  border-radius: var(--vf-radius-full, 999px);
+  background: var(--vf-primary-soft); color: var(--vf-primary);
+  border: 1px solid var(--vf-primary);
+}
+
+.card-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.card-title { font-size: 14px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.card-prompt { background: var(--vf-bg-3); border-radius: var(--vf-radius-sm); padding: 8px 10px; }
+.prompt-head { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--vf-text-3); margin-bottom: 4px; }
+.copy-mini { background: none; border: none; color: var(--vf-primary); font-size: 11px; cursor: pointer; padding: 0; }
+.prompt-text {
+  margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--vf-text-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-word;
+}
+.prompt-empty { margin: 0; font-size: 11.5px; color: var(--vf-text-4); }
+
+.card-meta { display: flex; gap: 10px; font-size: 11px; color: var(--vf-text-3); }
+.card-meta .stage { margin-left: auto; }
+.card-foot { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+</style>

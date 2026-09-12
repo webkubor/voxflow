@@ -22,6 +22,7 @@ from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from urllib.parse import quote
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -2597,6 +2598,89 @@ def museav_logout():
     from core import museav_auth                               # noqa: PLC0415
     museav_auth.forget()
     return {"ok": True}
+
+
+@app.get("/api/media")
+def media_file(path: str):
+    """按数据目录下的相对路径取文件（封面等）。
+
+    tracks.cover_file 存的是相对 DATA_DIR 的路径（publish/covers/xxx.jpg），
+    此前没有对应端点 —— 卡片墙要显示封面才发现。
+
+    **必须挡目录穿越**：path 是前端传来的，`../../.ssh/id_rsa` 这种要拒掉。
+    做法是解析成绝对路径后确认仍在 DATA_DIR 里面，不能只 replace("..", "")。
+    """
+    from pathlib import Path as _P                             # noqa: PLC0415
+
+    base = _P(DATA_DIR).resolve()
+    try:
+        target = (base / path).resolve()
+        target.relative_to(base)          # 不在 DATA_DIR 下就抛 ValueError
+    except (ValueError, OSError):
+        raise HTTPException(403, "路径越界") from None
+    if not target.is_file():
+        raise HTTPException(404, "文件不存在")
+    return FileResponse(str(target), headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.get("/api/gallery")
+def gallery(limit: int = 60, only_with_prompt: bool = False):
+    """音乐卡片墙：一首歌的「提示词 + 成品 + 线上地址」一次给齐。
+
+    ## 为什么要这个端点
+
+    提示词此前只存在数据库里，界面上看不到 —— 于是「这首歌当时是怎么调出来的」
+    每次都要翻记录。做成卡片之后，**提示词和成品摆在一起**，可以横着对比：
+    同样是搞笑，加了 bassoon 的和加了 ukulele 的差在哪，听一遍就知道。
+
+    数据本来就齐：tracks 有 tags/lyrics/cover/cloud_backup(R2)，
+    track_platforms 有 song_url 和播放量。这里只是把它们拼到一起。
+    """
+    from core import db as _db                                 # noqa: PLC0415
+
+    _db.init()
+    with _db.connect() as c:
+        rows = c.execute("""
+            SELECT id, title, tags, lyrics, cover_file, audio_file, cloud_backup,
+                   duration, created_at, stage, clip_id
+            FROM tracks ORDER BY created_at DESC LIMIT ?
+        """, (max(1, min(limit, 200)),)).fetchall()
+        plats = {}
+        for r in c.execute("""
+            SELECT track_id, platform, song_url, plays, status
+            FROM track_platforms WHERE song_url IS NOT NULL AND song_url != ''
+        """):
+            plats.setdefault(r["track_id"], []).append(
+                {"platform": r["platform"], "url": r["song_url"],
+                 "plays": r["plays"], "status": r["status"]})
+
+    cards = []
+    for r in rows:
+        tags = (r["tags"] or "").strip()
+        if only_with_prompt and not tags:
+            continue
+        lyr = (r["lyrics"] or "").strip()
+        # 来源：有 clip_id 才是 Suno 生成的。没有的是自己做的、或从别处同步进来的
+        # （琅琊榜插曲、洞箫版这些）—— **不能一律标成 AI 音乐**，那是对作者的误标，
+        # 发行时平台也会问「是否 AI 生成」，标错是合规问题不是显示问题。
+        is_ai = bool((r["clip_id"] or "").strip())
+        cards.append({
+            "id": r["id"],
+            "title": r["title"],
+            "source": "suno" if is_ai else "self",
+            "source_label": "AI 生成" if is_ai else "自制",
+            "tags": tags,                         # ← 卡片的主角：风格提示词
+            "has_lyrics": bool(lyr),
+            "lyrics_preview": lyr[:120],
+            "instrumental": "instrumental" in tags.lower(),
+            "cover": f"/api/media?path={quote(r['cover_file'])}" if r["cover_file"] else "",
+            "audio": r["cloud_backup"] or "",     # R2 直链，任何人点开就能听
+            "duration": r["duration"],
+            "created_at": r["created_at"],
+            "stage": r["stage"],
+            "platforms": plats.get(r["id"], []),  # 已上架的线上地址
+        })
+    return {"ok": True, "total": len(cards), "cards": cards}
 
 
 @app.get("/api/suno/status")

@@ -175,6 +175,7 @@
             <n-tab-pane name="suno" tab="音乐"><SunoTab /></n-tab-pane>
             <n-tab-pane name="intake" tab="入库"><IntakeTab /></n-tab-pane>
             <n-tab-pane name="works" tab="发歌"><PipelineBoard /></n-tab-pane>
+            <n-tab-pane name="gallery" tab="卡片墙"><GalleryTab /></n-tab-pane>
             <n-tab-pane name="publish" tab="发行"><PublishTab /></n-tab-pane>
             <n-tab-pane name="ops" tab="运营"><OpsTab /></n-tab-pane>
           </n-tabs>
@@ -296,6 +297,7 @@ const PipelineBoard = lazyTab(() => import('./PipelineBoard.vue'), '发歌记录
 const PublishTab = lazyTab(() => import('../tabs/PublishTab.vue'), '全网发行');
 const LibraryTab = lazyTab(() => import('../tabs/LibraryTab.vue'), '音频文件');
 const IntakeTab = lazyTab(() => import('../tabs/IntakeTab.vue'), '自动化发布');
+const GalleryTab = lazyTab(() => import('../tabs/GalleryTab.vue'), '音乐卡片墙');
 const OpsTab = lazyTab(() => import('../tabs/OpsTab.vue'), '运营台');
 import GlobalPlayer from './GlobalPlayer.vue';
 import TaskPanel from './TaskPanel.vue';
@@ -399,6 +401,7 @@ const TAB_GROUPS = [
     tabs: [
       { name: 'intake', label: '自动化发布', icon: 'upload', hint: '拿到音频从这里进：贴链接自动入库备料' },
       { name: 'works', label: '发歌记录', icon: 'board', hint: '哪些发过、哪些没发、谁负责' },
+      { name: 'gallery', label: '卡片墙', icon: 'library', hint: '每首歌的风格提示词 + 成品 + 线上地址，横着对比' },
       { name: 'publish', label: '全网发行', icon: 'publish', hint: '各平台账号与已上架作品' },
       { name: 'ops', label: '运营台', icon: 'pulse', hint: '成本、收益、回本播放量' },
     ],
