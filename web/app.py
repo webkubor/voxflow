@@ -2560,6 +2560,45 @@ class SunoGenerateRequest(BaseModel):
     download: bool = True  # 生成后拉回本地入库
 
 
+# ── 账户连接（界面版）────────────────────────────────────
+#
+# 此前连接 MUSE AV 只有命令行一条路（`voice museav login`），而界面上到处
+# 提示「终端跑 museav login」—— 对不开终端的人这就是死路，而 AI 文案和
+# 封面出图都要它。设备码流程本来就适合界面：显示一个码、开浏览器批准、
+# 这边轮询。所以拆成 start / poll 两个端点，界面自己走完。
+
+
+@app.post("/api/museav/login/start")
+def museav_login_start():
+    """开始连接 MUSE AV，返回验证码和验证网址。不阻塞。"""
+    from core import museav_auth                               # noqa: PLC0415
+    try:
+        return {"ok": True, **museav_auth.login_start()}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"发起授权失败：{str(e)[:120]}") from e
+
+
+@app.post("/api/museav/login/poll")
+def museav_login_poll(req: dict):
+    """查授权批准了没。界面每隔几秒打一次。"""
+    from core import museav_auth                               # noqa: PLC0415
+    code = (req or {}).get("device_code") or ""
+    if not code:
+        raise HTTPException(400, "缺少 device_code")
+    try:
+        return {"ok": True, **museav_auth.login_poll(code)}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"查询授权失败：{str(e)[:120]}") from e
+
+
+@app.post("/api/museav/logout")
+def museav_logout():
+    """断开本机连接。**不等于**在 MUSE AV 那边撤销授权 —— 真撤销要去账户页。"""
+    from core import museav_auth                               # noqa: PLC0415
+    museav_auth.forget()
+    return {"ok": True}
+
+
 @app.get("/api/suno/status")
 def suno_status():
     """Suno 登录态 + 余额 + 已保存 persona"""

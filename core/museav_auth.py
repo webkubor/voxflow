@@ -92,6 +92,31 @@ def forget() -> None:
     CONFIG_PATH.unlink(missing_ok=True)
 
 
+def login_start() -> dict:
+    """只做设备码流程的第一步：拿码和验证地址，立刻返回。
+
+    拆出来是为了让**界面**也能登录 —— 原来的 login() 会一直阻塞到用户批准，
+    HTTP 端点不能那么干（浏览器会先超时）。界面拿到码之后自己轮询 login_poll()。
+    命令行那条路仍然走 login()，行为不变。
+    """
+    d = _post("/app-auth/start", {"app_slug": APP_SLUG})
+    return {"device_code": d["device_code"], "user_code": d["user_code"],
+            "verification_uri": d["verification_uri"],
+            "interval": int(d.get("interval") or 3),
+            "expires_in": int(d.get("expires_in") or 600)}
+
+
+def login_poll(device_code: str) -> dict:
+    """查一次授权结果。{"status": "pending" | "approved" | "expired"}，不阻塞。"""
+    d = _post("/app-auth/poll", {"device_code": device_code})
+    status = d.get("status")
+    if status == "approved":
+        _save(d["api_key"], d.get("account_email") or "", d.get("scopes") or [])
+        return {"status": "approved", "account_email": d.get("account_email") or "",
+                "scopes": d.get("scopes") or []}
+    return {"status": status or "pending"}
+
+
 def login(open_browser: bool = True, on_code=None) -> dict:
     """走设备码流程拿这台机器的应用 Key。
 

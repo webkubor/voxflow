@@ -25,10 +25,15 @@
           <div class="caps">
             <n-tooltip v-for="c in capBadges" :key="c.key" trigger="hover" placement="bottom-end">
               <template #trigger>
-                <div class="cap-chip" :class="c.ready ? 'ok' : 'off'">
+                <div
+                  class="cap-chip"
+                  :class="[c.ready ? 'ok' : 'off', c.key === 'llm' && !c.ready ? 'clickable' : '']"
+                  @click="c.key === 'llm' && !c.ready && startMuseavLogin()"
+                >
                   <span class="cap-dot"></span>
                   <span class="cap-label">{{ c.label }}</span>
                   <span class="cap-what">{{ c.what }}</span>
+                  <span v-if="c.key === 'llm' && !c.ready" class="cap-cta">点此连接</span>
                 </div>
               </template>
               <div class="cap-popover">
@@ -205,6 +210,21 @@
       ></audio>
     </n-layout>
   </n-spin>
+  <!-- 连接 MUSE AV：设备码授权。
+       此前只能在终端跑 `voice museav login`，不开终端的人就卡死在这儿，
+       而 AI 文案和封面出图都要它。 -->
+  <n-modal v-model:show="museavModal" preset="card" style="max-width: 440px" title="连接 MUSE AV 账户">
+    <div v-if="museavErr" class="ma-err">{{ museavErr }}</div>
+    <template v-else>
+      <p class="ma-tip">1. 记下这个验证码</p>
+      <div class="ma-code">{{ museavCode }}</div>
+      <p class="ma-tip">2. 打开授权页，登录后确认这个码</p>
+      <n-button type="primary" class="glow" tag="a" :href="museavUri" target="_blank" rel="noopener">
+        打开授权页
+      </n-button>
+      <p class="ma-waiting">{{ museavDone ? '✓ 已连接，正在刷新…' : '等待你在网页上确认…' }}</p>
+    </template>
+  </n-modal>
 </template>
 
 <script setup>
@@ -226,7 +246,7 @@
  * 难分辨。换成自定义按钮 + 路由切换，n-tabs 留在下面当「路由 ↔ tab」的
  * 同步源（它绑了 v-model 到 currentTab）。视觉上不显示，但行为仍在。
  */
-import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { BOARD_POLL_MS } from '../config/constants';
 import { TAB_NAMES } from '../router';
@@ -545,9 +565,67 @@ const formatRenewDate = (iso) => {
   const year = d.getFullYear();
   return `${m}/${day}/${year}`;
 };
+// ── 连接 MUSE AV（设备码流程）──────────────────────────
+//
+// 界面版的登录。原来只有 `voice museav login` 一条路，而界面上到处提示
+// 「终端跑 museav login」—— 对不开终端的人那就是死路一条。
+const museavModal = ref(false);
+const museavCode = ref('');
+const museavUri = ref('');
+const museavErr = ref('');
+const museavDone = ref(false);
+let museavTimer = null;
+
+const stopMuseavPoll = () => {
+  if (museavTimer) { clearInterval(museavTimer); museavTimer = null; }
+};
+onUnmounted(stopMuseavPoll);
+
+const startMuseavLogin = async () => {
+  museavErr.value = ''; museavDone.value = false;
+  museavCode.value = '…'; museavModal.value = true;
+  try {
+    const r = await fetch('/api/museav/login/start', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || '发起授权失败');
+    museavCode.value = d.user_code;
+    museavUri.value = d.verification_uri;
+    stopMuseavPoll();
+    // 按后端给的 interval 轮询，不要更快 —— 中台那边有频率限制
+    museavTimer = setInterval(async () => {
+      try {
+        const pr = await fetch('/api/museav/login/poll', { method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ device_code: d.device_code }) });
+        const pd = await pr.json();
+        if (pd.status === 'approved') {
+          stopMuseavPoll(); museavDone.value = true;
+          setTimeout(() => { museavModal.value = false; location.reload(); }, 1200);
+        } else if (pd.status === 'expired') {
+          stopMuseavPoll(); museavErr.value = '验证码过期了，关掉重来一次。';
+        }
+      } catch { /* 单次查询失败不中断轮询，下一轮再试 */ }
+    }, (d.interval || 3) * 1000);
+  } catch (e) {
+    museavErr.value = String(e.message || e);
+  }
+};
 </script>
 
 <style scoped>
+.cap-chip.clickable { cursor: pointer; }
+.cap-chip.clickable:hover { border-color: var(--vf-primary); }
+.cap-cta { color: var(--vf-primary); font-weight: 600; margin-left: 2px; }
+.ma-tip { color: var(--vf-text-2); font-size: 13px; margin: 10px 0 6px; }
+.ma-code {
+  font-size: 28px; font-weight: 700; letter-spacing: 4px; text-align: center;
+  padding: 14px; background: var(--vf-bg-3); border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-sm); color: var(--vf-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.ma-waiting { color: var(--vf-text-3); font-size: 12px; margin-top: 12px; }
+.ma-err { color: var(--vf-err); font-size: 13px; }
 .nav-l1 { display: flex; gap: 4px; }
 .nav-l1-item {
   display: inline-flex; align-items: center; gap: 6px;
