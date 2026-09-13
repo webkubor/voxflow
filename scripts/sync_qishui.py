@@ -42,18 +42,26 @@ from core import db, pipeline as P  # noqa: E402
 DRY = "--dry-run" in sys.argv
 
 # 后台那几个中文状态 → 本地台账的 status
+# 后台那几个中文状态 → 本地台账的 status。
+#
+# ⚠️「代理发行中」算 **online** 不算 reviewing。它的意思是「已经在汽水可听，
+# 同时正由代理商分发到全球 150+ 平台」，不是还在排队等审核 ——
+# 2026-09-13 owner 确认。之前映射成 reviewing，导致 7 首已上线的歌
+# 在台账和运营台里一直显示「审核中」，收益口径也跟着少算。
+#
+# 真正没过审的是「审核未通过」，它会连带在列表里显示驳回原因。
 STATUS_MAP = {
     "字节系平台已发行": "online",
     "全球已发行": "online",
     "已发行": "online",
-    "代理发行中": "reviewing",
+    "代理发行中": "online",
     "审核中": "reviewing",
     "发行审核中": "reviewing",
     "审核未通过": "draft",
     "草稿": "draft",
 }
 
-_EGO = """
+_EGO = r"""
 // 复用**已经登录汽水**的那个空间 —— ego 的每个任务空间是独立浏览器 profile，
 // 登录态不共享。另起一个空间就是未登录状态，只会读到 0 条，
 // 而报错长得像「账号不对」，完全看不出是空间选错了。
@@ -77,14 +85,35 @@ await page.goto("https://music.douyin.com/console/songs");
 await page.waitForLoadState();
 await page.waitForTimeout(6000);
 
+// 这个列表**不是标准 <tr>/<td>**（实测 querySelectorAll("tr") 取不到行），
+// 是 div 拼的网格。所以从「状态文案」这个锚点往上找容器，容器的文本就是一整行。
+// 好处是不依赖 DOM 标签，平台换布局也不容易断。
 const rows = await page.evaluate(() => {
-  // 后台是表格布局，按行取单元格文本；列序：# / 曲名 / 平台曲名 / 地区 / 状态 / 时间
+  const STATUS = ["字节系平台已发行", "全球已发行", "已发行", "代理发行中",
+                  "发行审核中", "审核中", "审核未通过", "草稿"];
   const out = [];
-  for (const tr of document.querySelectorAll("tr")) {
-    const tds = [...tr.querySelectorAll("td")].map(td => td.innerText.trim());
-    if (tds.length < 5) continue;
-    const link = tr.querySelector('a[href*="/console/songs/detail/"]');
-    out.push({ cells: tds, detail: link ? link.getAttribute("href") : "" });
+  const seen = new Set();
+  for (const el of document.querySelectorAll("*")) {
+    if (el.children.length) continue;
+    const txt = (el.textContent || "").trim();
+    if (!STATUS.includes(txt)) continue;
+    // 往上找到既含状态、又含日期的那一层 —— 那就是一行
+    let row = el;
+    for (let i = 0; i < 8 && row; i++) {
+      const t = row.textContent || "";
+      if (t.includes(txt) && /\d{4}-\d{2}-\d{2}/.test(t) && t.length < 400) break;
+      row = row.parentElement;
+    }
+    if (!row) continue;
+    const flat = (row.textContent || "").replace(/\s+/g, " ").trim();
+    if (seen.has(flat)) continue;
+    seen.add(flat);
+    const link = row.querySelector('a[href*="/console/songs/detail/"], a[href*="/console/albums/detail/"]');
+    // 单元格：把可见的叶子节点按顺序取出来，比切文本可靠
+    const cells = [...row.querySelectorAll("*")]
+      .filter(e => !e.children.length && (e.textContent || "").trim())
+      .map(e => (e.textContent || "").trim());
+    out.push({ cells, detail: link ? link.getAttribute("href") : "" });
   }
   return out;
 });
@@ -118,10 +147,16 @@ def parse(row: dict) -> dict | None:
     if not names:
         return None
     detail = row.get("detail") or ""
+    # song_id 就在详情链接里（/console/songs/detail/<song_id>）。
+    # **必须带上它**：set_platform_status 按 (platform, song_id) 认记录，
+    # 不传就匹配不到已有那条，于是新建一条 —— 同一首歌在台账里出现两行、
+    # 状态各说各话（实测「逆着风跑起来」被拆成 reviewing + online 两条）。
+    m = re.search(r"/detail/(\d+)", detail)
     return {
         "title": names[0],
         "status": status,
         "date": date[:10],
+        "song_id": m.group(1) if m else "",
         "url": f"https://music.douyin.com{detail}" if detail.startswith("/") else detail,
     }
 
@@ -135,9 +170,17 @@ def main() -> int:
     print(f"后台读到 {len(rows)} 首\n")
 
     with db.connect() as c:
-        local = {r["title"]: r for r in c.execute(
-            "SELECT p.track_id, t.title, p.status FROM track_platforms p "
-            "JOIN tracks t ON t.id=p.track_id WHERE p.platform='qishui'").fetchall()}
+        rows_ = c.execute(
+            "SELECT p.track_id, t.title, t.release_title, p.status FROM track_platforms p "
+            "JOIN tracks t ON t.id=p.track_id WHERE p.platform='qishui'").fetchall()
+        # 三个名字都做索引：本地曲名、发行名、平台曲名。
+        # 后台列表显示的是**发行名**，只按 title 匹配会把「哦豁 · 翻车瞬间」判成
+        # 「后台没有」，而它其实就在那儿、叫「翻车瞬间」。
+        local = {}
+        for r in rows_:
+            for key in (r["title"], r["release_title"]):
+                if key:
+                    local.setdefault(key, r)
         by_plat_title = {r["platform_title"]: r for r in c.execute(
             "SELECT track_id, platform_title, status FROM track_platforms "
             "WHERE platform='qishui' AND platform_title!=''").fetchall()}
@@ -160,13 +203,22 @@ def main() -> int:
                 extra["publish_date"] = r["date"]
             if r["url"]:
                 extra["song_url"] = r["url"]
+            if r.get("song_id"):
+                extra["song_id"] = r["song_id"]
             P.set_platform_status(hit["track_id"], "qishui", r["status"], **extra)
             if r["status"] == "online":
                 P.set_stage(hit["track_id"], "published")
 
     back = {r["title"] for r in rows}
+    reported = set()
     for title, hit in local.items():
-        if title not in back and hit["status"] in ("online", "published"):
+        if hit["track_id"] in reported:
+            continue
+        names = {hit["title"], hit["release_title"]} - {None, ""}
+        if (names & back) or hit["status"] not in ("online", "published"):
+            continue
+        reported.add(hit["track_id"])
+        if True:
             print(f"  ! 本地记着已上线、这个账号后台没有：{title}（可能在别的汽水账号下，未改动）")
 
     tail = "（预演）" if DRY else ""
