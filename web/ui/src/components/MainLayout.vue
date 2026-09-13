@@ -179,6 +179,7 @@
             <n-tab-pane name="suno" tab="音乐"><SunoTab /></n-tab-pane>
             <n-tab-pane name="intake" tab="入库"><IntakeTab /></n-tab-pane>
             <n-tab-pane name="albums" tab="专辑"><AlbumsTab /></n-tab-pane>
+            <n-tab-pane name="promo" tab="宣推"><PromoTab /></n-tab-pane>
             <n-tab-pane name="works" tab="发歌"><PipelineBoard /></n-tab-pane>
             <n-tab-pane name="gallery" tab="卡片墙"><GalleryTab /></n-tab-pane>
             <n-tab-pane name="publish" tab="发行"><PublishTab /></n-tab-pane>
@@ -296,6 +297,7 @@ const lazyTab = (loader, label) => defineAsyncComponent({
 });
 
 const AlbumsTab = lazyTab(() => import('../tabs/AlbumsTab.vue'), '专辑');
+const PromoTab = lazyTab(() => import('../tabs/PromoTab.vue'), '宣推短视频');
 const CloneTab = lazyTab(() => import('../tabs/CloneTab.vue'), '声音克隆');
 const DesignTab = lazyTab(() => import('../tabs/DesignTab.vue'), '音色设计');
 const DialogueTab = lazyTab(() => import('../tabs/DialogueTab.vue'), '剧本创作');
@@ -416,6 +418,7 @@ const TAB_GROUPS = [
       { name: 'works', label: '发歌记录', icon: 'board', hint: '哪些发过、哪些没发、谁负责' },
       { name: 'publish', label: '全网发行', icon: 'publish', hint: '各平台账号与已上架作品' },
       { name: 'ops', label: '运营台', icon: 'pulse', hint: '成本、收益、回本播放量' },
+      { name: 'promo', label: '宣推短视频', icon: 'suno', hint: '把歌合成竖版宣推片，发抖音带流量' },
     ],
   },
 ];
@@ -650,12 +653,19 @@ const startMuseavLogin = async () => {
 }
 .ma-waiting { color: var(--vf-text-3); font-size: 12px; margin-top: 12px; }
 .ma-err { color: var(--vf-err); font-size: 13px; }
-.nav-l1 { display: flex; gap: 4px; }
+/* 一级和二级原来各画一条底线、中间零间距，两条线贴在一起，
+   层级关系完全读不出来。现在分工：**一级是标签页（带底线），
+   二级降成一组胶囊按钮（无线、装在浅底容器里）**，中间留出间距 —— 
+   一眼能看出二级从属于一级，而不是两排并列的导航。 */
+.nav-l1 {
+  display: flex; gap: 4px;
+  border-bottom: 1px solid var(--vf-border, #333);
+}
 .nav-l1-item {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 8px 18px; border-radius: 8px 8px 0 0; cursor: pointer;
   border: none; background: transparent; color: var(--vf-text-2, #bbb);
-  font-size: 14px; border-bottom: 2px solid transparent;
+  font-size: 14px; border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
 .nav-l1-item.active {
   color: var(--vf-primary-hover); font-weight: 600;
@@ -664,17 +674,23 @@ const startMuseavLogin = async () => {
   box-shadow: 0 2px 12px -4px var(--vf-primary);
 }
 .nav-l2 {
-  display: flex; gap: 2px; padding: 6px 0 2px;
-  border-bottom: 1px solid var(--vf-border, #333);
+  display: inline-flex; gap: 2px;
+  margin: 12px 0 4px;                 /* 跟一级拉开，不再贴着 */
+  padding: 3px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--vf-text-3, #999) 10%, transparent);
 }
 .nav-l2-item {
-  padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+  padding: 5px 13px; border-radius: 7px; cursor: pointer; font-size: 13px;
   border: none; background: transparent; color: var(--vf-text-3, #999);
+  transition: background .12s ease, color .12s ease;
 }
+.nav-l2-item:hover { color: var(--vf-text-2, #bbb); }
 .nav-l2-item.active {
-  background: var(--vf-primary-soft);
+  background: var(--vf-bg-1, #1a1a1a);
   color: var(--vf-primary-hover);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vf-primary) 30%, transparent);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
 }
 
 /* 异步组件加载失败的兜底屏。用 :deep 是因为它渲染在 errorComponent 里，
