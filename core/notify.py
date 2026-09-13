@@ -37,6 +37,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+from pathlib import Path
 import subprocess
 import urllib.error
 import urllib.request
@@ -104,9 +105,36 @@ def _post(webhook: str, payload: dict) -> tuple[bool, str]:
     return True, ""
 
 
+def find_lark_cli() -> str:
+    """定位 lark-cli。
+
+    **不能只靠 `shutil.which`** —— 它装在 mise 管理的 node 里
+    （`~/.local/share/mise/installs/node/<ver>/bin/`），而非交互式 shell
+    （后端服务、cron、subprocess）常常没有 mise 注入的 PATH。
+    2026-09-13 就是因为这个，lark-cli 这条通道从来没真正生效过，
+    所有通知都在走 webhook —— 而 webhook 的机器人一被停用就全哑了。
+
+    mise shims 是稳定入口（版本号变了它也还在），放在 which 之后作兜底。
+    """
+    import glob  # noqa: PLC0415
+
+    for cand in (
+        shutil.which("lark-cli"),
+        str(Path.home() / ".local/share/mise/shims/lark-cli"),
+        str(Path.home() / ".local/bin/lark-cli"),
+        "/opt/homebrew/bin/lark-cli",
+        "/usr/local/bin/lark-cli",
+    ):
+        if cand and Path(cand).exists():
+            return cand
+    # 版本号写死会随升级失效，所以最后按 glob 兜一层
+    hits = sorted(glob.glob(str(Path.home() / ".local/share/mise/installs/node/*/bin/lark-cli")))
+    return hits[-1] if hits else ""
+
+
 def _lark_cli(acc: dict, card: dict, dedupe_key: str = "") -> tuple[bool, str]:
     """lark-cli 通道：以机器人身份往群里发交互卡片。"""
-    exe = shutil.which("lark-cli")
+    exe = find_lark_cli()
     if not exe:
         return False, "lark-cli 未安装"
     cmd = [exe, "--profile", acc["profile"], "im", "+messages-send",
