@@ -113,7 +113,7 @@ export const api = {
   pipeline: () => get<PipelineResponse>('pipeline'),
   /** 「我是谁」—— 从通知配置的 assignees.owner 读，不另存一份当前用户 */
   notifyOwner: () => get<{ name: string; open_id: string }>('notify/owner'),
-  /** 贴链接入库 —— 「自动化发布」那一页用 */
+  /** 贴链接入库 —— 「导入音频」那一页用 */
   importUrl: (p: {
     url: string; title?: string; album?: string; platform?: string;
     publisher?: string; instrumental?: boolean; with_cover?: boolean;

@@ -307,7 +307,7 @@ const SunoTab = lazyTab(() => import('../tabs/SunoTab.vue'), 'AI 音乐');
 const PipelineBoard = lazyTab(() => import('./PipelineBoard.vue'), '发歌记录');
 const PublishTab = lazyTab(() => import('../tabs/PublishTab.vue'), '全网发行');
 const LibraryTab = lazyTab(() => import('../tabs/LibraryTab.vue'), '音频文件');
-const IntakeTab = lazyTab(() => import('../tabs/IntakeTab.vue'), '自动化发布');
+const IntakeTab = lazyTab(() => import('../tabs/IntakeTab.vue'), '导入音频');
 const GalleryTab = lazyTab(() => import('../tabs/GalleryTab.vue'), '音乐卡片墙');
 const OpsTab = lazyTab(() => import('../tabs/OpsTab.vue'), '运营台');
 import GlobalPlayer from './GlobalPlayer.vue';
@@ -416,7 +416,7 @@ const TAB_GROUPS = [
     tabs: [
       { name: 'gallery', label: '卡片墙 · 选歌', icon: 'library', hint: '翻所有做好的歌，挑出要发的' },
       { name: 'albums', label: '专辑', icon: 'board', hint: '把选中的歌组成一张辑：定辑名、排曲序、出一张共用封面' },
-      { name: 'intake', label: '发行', icon: 'upload', hint: '备料齐了从这里走发行' },
+      { name: 'intake', label: '导入音频', icon: 'upload', hint: '别人给你一个音频链接，从这里进库；本机生成的不用走这页' },
       { name: 'works', label: '发歌记录', icon: 'board', hint: '哪些发过、哪些没发、谁负责' },
       { name: 'publish', label: '全网发行', icon: 'publish', hint: '各平台账号与已上架作品' },
       { name: 'ops', label: '运营台', icon: 'pulse', hint: '成本、收益、回本播放量' },
