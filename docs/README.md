@@ -17,6 +17,7 @@
 | 发版前要遵守哪些硬规矩 | [MUSIC_PUBLISH_SOP](MUSIC_PUBLISH_SOP.md) ✅ |
 | 发一个新版本（代码侧） | [RELEASE_SOP](RELEASE_SOP.md) ✅ |
 | 忘了某个命令怎么敲 | [COMMANDS](COMMANDS.md) ✅ |
+| **通知发不出去** | [TROUBLESHOOT_NOTIFY](TROUBLESHOOT_NOTIFY.md) ✅ |
 | 数据存在哪、表结构什么样 | [DATA](DATA.md) ✅ |
 | 接下来要做什么、为什么 | [ROADMAP](ROADMAP.md) ✅ · [TODO](TODO.md) ✅ |
 | 克隆儿童声音时首字被吞 | [儿童声音首字保护指南](儿童声音首字保护指南.md) ✅ |
