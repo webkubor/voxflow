@@ -3271,8 +3271,12 @@ def album_cover_generate(album_id: str, req: AlbumCoverRequest):
     if not cover.available():
         raise HTTPException(400, "museav 未登录。跑一次 `museav login`。")
 
-    prompt = req.prompt.strip() or (
-        f"{album['title']}，专辑封面，{album.get('description') or ''}".strip("，"))
+    # 走 cover.build_prompt，**不要自己拼** —— 它里面写着「不得出现任何文字」的硬禁令。
+    # 2026-09-13 就是因为这里自拼 prompt 并把专辑简介（营销文案）喂了进去，
+    # 模型把「翻车现场 · 搞笑BGM / 短视频专用喜剧配乐」全画成了海报标题，
+    # 两首歌被汽水以「封面含有广告引流信息」驳回。
+    prompt = req.prompt.strip() or cover.build_prompt(
+        album["title"], album.get("tags") or pipeline.album_tags(album_id, req.platform))
     label = f"🖼 专辑封面：{album['title']}"
     params = {"title": album["title"], "prompt": prompt, "ratio": req.ratio,
               "album_key": album["key"], "track_id": ""}
@@ -3333,7 +3337,8 @@ def album_publish(album_id: str, req: AlbumPublishRequest):
     elif not cover.available():
         steps.append({"step": "封面", "ok": False, "detail": "museav 未登录，跑 `museav login`"})
     else:
-        prompt = f"{album['title']}，专辑封面，{album.get('description') or ''}".strip("，")
+        prompt = cover.build_prompt(
+            album["title"], album.get("tags") or pipeline.album_tags(album_id, req.platform))
         cover_task = _submit_task("cover", f"🖼 专辑封面：{album['title']}",
                                   {"title": album["title"], "prompt": prompt, "ratio": "1:1",
                                    "album_key": album["key"], "track_id": ""})

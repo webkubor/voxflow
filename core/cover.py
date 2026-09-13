@@ -354,10 +354,58 @@ def _ratio_matches(ratio: str, size: tuple[int, int] | None, tol: float = 0.05) 
     return abs(got - want) / want <= tol
 
 
+# 平台对封面的硬要求（2026-09-13 汽水驳回实测）：
+# 「歌曲封面、专辑封面中不能含有商业营销、广告、水印等引流信息」。
+# 一旦图上出现标题字、标语、角标、logo、二维码，整首歌被退回重传。
+# 所以禁令必须写死在 prompt 里，而且**不能把专辑名/简介这类文案喂给模型** ——
+# 模型看到文案就会把它画成海报标题（实测「翻车现场 · 搞笑BGM」被画成了巨大艺术字）。
+_NO_TEXT = ("画面中不得出现任何文字、字母、数字、标题、标语、角标、水印、logo、"
+            "二维码、品牌标识或任何形式的文案排版")
+
+
+# 专辑名里的这些词是**品类标签**，不是画面内容。喂给模型它就会当成要画的标语，
+# 「搞笑BGM」「短视频专用」这类词更是直接把图带向营销海报。出图只要意象。
+_CATEGORY_WORDS = ("BGM", "bgm", "合集", "精选", "专辑", "单曲", "纯音乐", "伴奏",
+                   "原声", "配乐", "系列", "Vol", "vol", "EP")
+
+
+def _visual_subject(title: str) -> str:
+    """从专辑名里剥出可画的意象，去掉品类标签和分隔符。
+
+    「翻车现场 · 搞笑BGM」→「翻车现场」；「古筝助眠 · 纯音乐合集」→「古筝助眠」。
+
+    **取第一段，不是取最长段** —— 中文专辑名的惯例是「作品名 · 品类」，
+    第一段才是要画的东西。按长度取会选中「搞笑BGM」，剥完品类词只剩「搞笑」，
+    正好把真正的画面丢了（2026-09-13 实测）。
+    """
+    import re  # noqa: PLC0415
+    segs = [x.strip() for x in re.split(r"[·・‧•|/｜]|\s[-–—]\s", title) if x.strip()]
+    for seg in segs or [title]:
+        cleaned = seg
+        for w in _CATEGORY_WORDS:
+            cleaned = cleaned.replace(w, "")
+        cleaned = cleaned.strip(" ·-|")
+        if cleaned:
+            return cleaned
+    return title
+
+
 def build_prompt(title: str, tags: str = "", lyrics: str = "") -> str:
-    """从作品信息拼一句封面提示词。不放歌词，避免模型把字画到图上。"""
-    parts = [f"专辑封面设计，主题：{title}"]
+    """从作品信息拼一句封面提示词。
+
+    三条硬规矩，都是被平台退过才写死的：
+      1. **title 只当画面线索，不是要画上去的字**（还要先剥掉品类词）
+      2. **歌词一律不放** —— 它是模型往图上写字最大的诱因
+      3. **要唱片封面，不要营销海报** —— 不写「短视频专用」这类用途描述
+    """
+    # 画面主体必须是**音乐本身**：乐器、声音的视觉化、演奏的氛围。
+    # 专辑名只提供气质线索，不是要照着字面画一个场景 ——
+    # 「翻车现场」画成摔倒的猫那是段子图，不是唱片封面。
+    parts = ["音乐专辑封面，画面主体必须是音乐元素本身（乐器、演奏、声音的视觉意象）"]
     if tags.strip():
-        parts.append(f"音乐风格：{tags.strip()}")
-    parts.append("正方形构图，具有氛围感的视觉意象，画面中不要出现任何文字")
+        parts.append(f"按这些乐器与曲风来画：{tags.strip()}")
+    parts.append(f"整体气质呼应专辑意境：{_visual_subject(title)}")
+    parts.append("唱片封面质感，单一主体，构图干净留白充足，正方形")
+    parts.append("不要画成宣传物料或段子插画，不要人物表情包式的夸张叙事场景")
+    parts.append(_NO_TEXT)
     return "，".join(parts)

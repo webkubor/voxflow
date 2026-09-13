@@ -944,6 +944,19 @@ def publish_fields(track_id: str) -> dict[str, Any]:
     }
 
 
+def album_tags(album_id: str, platform: str) -> str:
+    """整张辑的曲风标签 —— 取辑内第一首有 tags 的歌。
+
+    出封面要靠它知道该画什么乐器。专辑自己那个 tags 字段是给平台同步用的，
+    本地组辑时不填，所以得回到曲目上取。
+    """
+    for t in get_album(album_id, platform)["tracks"]:
+        tags = ((get_track(t["id"]) or {}).get("tags") or "").strip()
+        if tags:
+            return tags
+    return ""
+
+
 def sync_album_cover(album_id: str, platform: str) -> int:
     """把专辑封面铺到辑内每首歌的 cover_file，返回铺了几首。
 
