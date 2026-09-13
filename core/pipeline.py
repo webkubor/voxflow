@@ -871,12 +871,26 @@ def create_album(title: str, platform: str, track_ids: "list[str] | tuple" = (),
 
 
 def add_to_album(album_id: str, platform: str, track_ids: "list[str]") -> dict[str, Any]:
-    """把作品加进专辑，追加在末尾。已经在别的专辑里的会被拒绝。"""
+    """把作品加进专辑，追加在末尾。
+
+    两种情况会被拒绝：
+      1. 这首已经在别的专辑里（平台也是一首歌只能属一张辑）
+      2. **这张辑已经发行** —— 汽水原话「如需代理发行，请创建新专辑并一次性
+         添加所有歌曲，**发行后不可增删**」。本地不挡的话，会一路备料到
+         提交那一刻才发现加不进去，前面的封面和发行名全白做。
+    """
     db.init()
     key = album_key(platform, album_id)
     with db.connect() as c:
         if not c.execute("SELECT 1 FROM albums WHERE key=?", (key,)).fetchone():
             raise ValueError(f"没有这张专辑: {album_id}")
+        released = c.execute(
+            "SELECT COUNT(*) n FROM track_platforms WHERE platform=? AND album_id=? "
+            "AND status IN ('online','published')", (platform, album_id)).fetchone()["n"]
+        if released and track_ids:
+            raise ValueError(
+                f"这张辑已经发行了（{released} 首在线），平台规则是发行后不可增删。"
+                f"要加新歌请新建一张专辑。")
         start = (c.execute(
             "SELECT MAX(COALESCE(track_no,0)) n FROM track_platforms "
             "WHERE platform=? AND album_id=?", (platform, album_id)).fetchone()["n"] or 0)
