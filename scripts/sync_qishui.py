@@ -61,9 +61,12 @@ const spaces = await listTaskSpaces();
 let task = null;
 for (const s of spaces) {
   try {
-    const t = s.ownership === "user"
-      ? await takeOverTaskSpace(s.spaceId ?? s.id)
-      : await taskSpace(s.spaceId ?? s.id);
+    // ownership 有三种值：agent / user / **agentDelegatedToUser**（handOff 之后就是它）。
+    // 只判断 === "user" 会漏掉第三种，于是对一个已交还的空间调 taskSpace()，
+    // 拿不到页面、静默跳过，最后报「一条作品都没读到」，看着像账号不对。
+    const t = s.ownership === "agent"
+      ? await taskSpace(s.spaceId ?? s.id)
+      : await takeOverTaskSpace(s.spaceId ?? s.id);
     const pg = t.page("p1");
     if ((await pg.url()).includes("music.douyin.com")) { task = t; break; }
   } catch (e) { /* 空间不可用，换下一个 */ }
