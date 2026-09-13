@@ -410,13 +410,14 @@ const TAB_GROUPS = [
   },
   {
     key: 'release', title: '发行', icon: 'publish',
-    // 顺序 = 一次发行真实的做事顺序：**在卡片墙挑歌 → 组成专辑 → 发行 → 回头看记录**。
+    // 顺序 = 一次发行真实的做事顺序：**挑歌 → 组成专辑 → 看进度**。
+    // 导入外部音频收进卡片墙（它只是挑歌时的一个小动作），不单独占位；
+    // 任何歌都要进专辑才能发，所以专辑紧跟着挑歌。
     // 卡片墙是这条链的**起点**（选歌就在那儿翻），不是末尾的素材库 ——
     // 把它排到最后，等于让人从流程中段开始找入口。
     tabs: [
-      { name: 'gallery', label: '卡片墙 · 选歌', icon: 'library', hint: '翻所有做好的歌，挑出要发的' },
+      { name: 'gallery', label: '卡片墙 · 选歌', icon: 'library', hint: '翻所有做好的歌，挑出要发的；外部音频也从这里导入' },
       { name: 'albums', label: '专辑', icon: 'board', hint: '把选中的歌组成一张辑：定辑名、排曲序、出一张共用封面' },
-      { name: 'intake', label: '导入音频', icon: 'upload', hint: '别人给你一个音频链接，从这里进库；本机生成的不用走这页' },
       { name: 'works', label: '发歌记录', icon: 'board', hint: '哪些发过、哪些没发、谁负责' },
       { name: 'publish', label: '全网发行', icon: 'publish', hint: '各平台账号与已上架作品' },
       { name: 'ops', label: '运营台', icon: 'pulse', hint: '成本、收益、回本播放量' },

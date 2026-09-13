@@ -17,6 +17,11 @@
         <n-button size="small" :loading="loading" @click="load">
           <Icon name="refresh" size="sm" /> 刷新
         </n-button>
+        <!-- 导入外部音频只是挑歌时的一个小动作（别人给了个链接），
+             不值得单独占一个 tab —— 收进这里，跟「一键备料」并排。 -->
+        <n-button size="small" @click="intakeOpen = true">
+          <Icon name="upload" size="sm" /> 导入音频
+        </n-button>
         <n-button type="primary" size="small" class="glow" @click="prepOpen = true">
           <Icon name="plus" size="sm" /> 一键备料
         </n-button>
@@ -92,14 +97,20 @@
     </div>
   </div>
   <PrepModal v-model:show="prepOpen" />
+
+  <n-modal v-model:show="intakeOpen" preset="card" title="导入外部音频" style="max-width: 860px">
+    <IntakeTab />
+  </n-modal>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
 import Icon from '../components/Icon.vue';
 import PrepModal from '../components/PrepModal.vue';
+import IntakeTab from './IntakeTab.vue';
 
 const prepOpen = ref(false);
+const intakeOpen = ref(false);
 const failed = reactive({});
 const staging = reactive({});   // 封面加载失败的 id，失败一次就不再重试
 const cards = ref([]);
