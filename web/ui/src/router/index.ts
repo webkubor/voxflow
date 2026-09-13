@@ -45,6 +45,7 @@ export const tabRoutes = [
   { path: '/suno', name: 'suno', component: TabPlaceholder },
   { path: '/albums', name: 'albums', component: TabPlaceholder },
   { path: '/promo', name: 'promo', component: TabPlaceholder },
+  { path: '/attest', name: 'attest', component: TabPlaceholder },
   { path: '/works', name: 'works', component: TabPlaceholder },
   { path: '/publish', name: 'publish', component: TabPlaceholder },
   { path: '/library', name: 'library', component: TabPlaceholder },

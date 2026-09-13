@@ -180,6 +180,7 @@
             <n-tab-pane name="intake" tab="入库"><IntakeTab /></n-tab-pane>
             <n-tab-pane name="albums" tab="专辑"><AlbumsTab /></n-tab-pane>
             <n-tab-pane name="promo" tab="宣推"><PromoTab /></n-tab-pane>
+            <n-tab-pane name="attest" tab="存证"><AttestTab /></n-tab-pane>
             <n-tab-pane name="works" tab="发歌"><PipelineBoard /></n-tab-pane>
             <n-tab-pane name="gallery" tab="卡片墙"><GalleryTab /></n-tab-pane>
             <n-tab-pane name="publish" tab="发行"><PublishTab /></n-tab-pane>
@@ -298,6 +299,7 @@ const lazyTab = (loader, label) => defineAsyncComponent({
 
 const AlbumsTab = lazyTab(() => import('../tabs/AlbumsTab.vue'), '专辑');
 const PromoTab = lazyTab(() => import('../tabs/PromoTab.vue'), '宣推短视频');
+const AttestTab = lazyTab(() => import('../tabs/AttestTab.vue'), '原创存证');
 const CloneTab = lazyTab(() => import('../tabs/CloneTab.vue'), '声音克隆');
 const DesignTab = lazyTab(() => import('../tabs/DesignTab.vue'), '音色设计');
 const DialogueTab = lazyTab(() => import('../tabs/DialogueTab.vue'), '剧本创作');
@@ -419,6 +421,7 @@ const TAB_GROUPS = [
       { name: 'publish', label: '全网发行', icon: 'publish', hint: '各平台账号与已上架作品' },
       { name: 'ops', label: '运营台', icon: 'pulse', hint: '成本、收益、回本播放量' },
       { name: 'promo', label: '宣推短视频', icon: 'suno', hint: '把歌合成竖版宣推片，发抖音带流量' },
+      { name: 'attest', label: '原创存证', icon: 'publish', hint: '导出创作留痕与证书图，证明独创性；批量锚定上链' },
     ],
   },
 ];

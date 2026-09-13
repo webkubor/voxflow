@@ -3388,6 +3388,79 @@ def album_publish(album_id: str, req: AlbumPublishRequest):
     }
 
 
+# ── 原创存证 ──────────────────────────────────────────
+#
+# AI 音乐要受著作权保护，法律上看有没有「独创性智力投入」。voxflow 本来就攒着
+# 这份证据（prompt、版本选择、时间线），这几个端点把它导成可验证、可出示的形式。
+
+
+class AttestBatchRequest(BaseModel):
+    track_ids: list[str]
+    note: str = "voxflow"
+
+
+@app.get("/api/attest/{track_id}")
+def attest_one(track_id: str):
+    """单首作品的完整创作留痕。纯本地计算，不花钱。"""
+    from core import attest
+    try:
+        return {"ok": True, "doc": attest.provenance(track_id)}
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.post("/api/attest/batch")
+def attest_batch(req: AttestBatchRequest):
+    """把一批作品打成存证包：算 Merkle root、给每首出存在性证明、落盘。"""
+    from core import attest
+    if not req.track_ids:
+        raise HTTPException(400, "track_ids 不能为空")
+    try:
+        batch = attest.build_batch(req.track_ids)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    path = attest.save_batch(batch)
+    return {"ok": True, "merkle_root": batch["merkle_root"], "count": batch["count"],
+            "saved_to": str(path), "anchor": attest.anchor_payload(batch["merkle_root"], req.note),
+            "items": [{k: v for k, v in it.items() if k != "proof"} for it in batch["items"]]}
+
+
+class AttestVerifyRequest(BaseModel):
+    leaf: str
+    proof: list[dict]
+    root: str
+
+
+@app.post("/api/attest/verify")
+def attest_verify(req: AttestVerifyRequest):
+    """验证某首作品确实属于某个已锚定的批次。任何人拿到存证包都能验。"""
+    from core import attest
+    try:
+        ok = attest.verify_proof(req.leaf, req.proof, req.root)
+    except Exception as e:                                       # noqa: BLE001
+        raise HTTPException(400, f"证明格式不对：{e}")
+    return {"ok": ok}
+
+
+@app.get("/api/attest/batches/list")
+def attest_batches():
+    """历史存证包 —— 落在 ~/.voxflow/attest/ 下。"""
+    import json as _j                                            # noqa: PLC0415
+    d = DATA_DIR / "attest"
+    if not d.is_dir():
+        return {"batches": []}
+    out = []
+    for f in sorted(d.glob("attest-*.json"), reverse=True)[:50]:
+        try:
+            b = _j.loads(f.read_text())
+            out.append({"file": f.name, "built_at": b.get("built_at"),
+                        "count": b.get("count"), "merkle_root": b.get("merkle_root"),
+                        "titles": [i.get("title") for i in (b.get("items") or [])][:6]})
+        except Exception:                                        # noqa: BLE001, S112
+            continue
+    return {"batches": out}
+
+
 class CoverUpscaleRequest(BaseModel):
     track_id: str
 

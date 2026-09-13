@@ -34,11 +34,7 @@
 
 import ky, { HTTPError, TimeoutError } from 'ky';
 import { API_TIMEOUT_MS, API_RETRY_LIMIT } from '../config/constants';
-import type {
-  Album, CapabilitiesResponse, PersonasResponse, PipelineResponse,
-  EconomicsResponse, HealthResponse, LogRecord, MetricsResponse,
-  PlatformAccountsResponse, PlatformKey, Stage, Track,
-} from '../types/api';
+import type { Album, AttestDoc, CapabilitiesResponse, EconomicsResponse, HealthResponse, LogRecord, MetricsResponse, PersonasResponse, PipelineResponse, PlatformAccountsResponse, PlatformKey, Stage, Track } from '../types/api';
 import { CLIENT_VERSION, toError, toMessage, VoxError } from '../lib/errors';
 
 export { toError, toMessage };
@@ -177,6 +173,14 @@ export const api = {
   albumPublish: (albumId: string, body: { platform: string; auto_cover?: boolean; wait?: boolean }) =>
     post<{ ok: boolean; album: Album; steps: Array<{ step: string; ok: boolean; detail: string }>; next: string }>(
       `albums/${albumId}/publish`, body),
+  // ── 原创存证 ──
+  attestOne: (trackId: string) => get<{ ok: boolean; doc: AttestDoc }>(`attest/${trackId}`),
+  attestBatch: (body: { track_ids: string[]; note?: string }) =>
+    post<{ ok: boolean; merkle_root: string; count: number; saved_to: string;
+           anchor: { data_hex: string; data_text: string; hint: string };
+           items: Array<{ track_id: string; title: string; digest: string }> }>('attest/batch', body),
+  attestBatches: () => get<{ batches: Array<{ file: string; built_at: string; count: number;
+                                              merkle_root: string; titles: string[] }> }>('attest/batches/list'),
   platformAccounts: () => get<PlatformAccountsResponse>('platform-accounts'),
   publishBoard: () => get<{ accounts: unknown[]; tracks: Track[] }>('publish-board'),
 

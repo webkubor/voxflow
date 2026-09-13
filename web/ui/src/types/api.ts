@@ -77,6 +77,8 @@ export interface Track {
   is_source: boolean;
   /** 秒。Suno 一次出两版、同名只差几秒，选版本时全靠它区分。 */
   duration?: number | null;
+  /** 生成时间。存证页按它排序、写进证书。 */
+  created_at?: string;
   /** 发出去的歌名。生成名可以重复，这个必须唯一。 */
   release_title: string;
   /** 独家授权投向的那一个平台。 */
@@ -368,4 +370,25 @@ export interface EconomicsResponse {
   total_tracks: number;
   /** 有单曲维度收入数据的作品数。0 = 还没跑过 scripts/ncm_track_stats.py */
   revenue_covered: number;
+}
+
+
+/** 作品的创作留痕 —— 证明「独创性智力投入」的那份材料。 */
+export interface AttestDoc {
+  schema: string;
+  track_id: string;
+  title: string;
+  release_title: string;
+  created_at: string;
+  digest: string;
+  design: { prompt: string; tags: string; lyrics: string; voice: string };
+  generation: {
+    clip_id: string;
+    clip_ids: string[];
+    duration_sec: number | null;
+    alternates_not_chosen: Array<{ clip_id: string; duration_sec: number | null }>;
+  };
+  content: { audio_file: string; audio_sha256: string; audio_bytes: number; cover_file: string };
+  timeline: Array<{ ts: string; from: string; to: string; actor: string; note: string }>;
+  tooling: Array<{ ts: string; provider: string; action: string; credits: number }>;
 }
