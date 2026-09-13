@@ -89,7 +89,9 @@ def _ca_bundle() -> str:
 
 
 def _museav_bin() -> str:
-    p = shutil.which("museav")
+    from core.exe import find_exe  # noqa: PLC0415
+
+    p = find_exe("museav")
     if p:
         return p
     fallback = Path.home() / ".local/share/mise/shims/museav"

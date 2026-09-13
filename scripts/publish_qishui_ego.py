@@ -56,6 +56,13 @@ from core.paths import DATA_DIR  # noqa: E402
 DRY = "--dry-run" in sys.argv
 
 
+def _ffmpeg() -> str:
+    """ffmpeg 的绝对路径。裸名字在非交互式 shell 里找不到（homebrew 不在最小 PATH）。"""
+    from core.exe import find_exe  # noqa: PLC0415
+
+    return find_exe("ffmpeg") or "ffmpeg"
+
+
 def resolve(rel: str) -> Path:
     p = Path(rel)
     return p if p.is_absolute() else DATA_DIR / p
@@ -67,7 +74,7 @@ def to_mp3(audio: Path) -> Path:
         return audio
     mp3 = audio.with_suffix(".mp3")
     if not mp3.is_file() or mp3.stat().st_mtime < audio.stat().st_mtime:
-        subprocess.run(["ffmpeg", "-y", "-i", str(audio), "-b:a", "320k", str(mp3)],
+        subprocess.run([_ffmpeg(), "-y", "-i", str(audio), "-b:a", "320k", str(mp3)],
                        check=True, capture_output=True)
     if not mp3.is_file():
         raise RuntimeError(f"转码后文件不存在：{mp3}")

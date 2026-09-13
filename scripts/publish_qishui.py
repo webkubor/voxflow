@@ -68,6 +68,13 @@ lyrics_raw = track.get("lyrics", "")
 lyrics = "\n".join(l for l in lyrics_raw.splitlines() if not l.strip().startswith("["))
 lyrics = "\n".join(l for l in lyrics.splitlines()).strip()
 
+def _ffmpeg() -> str:
+    """ffmpeg 的绝对路径。裸名字在非交互式 shell 里找不到（homebrew 不在最小 PATH）。"""
+    from core.exe import find_exe  # noqa: PLC0415
+
+    return find_exe("ffmpeg") or "ffmpeg"
+
+
 def _resolve(p: str) -> Path:
     path = Path(p)
     if not path.is_absolute():
@@ -83,7 +90,7 @@ if audio.suffix.lower() == ".wav" and audio.is_file():
     mp3_candidate = audio.with_suffix(".mp3")
     if not mp3_candidate.is_file() or mp3_candidate.stat().st_mtime < audio.stat().st_mtime:
         import subprocess
-        subprocess.run(["ffmpeg", "-y", "-i", str(audio), "-b:a", "320k", str(mp3_candidate)],
+        subprocess.run([_ffmpeg(), "-y", "-i", str(audio), "-b:a", "320k", str(mp3_candidate)],
                        check=True, capture_output=True)
     audio = mp3_candidate
 

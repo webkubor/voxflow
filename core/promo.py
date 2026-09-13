@@ -32,12 +32,23 @@ REEL_CANDIDATES = [
 ]
 
 
+def _ffmpeg() -> str:
+    """ffmpeg 的绝对路径。裸名字在非交互式 shell 里找不到（homebrew 不在最小 PATH）。"""
+    from core.exe import find_exe  # noqa: PLC0415
+
+    return find_exe("ffmpeg") or "ffmpeg"
+
+
 def find_reel_bin() -> Optional[str]:
     """定位本机 reel CLI 可执行文件。"""
     for cand in REEL_CANDIDATES:
         if cand and os.path.isfile(cand) and os.access(cand, os.X_OK):
             return cand
-    return shutil.which("reel")
+    # 查找规则统一在 core/exe.py —— reel 装在 mise 的 node 里，
+    # 非交互式 shell 没有 mise 注入的 PATH，只靠 which 必然找不到。
+    from core.exe import find_exe  # noqa: PLC0415
+
+    return find_exe("reel") or None
 
 
 def check_promo_status() -> dict[str, Any]:
@@ -150,7 +161,7 @@ def generate_promo_video(
         mp3_cand = audio_path.with_suffix(".mp3")
         if not mp3_cand.exists() or mp3_cand.stat().st_mtime < audio_path.stat().st_mtime:
             subprocess.run(
-                ["ffmpeg", "-y", "-i", str(audio_path), "-b:a", "320k", str(mp3_cand)],
+                [_ffmpeg(), "-y", "-i", str(audio_path), "-b:a", "320k", str(mp3_cand)],
                 check=True,
                 capture_output=True,
             )

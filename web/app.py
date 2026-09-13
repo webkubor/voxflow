@@ -34,6 +34,7 @@ from pydantic import BaseModel
 _PROJECT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_DIR))
 
+from core.exe import find_exe as _find_exe  # 外部命令一律走它，见 core/exe.py
 from core.paths import (  # noqa: E402
     DATA_DIR, OUT_DIR, TEMP_DIR, REF_DIR, MODELS_DIR,
     PERSONAS_FILE, SCRIPTS_FILE, PROJECT_DIR, ensure_dirs,
@@ -1830,7 +1831,7 @@ def _probe_login_account(platform: str) -> str:
     from core.paths import PROJECT_DIR as PD  # noqa: PLC0415
 
     probe = PD / "scripts/check_login.py"
-    if not (shutil.which("browser-harness") and probe.exists()):
+    if not (_find_exe("browser-harness") and probe.exists()):
         return ""
     try:
         with open(probe, encoding="utf-8") as f:
@@ -1981,7 +1982,7 @@ def publish_login_check(platform: str = "qishui"):
 
 
     spec = pipeline.PLATFORMS.get(platform) or {}
-    if not shutil.which("browser-harness"):
+    if not _find_exe("browser-harness"):
         return {"可验证": False, "已登录": None, "说明": "没装 browser-harness",
                 "控制台": spec.get("console", "")}
     probe = PD / "scripts/check_login.py"
@@ -2128,7 +2129,7 @@ def publish_preflight(platform: str = "qishui"):
         cs.get("detail") or "museav 未就绪 —— 跑一次 `museav login`（登录一次，出图和文案一起通），或检查积分")
 
     # 2) 自动填表要用的浏览器工具
-    harness = _sh.which("browser-harness")
+    harness = _find_exe("browser-harness")
     add("browser-harness", bool(harness),
         f"已装：{harness}" if harness else "没装 —— 自动填表跑不了，只能手工填")
 

@@ -187,7 +187,8 @@ def check_models():
 
 @register
 def check_ffmpeg():
-    path = shutil.which("ffmpeg")
+    from core.exe import find_exe  # noqa: PLC0415
+    path = find_exe("ffmpeg")
     if path:
         try:
             result = subprocess.run(

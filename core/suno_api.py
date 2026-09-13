@@ -87,6 +87,13 @@ MODELS = {
 DEFAULT_MODEL = "v6"
 
 
+def _ffmpeg() -> str:
+    """ffmpeg 的绝对路径。裸名字在非交互式 shell 里找不到（homebrew 不在最小 PATH）。"""
+    from core.exe import find_exe  # noqa: PLC0415
+
+    return find_exe("ffmpeg") or "ffmpeg"
+
+
 class SunoError(RuntimeError):
     """调用失败。message 是给人看的，不要再包一层。"""
 
@@ -428,7 +435,7 @@ def upload_audio(file_path: str, *, title: str = "", timeout_s: int = 240) -> st
     if ext not in ("mp3", "wav"):
         import tempfile  # noqa: PLC0415
         tmp = Path(tempfile.mkdtemp()) / (path.stem + ".mp3")
-        r = subprocess.run(["ffmpeg", "-y", "-i", str(path), "-vn",
+        r = subprocess.run([_ffmpeg(), "-y", "-i", str(path), "-vn",
                             "-codec:a", "libmp3lame", "-b:a", "192k", str(tmp)],
                            capture_output=True, text=True)
         if r.returncode != 0 or not tmp.exists():

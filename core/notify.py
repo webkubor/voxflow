@@ -106,30 +106,10 @@ def _post(webhook: str, payload: dict) -> tuple[bool, str]:
 
 
 def find_lark_cli() -> str:
-    """定位 lark-cli。
+    """定位 lark-cli。查找规则统一在 core/exe.py，那里写着为什么不能只靠 which。"""
+    from core.exe import find_exe  # noqa: PLC0415
 
-    **不能只靠 `shutil.which`** —— 它装在 mise 管理的 node 里
-    （`~/.local/share/mise/installs/node/<ver>/bin/`），而非交互式 shell
-    （后端服务、cron、subprocess）常常没有 mise 注入的 PATH。
-    2026-09-13 就是因为这个，lark-cli 这条通道从来没真正生效过，
-    所有通知都在走 webhook —— 而 webhook 的机器人一被停用就全哑了。
-
-    mise shims 是稳定入口（版本号变了它也还在），放在 which 之后作兜底。
-    """
-    import glob  # noqa: PLC0415
-
-    for cand in (
-        shutil.which("lark-cli"),
-        str(Path.home() / ".local/share/mise/shims/lark-cli"),
-        str(Path.home() / ".local/bin/lark-cli"),
-        "/opt/homebrew/bin/lark-cli",
-        "/usr/local/bin/lark-cli",
-    ):
-        if cand and Path(cand).exists():
-            return cand
-    # 版本号写死会随升级失效，所以最后按 glob 兜一层
-    hits = sorted(glob.glob(str(Path.home() / ".local/share/mise/installs/node/*/bin/lark-cli")))
-    return hits[-1] if hits else ""
+    return find_exe("lark-cli")
 
 
 def _lark_cli(acc: dict, card: dict, dedupe_key: str = "") -> tuple[bool, str]:
@@ -233,7 +213,7 @@ def _lark_json(acc: dict, method: str, path: str,
     踩过：分页写成 `?page_size=500` 后判重查询永远返回空，
     于是每同步一次就把整张表再插一遍。
     """
-    exe = shutil.which("lark-cli")
+    exe = find_lark_cli()
     if not exe:
         return {"ok": False, "error": "lark-cli 未安装"}
     cmd = [exe, "--profile", acc["profile"], "api", method, path, "--as", "bot"]
