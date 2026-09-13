@@ -1,103 +1,67 @@
 # 数据存在哪
 
-一句话：**全是 JSON 文件，没有数据库。** 台账在 `configs/`，文件资产在
-`assets/` `out/` `publish/` 三层。
+一句话：**台账在 SQLite（`~/.voxflow/voxflow.db`），配置和文件资产还是 JSON + 目录。**
+
+| 放什么 | 在哪 |
+|---|---|
+| 作品台账、平台状态、专辑、事件流水 | **`voxflow.db`**（7 张表） |
+| 配置：艺人档案、平台清单、音色库、账号 | `configs/*.json` |
+| 文件资产：参考音频、合成产物、发布物料 | `assets/` `out/` `publish/` `library/` |
 
 ---
 
-## 为什么不用数据库
+## 为什么后来还是上了数据库
 
-规模决定的。这是个单人本地工具，台账规模是**几十到几百首歌、几个到几十个音色**，
-一个 JSON 文件全装得下。上数据库要引入三件事——迁移、连接管理、备份，
-而在这个规模上它们一件都换不来收益。
+这份文档原先写的是「全是 JSON 文件，没有数据库」，并且论证了在几百首的规模上
+加数据库是纯负债。那个判断在当时成立，**后来被三件事推翻了**——正好就是当初
+自己定下的那三条换库标准：
 
-JSON 还有三个此处很实在的好处：
+1. **需要查询了**。「哪些歌在汽水是 online 但还没回填播放量」这种问题，
+   全读进内存过滤能做，但每加一个维度就多一层循环。SQL 一句话的事。
+2. **需要并发写了**。后端任务队列会并发改台账（出封面、同步平台、批量生成同时在跑），
+   `_load → 改 → _save` 全量重写必然互相覆盖。
+3. **一首歌对多条平台记录**。同一首在汽水/网易云各有状态、各有 song_id，
+   JSON 里嵌套三层之后就没法维护了。
 
-- **可读**：出问题直接 `cat` 就能看，不用连库开客户端
-- **可手改**：状态错了用编辑器改一行就行
-- **可 diff**：进 git 之后，「这首歌什么时候从已选定变成发版中」在历史里看得见
+所以现在是：**结构化、会并发、要查询的进库；单纯的配置留 JSON。**
 
-### 什么时候该换数据库
-
-不是「数据变多」，是**出现下面任一条**：
-
-1. **需要并发写**。现在是单进程单人，`_load` → 改 → `_save` 全量重写没问题；
-   多个进程同时写会互相覆盖。
-2. **需要查询**。现在都是「全读进来再过滤」，几百条无所谓；
-   到了要按时间范围、按平台状态组合查，就该上库了。
-3. **单文件超过几 MB**。歌词是最大的字段，一首约 400 字；
-   1000 首约 1.5 MB，还行。到几万首再说。
-
-在那之前，加数据库是纯负债。
+> 教训记在这儿：这份文档从 JSON 迁到 SQLite 之后**很久没同步**，
+> 开头那句「没有数据库」误导过读它的人（和 agent）——
+> **过时的架构描述比没有文档更糟，因为它让人从错误的前提开始推理。**
 
 ---
 
-## 台账：`configs/*.json`
-
-### `pipeline.json` — 作品台账（最重要的一份）
-
-每首歌走到哪一步、内容是什么、发到哪了。结构见 `core/pipeline.py`。
+## 台账：`voxflow.db`
 
 ```
-tracks: {
-  <track_id>: {
-    # ── 流程状态 ──
-    stage           draft | generated | selected | publishing | published | archived
-    platforms       { qishui: {status, updated_at}, netease: {...} }   # 每个平台单独记
-
-    # ── 创作元数据（必须留底）──
-    title           歌名
-    lyrics          完整歌词
-    tags            送给 Suno 的风格串
-    prompt          让 LLM 写歌词时给的描述
-    voice           用了哪个音色（TTS 类作品）
-    clip_id         选定的 Suno clip
-    clip_ids        [两个]  —— Suno 一次出两首，另一首也留着
-
-    # ── 本地产物 ──
-    audio_file      out/music/xxx.wav
-    cover_file      publish/.../cover.jpg
-
-    # ── 云端（预留给 R2 同步）──
-    cloud_backup    { status, location, updated_at }
-
-    note, updated_at
-  }
-}
+tracks              作品本体：标题、歌词、风格标签、clip_id、音频/封面路径、
+                    stage（draft→generated→selected→publishing→published）、
+                    release_title（发行名，全局唯一）、release_platform（独家授权）
+track_platforms     一首歌 × 一个平台的上架记录：status、song_id、song_url、
+                    album_id、track_no、plays、earned_cny、publisher
+albums              专辑：本地草稿（album_id 形如 local-xxxxxxxx）与平台同步回来的
+publish_events      状态流转事件流：什么时候从哪到哪、谁操作的
+platform_accounts   各平台账号资产与登录状态
+usage_events        调用流水与计费：Suno / LLM / museav 各花了多少
+meta                schema 版本等元信息
 ```
 
-**为什么歌词要存台账而不是只留在 Suno**：Suno 那边不归我们，账号一停、
-对方改版、清理旧作品，数据就没了。而歌词是平台发布的必填项，
-风格标签影响推荐，出问题要复现也得靠它们。文件名更是只能塞下一个标题。
+看表结构直接 `sqlite3 ~/.voxflow/voxflow.db ".schema tracks"`，
+读写一律走 `core/pipeline.py`，**不要在别处手写 SQL** —— 独家授权、发行名唯一、
+专辑发行后不可增删这些规则都在那里，绕过去就等于绕过规则。
 
-**为什么每个平台单独记状态**：同一首歌可能汽水已上架、网易云还在审核。
-只有一个全局状态表达不出这种情况。
+---
 
-**状态机不做自动跃迁**：`generated → selected` 是「我要哪一首」，
-`selected → publishing` 是「我确认发这首」。两个都是人的决定 ——
-文件齐了不代表人想发。发版之前不该做任何平台相关的事，
-因为不知道发哪个平台，封面尺寸和文案风格都定不了。
+## 配置：`configs/*.json`
 
-### `personas.json` — 音色库
+这些是**配置不是台账**，改动低频、要人读人改，留 JSON 正合适：
 
-```
-<key>: {
-  name          显示名，随便改（中文、空格、标点都行）
-  ref           参考音频路径 ← 音频的唯一真源
-  design        设计配方路径
-  instruction   合成时给模型的基础指令（「怎么念」）
-  desc          给人看的描述（「这是谁」）
-}
-```
-
-⚠️ **路径只从 `ref` 读，绝不从 `name` 拼**。以前是按 `当前参考_{name}.wav`
-拼路径，于是改个中文名音频就找不到，而且静默失败。现在 name 是纯粹的名字。
-写入侧（新建样音）仍用名字起文件名，无所谓——落盘时会把路径记进 `ref`。
-
-### `publish_accounts.json` — 平台账号状态
-
-只存非敏感元数据（平台、登录状态、检测时间）。**不存 cookie、不存密码**。
-真正的登录态在浏览器里，通过 browser-harness 附着使用。
+- `artist.json` — 艺人档案（含实名信息，接口返回时会脱敏）
+- `platforms.json` — 平台清单：后台地址、发布入口、触达范围、核验日期
+- `pricing.json` — 各平台单价口径（标了 confidence，未证实的写 0 不猜）
+- `personas.json` — 音色库：每个音色的参考音频与设计配方
+- `publish_accounts.json` — 平台账号占位；真正的登录态在浏览器里
+- `notify.json` / `r2.json` — 飞书通知与图床配置
 
 ### 其余
 

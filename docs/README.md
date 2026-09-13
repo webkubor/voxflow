@@ -17,7 +17,7 @@
 | 发版前要遵守哪些硬规矩 | [MUSIC_PUBLISH_SOP](MUSIC_PUBLISH_SOP.md) ✅ |
 | 发一个新版本（代码侧） | [RELEASE_SOP](RELEASE_SOP.md) ✅ |
 | 忘了某个命令怎么敲 | [COMMANDS](COMMANDS.md) ✅ |
-| 数据存在哪、表结构什么样 | [DATA](DATA.md) ⚠️ **已过时** |
+| 数据存在哪、表结构什么样 | [DATA](DATA.md) ✅ |
 | 接下来要做什么、为什么 | [ROADMAP](ROADMAP.md) ✅ · [TODO](TODO.md) ✅ |
 | 克隆儿童声音时首字被吞 | [儿童声音首字保护指南](儿童声音首字保护指南.md) ✅ |
 | 了解音频资产的产品设计 | [AUDIO_ASSET_CENTER](AUDIO_ASSET_CENTER.md) 📋 |
@@ -27,23 +27,6 @@
 根目录还有：[README](../README.md) · [CLAUDE.md](../CLAUDE.md)（**agent 红线，动手前必读**）·
 [TECHNICAL_PATH](../TECHNICAL_PATH.md) · [VOICE_DESIGN_SOP](../VOICE_DESIGN_SOP.md) ·
 [TUI_DESIGN](../TUI_DESIGN.md) · [CONTRIBUTING](../CONTRIBUTING.md) · [CHANGELOG](../CHANGELOG.md)
-
----
-
-## ⚠️ DATA.md 已经和现实不符
-
-它开头写着「**全是 JSON 文件，没有数据库**」，而实际上台账早就在 SQLite：
-
-```
-~/.voxflow/voxflow.db
-  tracks · track_platforms · albums · publish_events · platform_accounts · usage_events · meta
-```
-
-`configs/` 现在只剩**配置**（platforms.json / pricing.json / artist.json），不是台账。
-读 DATA.md 前先知道这件事，否则会照着它去找根本不存在的 JSON 台账。
-
-> 这类错误的代价不只是浪费时间 —— agent 读文档比读代码更早，
-> **一份过时的架构描述会让它从错误的前提开始推理**。
 
 ---
 
