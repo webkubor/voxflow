@@ -62,6 +62,27 @@ dependencies = [
   "onnxruntime",
   "einops",
   "pydub",
+  # ── 2026-09-14 补：干净 venv 实测发现的两个漏声明 ──
+  #
+  # 这两个都在**产品路径**上被直接 import，却没有任何已声明依赖硬性要求它们，
+  # 于是「开发机上能跑」只是因为历史上手工装过 / 被别的包顺带带进来。
+  # 新建 venv 实测（`python -m venv` + `pip install -e .`）抓出来的：
+  #
+  #   pillow   core/cover.py:302 硬 import（无 try/except）→ 封面裁切直接
+  #            ModuleNotFoundError。而且 core/cover.py:336 的 _image_size()
+  #            包了 try/except 并注释「不让缺 Pillow 挡住出图」—— 作者当时就
+  #            撞过这个坑，只是用兜底绕过去，没回来补声明。
+  #            ⚠️ Pillow 在 huggingface_hub / transformers 里**只存在于 extra**
+  #            （transformers 的 vision / all / dev），pip 不会因它们而装。
+  #   requests core/suno_api.py:424 硬 import。干净环境里它是被
+  #            librosa → pooch 顺带带进来的 —— 能用，但这条链不是契约，
+  #            librosa 哪天不依赖 pooch 就断。hub 1.x 已改用 httpx，
+  #            不再提供 requests（旧版 hub 是它的来源）。
+  #
+  # 判断标准不是「装完能不能 import」，而是「**产品路径直接 import 的包有没有
+  # 被显式声明**」。transitively 满足是运气，不是契约。
+  "pillow",
+  "requests",
   # 下模型用（提供 `hf` 命令）。之前走 modelscope，迁 MLX 后换成 hf。
   # 注意：transformers>=5.14 会把 huggingface_hub 顶到 1.x（它要 >=1.5,<2.0）。
   # 项目只用 `hf` 这个 CLI，不用 hub 的 Python API，所以这个 major 跳跃无影响。
