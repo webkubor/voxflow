@@ -28,7 +28,7 @@ ROLE = "demo_narrator"
 REF = os.path.join(str(DATA_DIR), "assets/temp/当前参考_温柔旁白.wav")
 
 print(f"[1/4] 加载 MLX engine")
-engine = TTSBaseEngine("Base", "1.7B", backend="mlx")
+engine = TTSBaseEngine("Base", "1.7B")
 processor = AudioProcessor(str(DATA_DIR))
 cloner = CloneMode(engine, processor)
 

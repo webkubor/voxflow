@@ -180,7 +180,6 @@ def voice_preview(
     console.print(f"[cyan]⏳ 正在生成试听音频...[/cyan]")
     try:
         import soundfile as sf
-        import torch
         from core.engine import TTSBaseEngine
         from core.modes.cloner import CloneMode
 
@@ -190,7 +189,7 @@ def voice_preview(
 
         instruction = data.get("instruction", "")
         # 2026-09-14：迁 Apple MLX，instruct_ids 路径失效，直接传字符串
-        # engine.backend 自动分流；engine.ref_text_for(persona_key) 抛清晰错误
+        # engine.ref_text_for(persona_key) 缺字段会抛清晰错误
         persona_key = data.get("key") or data.get("persona") or "demo_narrator"
         results = list(engine.wrapped_model.generate(
             text=text,

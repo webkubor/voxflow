@@ -95,19 +95,35 @@ class CloneMode:
         else:
             final_instruct = f"{base_instruct} {instruct}".strip()
         priority_tag = "情绪优先" if emotion_priority else "人设优先"
-        print(f"👥 模式：指令克隆({priority_tag}) | 角色：{display_name} | 演技负载：{final_instruct[:50]}...")
 
-        # 2026-09-14：迁 Apple MLX
-        # - MLX base 不接受 instruct_ids（源码层无入口），情绪控制改靠文本 + ref_audio 本身
-        # - MLX base 必须传 ref_text（不传会截断+乱码），从 personas.json 取
-        # - generate() 返回 generator of GenerationResult，要取首个 .audio + sample_rate
-        results = list(self.engine.wrapped_model.generate(
-            text=text,
-            ref_audio=seed,
-            ref_text=self.engine.ref_text_for(persona),
-            lang_code="chinese",
-            temperature=0.7, top_p=0.9, top_k=50,
-        ))
+        # ── MLX 后端 ────────────────────────────────────────────────
+        # MLX base **源码层没有 instruct 入口**（见 docs/MLX_MIGRATION.md 坑 2）：
+        # `_generate_icl()` 签名里没有 instruct，base 分支调
+        # `_prepare_generation_inputs()` 时也不传。所以情绪指令在这里传不进去。
+        #
+        # 以前这里把 `final_instruct` 打印成「演技负载」却没传给模型 —— 用户传了
+        # `--tone` / `--emotion` 毫无效果，控制台却显示得像生效了。
+        # **静默失败比报错更坏**，所以调用方真要了情绪就明说它不生效。
+        if (instruct or "").strip():
+            print(
+                f"👥 模式：指令克隆({priority_tag}) | 角色：{display_name}\n"
+                f"   ⚠️ MLX base 不支持动态情绪指令，「{final_instruct[:40]}」本次不会生效。\n"
+                f"      音色完全来自样音；要带情绪请把它写进文本本身。"
+            )
+        else:
+            print(f"👥 模式：指令克隆({priority_tag}) | 角色：{display_name}")
+
+        results = list(
+            self.engine.wrapped_model.generate(
+                text=text,
+                ref_audio=seed,
+                ref_text=self.engine.ref_text_for(persona),
+                lang_code="chinese",
+                temperature=0.7,
+                top_p=0.9,
+                top_k=50,
+            )
+        )
         sr = self.engine.sample_rate
         wavs = [r.audio for r in results]
         return wavs, sr

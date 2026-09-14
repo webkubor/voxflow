@@ -30,7 +30,7 @@
 
 ## 改 `core/engine.py`（最关键的一处）
 
-- [ ] 把 `from qwen_tts import Qwen3TTSModel` 换成 `from mlx_audio.tts.utils import load_model`
+- [x] 把 `from qwen_tts import Qwen3TTSModel` 换成 `from mlx_audio.tts.utils import load_model`
 - [ ] 删除 `os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"`（MLX 不需要 fallback）
 - [ ] 删除 `import torch`
 - [ ] 把 `self.wrapped_model = Qwen3TTSModel.from_pretrained(...)` 换成

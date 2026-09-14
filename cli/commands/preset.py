@@ -158,7 +158,6 @@ def _run_single_preset(cfg: dict, config_ref: str, dry_run: bool = False):
         write_generation_json,
     )
     import soundfile as sf
-    import torch
 
     model_type = cfg.get("model_type", "Base")
     model_size = cfg.get("model_size", "1.7B")

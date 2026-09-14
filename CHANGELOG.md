@@ -8,8 +8,8 @@
 
 - **Qwen3-TTS 推理框架：PyTorch(MPS) → Apple MLX 8-bit**（代码落地）
   - `core/engine.py`：从 `Qwen3TTSModel.from_pretrained` 改为 `mlx_audio.tts.utils.load_model`；
-    新增 `backend="mlx"|"pytorch"` 双链路参数（PyTorch 仍保留作回退）；
-    新增 `ref_text_for(persona)`；删除 MPS 设备检测
+    **PyTorch 回退链路整个删除**（与 mlx-audio 的 transformers>=5.14 依赖冲突，
+    且 MLP fallback 静默降级是本次迁移的根因）；新增 `ref_text_for(persona)`
   - `core/modes/cloner.py`：删除 `instruct_ids` 路径，改用 `generate(ref_audio=, ref_text=)`
     直接传字符串（MLX Base 不支持 instruct_ids，实测对当前项目无影响）
   - `core/modes/designer.py`：参数顺序适配 `(text, instruct, language)`
