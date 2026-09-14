@@ -418,7 +418,7 @@ results = list(self.engine.wrapped_model.generate(
 |---|---|---|
 | `install.sh` | 用 modelscope 下 Qwen 原生 4.2 GB ×2 到 `~/.voxflow/models/`，运行时却只读 `models-mlx/` → 下 8.4 GB 无用权重 + 「模型未就绪」 | 改 `hf download` 下 8-bit 版到 `MODELS_MLX_DIR` |
 | `web/app.py` | 「模型下载卡」下错同一批；`_check_model_dir` / `_model_downloading` / 进度 / 顶栏探针**共 9 处**判定指旧目录 → 下完说「就绪」、引擎去 models-mlx 找，`RuntimeError` | 收成一个 `_model_dir()`，路径只在一处拼 |
-| `pyproject.toml` | 没声明 `mlx` / `mlx-audio` → 新机器 `pip install -e .` 装完 doctor 报「MLX 未安装」 | 声明 `mlx`；`mlx-audio` 因 transformers 冲突走 `--no-deps`（见「已知问题」） |
+| `pyproject.toml` | 没声明 `mlx` / `mlx-audio` → 新机器 `pip install -e .` 装完 doctor 报「MLX 未安装」 | 声明 `mlx`；`mlx-audio` 恢复**正常声明**（当时因 transformers 冲突走 `--no-deps`，该冲突已于同日升级解决，见下） |
 | `cli/commands/doctor.py` | `check_directories` 里的 `REQUIRED_DIRS` 早被 `DATA_SUBDIRS`/`CODE_SUBDIRS` 取代，两处引用漏改 → 健康环境直接 `NameError` 报 FAIL；`check_models` 查的还是 PyTorch 目录 | 改用真源清单；模型检查改指 MLX 并按体积查完整性 |
 
 **教训**：`core/paths.py` 的注释里写着「路径只定义一次」，迁移时却新增了一个
@@ -426,12 +426,10 @@ results = list(self.engine.wrapped_model.generate(
 拼了一遍，三份里有两份是错的。**新增一个目录就该先加进 paths.py**，这是这条
 规矩存在的意义。
 
-### ⚠️ 已知问题：`mlx-audio` 与 `transformers` 的依赖声明冲突
+### ✅ 已解决：`mlx-audio` 与 `transformers` 的依赖声明冲突
 
-`mlx-audio 0.5.3` 声明 `transformers>=5.14.0`，而本项目锁 `transformers==4.57.3`
-（随仓库自带的 `qwen_tts` 参考实现需要）。本机这个组合**实测能跑**
-（端到端合成 + 全部入口 import 通过），但它是**声明不满足**的状态。
-
+**问题**：`mlx-audio 0.5.3` 声明 `transformers>=5.14.0`，而本项目锁 `transformers==4.57.3`。
+本机这个组合实测能跑（端到端合成 + 全部入口 import 通过），但它是**声明不满足**的状态，
 正常 `pip install` 只有两条坏路：
 
 1. 把 transformers 顶到 5.x → CLI 直接死在
@@ -440,10 +438,47 @@ results = list(self.engine.wrapped_model.generate(
 2. 静默降级到 `mlx-audio 0.2.9` → 那版没有 `load_model` / `generate(ref_text=)`，
    **装完能 import、一合成才炸**，是最难查的那种
 
-所以 `install.sh` 用 `--no-deps` 显式绕过、并把真正的运行时依赖
-（`miniaudio` / `scipy` / `sounddevice` / `tqdm`）单独装上。
-**这是技术债，不是干净解法**：等上游放宽约束、或本项目升级 transformers
-之后应改回普通安装。
+**根因（2026-09-14 查实）**：锁死 `4.57.3` 的理由写的是「随仓库自带的 `qwen_tts`
+参考实现需要」—— 但 `qwen_tts` 是**历史实验脚本**（`tools/` 下的 PyTorch 基线对比），
+**不是产品依赖**。而真正的主链路对 transformers 只有**一处**依赖：
+
+```
+mlx_audio/tts/models/qwen3_tts/qwen3_tts.py:2825
+    from transformers import AutoTokenizer
+```
+
+且这一行**包在 `try/except` 里**，失败只打 warning。也就是说：把历史脚本的版本要求
+当成了产品约束，代价是环境长期不自洽 —— 任何人跑 `pip install <随便什么>` 都可能被 pip
+「顺手修好」，某天突然发现 CLI 坏了。
+
+**解**：`transformers==4.57.3` → `>=5.14`，`mlx-audio` 恢复正常声明，
+`install.sh` 删掉整段 `--no-deps` 绕过代码。
+
+**升级实测**（真实环境，非隔离）：
+
+| 项 | 结果 |
+|---|---|
+| 版本 | transformers 5.17.0 / huggingface_hub 1.31.0 / tokenizers 0.23.2 |
+| `pip check` | `No broken requirements found`（环境首次自洽） |
+| 8 个入口 import | 全绿 |
+| `voice doctor` | 11 PASS / 2 WARN / **0 FAIL** |
+| 克隆路径 | 3.98s / 24 kHz / 峰值 0.989 |
+| 设计路径 | 引擎加载 3.63s、产出 5.20s / 24 kHz / 峰值 0.527 |
+| `hf` CLI | `hf version` → 1.31.0 ✓（hub 1.x 的 `hf` 随主包，`[cli]` extra 已不存在） |
+
+**代价**：`qwen_tts` 在 transformers 5.x 下 **import 阶段就炸**
+（`TypeError: check_model_inputs() missing 1 required positional argument: 'func'`，
+5.x 改了该装饰器签名）。主链路不受影响，但两个历史对比脚本
+（`tools/baseline_pytorch_tts.py`、`tools/verify_instruct_effect.py`）需要单独开环境跑：
+
+```bash
+uv run --with transformers==4.57.3 --with torch python tools/baseline_pytorch_tts.py
+```
+
+`pyproject.toml` 里仍打包 `qwen_tts*`（免得删了别人的东西），并在注释里写明只兼容 4.57.3；
+`qwen-tts-demo` 这个 console script 已摘除 —— 留一个装得上、一跑就报错的命令比没有更糟。
+
+**升级前的回滚点**：`/tmp/vf-before-upgrade.txt`（93 个包的 `pip freeze` 快照）。
 
 ---
 
@@ -457,3 +492,4 @@ results = list(self.engine.wrapped_model.generate(
 | 2026-09-14 17:0x | **再修正** | 第八节「废弃假设 1」是**错的**（基于参数名猜测，未读源码未实测）—— 控制变量实测证明 `instruct_ids` 在 PyTorch base 上真实生效，已改回「成立」并附数据；假设 2 结论保留但更正其支撑事实；新增第十节（迁移实现的静默丢失 + 已修的两个克隆 bug）。纠正人：小楠（workbuddy） |
 | 2026-09-14 17:2x | 补复核 3 | 「MLX ICL 音色更准」被实测否掉 —— 与 PyTorch 之差 0.0006 恰等于 seed 噪声底，无实质差别。附 `tools/compare_voice_fidelity.py`（带负对照 + 噪声底）。含义：迁移在音色上是零收益，别拿它当丢掉情绪指令的补偿项。 |
 | 2026-09-14 17:3x | **收尾** | 修迁移没改完的四处（`install.sh` / `web/app.py` / `pyproject.toml` / `doctor.py`，见第十节）；纠正开头「能力不丢」的表述与 53.41 s 冷启动数字（实为首次冷读盘，常态 6.55 s 冷 / 5.74 s 热）；第十节的静默丢失标记为已修；补「已知问题：mlx-audio 与 transformers 依赖声明冲突」。纠正人：小楠（workbuddy） |
+| 2026-09-14 17:5x | **冲突已解** | 按老爹拍板升级 transformers：`==4.57.3` → `>=5.14`，`mlx-audio` 恢复正常声明，`install.sh` 删掉 `--no-deps` 绕过。查实根因是**把 `qwen_tts` 这个历史实验脚本的版本要求当成了产品依赖**（主链路只用一处 `AutoTokenizer`，且包在 try/except 里）。升级后实测：`pip check` 干净、8 入口全绿、doctor 0 FAIL、克隆 3.98 s、设计 5.20 s；代价是 `qwen_tts` 在 5.x 下 import 即炸（两个历史对比脚本需单独开环境跑）。第十节的「已知问题」段改写为「已解决」并附实测数据。纠正人：小楠（workbuddy） |

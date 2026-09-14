@@ -45,8 +45,9 @@ MLX 与均值之差 +0.0006 —— **恰好落在噪声底上**。所以迁移�
    并告诉你该拿 whisper 转写哪个文件，不会丢一段乱码给你。
 
 **硬件要求收紧：Apple Silicon + macOS，没有例外。** PyTorch 回退链路整个删除
-（它与 mlx-audio 的 `transformers>=5.14` 依赖冲突，留着等于每次改代码维护两套、
-A/B 跑两遍）。`voice doctor` 在非 Apple Silicon 上从 WARN 改为 **FAIL** ——
+（留着等于每次改代码维护两套、A/B 跑两遍；当时它还与 mlx-audio 的
+`transformers>=5.14` 声明冲突，该冲突本版已单独解决，见下文「依赖」节）。
+`voice doctor` 在非 Apple Silicon 上从 WARN 改为 **FAIL** ——
 「不能用」不该被写成「差一点」，而 WARN 是最容易被忽略的一档。
 
 决策过程、能力矩阵、改动清单、回滚方法：
@@ -68,6 +69,52 @@ A/B 跑两遍）。`voice doctor` 在非 Apple Silicon 上从 WARN 改为 **FAIL
   早在改用 `DATA_SUBDIRS` / `CODE_SUBDIRS` 时就被删了，两处引用漏改，一跑就是
   `NameError`。顺带把 `check_models` 从 PyTorch 目录改指 MLX，并按**体积**查完整性
   （与「目录在不在」分工：下载中断会留下一个通过存在性检查、加载时才报错的目录）
+
+### ⬆️ 依赖：解掉 `mlx-audio` ↔ `transformers` 的声明冲突
+
+`mlx-audio 0.5.3` 声明 `transformers>=5.14.0`，而本项目锁 `transformers==4.57.3`。
+本机这个组合实测能跑，但它是**声明不满足**的状态：正常 `pip install` 只有两条坏路 ——
+把 transformers 顶到 5.x（CLI 直接死在 `cannot import name 'hf_api'`），
+或静默降级到 `mlx-audio 0.2.9`（那版没有 `load_model` / `generate(ref_text=)`，
+**装完能 import、一合成才炸**）。当时 `install.sh` 用 `--no-deps` 绕过 ——
+**这是技术债**：任何人跑 `pip install <随便什么>` 都可能被 pip「顺手修好」，
+某天突然发现 CLI 坏了。
+
+**查实根因**：锁死 4.57.3 的理由写的是「随仓库自带的 `qwen_tts` 参考实现需要」，
+但 `qwen_tts` 是**历史实验脚本**（`tools/` 下的 PyTorch 基线对比），不是产品依赖。
+真正的主链路对 transformers 只有**一处**依赖 ——
+`mlx_audio/tts/models/qwen3_tts/qwen3_tts.py:2825` 的 `from transformers import AutoTokenizer`，
+且这一行**包在 `try/except` 里**，失败只打 warning。
+**把历史脚本的版本要求当成了产品约束**，代价是环境长期不自洽。
+
+- `transformers==4.57.3` → **`>=5.14`**；`mlx-audio` 恢复正常声明；
+  `install.sh` 删掉整段 `--no-deps` 绕过代码
+- `huggingface_hub[cli]` → `huggingface_hub`：hub 1.x 的 `hf` 命令随主包一起装，
+  那个 extra 已不存在，留着只会让 pip 每次装都吐
+  `does not provide the extra 'cli'` 的警告
+- 摘除 `qwen-tts-demo` console script —— 它在 5.x 下 import 就炸，
+  留一个装得上、一跑就报错的命令比没有更糟
+
+升级后实测（真实环境）：
+
+| 项 | 结果 |
+|---|---|
+| 版本 | transformers 5.17.0 / huggingface_hub 1.31.0 / tokenizers 0.23.2 |
+| `pip check` | `No broken requirements found` —— 环境首次自洽 |
+| 8 个入口 import | 全绿 |
+| `voice doctor` | 11 PASS / 2 WARN / **0 FAIL** |
+| 克隆路径 | 3.98 s / 24 kHz / 峰值 0.989 |
+| 设计路径 | 引擎加载 3.63 s、产出 5.20 s / 24 kHz / 峰值 0.527 |
+| `hf` CLI | `hf version` → 1.31.0 ✓ |
+
+**代价**：`qwen_tts` 在 transformers 5.x 下 **import 阶段就炸**
+（`TypeError: check_model_inputs() missing 1 required positional argument: 'func'`）。
+主链路不受影响，但 `tools/baseline_pytorch_tts.py`、`tools/verify_instruct_effect.py`
+这两个历史对比脚本需单独开环境跑：
+
+```bash
+uv run --with transformers==4.57.3 --with torch python tools/baseline_pytorch_tts.py
+```
 
 ### 🐛 修复：克隆主路径
 
@@ -110,13 +157,8 @@ A/B 跑两遍）。`voice doctor` 在非 Apple Silicon 上从 WARN 改为 **FAIL
 
 ### ⚠️ 已知问题
 
-- **`mlx-audio` 与 `transformers` 的依赖声明冲突**：mlx-audio 0.5.3 要求
-  `transformers>=5.14.0`，本项目锁 `transformers==4.57.3`（随仓库自带的 `qwen_tts`
-  参考实现需要）。正常 `pip install` 只有两条坏路：把 transformers 顶到 5.x
-  （CLI 直接死在 `cannot import name 'hf_api'`），或静默降级到 mlx-audio 0.2.9
-  （那版没有 `load_model` / `generate(ref_text=)`，装完能 import、一合成才炸）。
-  目前 install.sh 用 `--no-deps` 显式绕过并把真正的运行时依赖单独装上 ——
-  **这是技术债**，等上游放宽约束或本项目升级 transformers 后应改回正常安装
+- **`qwen_tts` 在 transformers 5.x 下不可用**：`tools/` 下两个 PyTorch 基线对比脚本
+  需单独开环境跑（见上「依赖」节）。主链路不受影响
 - **`jxx_host` 的样音本身转写带乱码**（「经经箱影箱」），MLX 克隆输出也跟着乱。
   不是迁移 bug，是录音问题 —— 要重录参考音，或手工修 `ref_text`
 - `pyproject.toml` 的版本号长期没跟 CHANGELOG 走（CHANGELOG 已到 0.9.0 而它停在

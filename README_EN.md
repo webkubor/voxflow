@@ -36,13 +36,11 @@ For a manual Python setup, or when `voice doctor` reports missing packages:
 
 ```bash
 pip install -e .
-pip install pydub "huggingface_hub[cli]"
+pip install pydub
 
-# mlx-audio needs --no-deps: it declares transformers>=5.14 while this project
-# pins transformers==4.57.3. Resolving normally would either upgrade transformers
-# (which breaks the CLI) or silently downgrade mlx-audio to an incompatible 0.2.x.
-pip install --no-deps "mlx-audio==0.5.3"
-pip install miniaudio scipy sounddevice tqdm
+# mlx-audio is declared normally in pyproject.toml — no --no-deps workaround
+# is needed. (It used to be: mlx-audio declares transformers>=5.14 while the
+# project pinned transformers==4.57.3. That pin is gone as of 2026-09-14.)
 ```
 
 ## TTS backend: Apple MLX 8-bit

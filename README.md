@@ -214,7 +214,7 @@ VoiceDesign。复现脚本：[`tools/verify_instruct_effect.py`](tools/verify_in
 ### 硬件要求
 
 **Apple Silicon（M 系列）+ macOS，没有例外。** PyTorch 回退链路已整个删除
-（它与 mlx-audio 的 `transformers>=5.14` 依赖冲突，留着等于每次改代码维护两套）。
+（留着等于每次改代码维护两套、A/B 跑两遍）。
 `voice doctor` 在非 Apple Silicon 上会直接 **FAIL** 而不是 WARN ——
 「不能用」不该被写成「差一点」。
 
