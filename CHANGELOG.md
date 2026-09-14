@@ -2,39 +2,127 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/) 规范。
 
-## [未发布]
+## [0.10.0] - 2026-09-14
 
-### 变更
+一次**换掉推理框架**的版本。表面上写着「PyTorch 换 MLX、体积省 31%、推理快 1.76×」，
+真正解决的是另一件事：**把「静默降级」这一类故障从架构上消掉**。
+顺带暴露出迁移没改完的四处 —— 它们都会让新用户拿到一个跑不起来、却看不出为什么的安装。
 
-- **Qwen3-TTS 推理框架：PyTorch(MPS) → Apple MLX 8-bit**（代码落地）
-  - `core/engine.py`：从 `Qwen3TTSModel.from_pretrained` 改为 `mlx_audio.tts.utils.load_model`；
-    **PyTorch 回退链路整个删除**（与 mlx-audio 的 transformers>=5.14 依赖冲突，
-    且 MLP fallback 静默降级是本次迁移的根因）；新增 `ref_text_for(persona)`
-  - `core/modes/cloner.py`：删除 `instruct_ids` 路径，改用 `generate(ref_audio=, ref_text=)`
-    直接传字符串（MLX Base 不支持 instruct_ids，实测对当前项目无影响）
-  - `core/modes/designer.py`：参数顺序适配 `(text, instruct, language)`
-  - `cli/commands/{voice,tts,doctor}.py`：调用点同步改造、doctor 新增 MLX 后端/模型检查
-  - `~/.voxflow/configs/personas.json`：两个角色都补 `ref_text` 字段
-  - 实测 A/B：MLX 加载 7.90s、推理 7.22s、产出 4.48s（对比 PyTorch 33.03s/13.93s/4.64s），
-    whisper 转写 demo_narrator 两版一字不差
-  - **jxx_host 提示**：其样音转写带「经经箱影箱」乱码，导致 MLX 克隆输出「这是一段用于音乐时的任何」乱码
-    ——是录音样音本身问题，非迁移 bug。重新录参考音或重写 `ref_text` 即可
-  - 决策理由 + 全部改动清单见 [docs/MLX_MIGRATION.md](docs/MLX_MIGRATION.md) 与
-    [docs/MLX_MIGRATION_CHECKLIST.md](docs/MLX_MIGRATION_CHECKLIST.md)
-  - 配套：`tools/{smoke_mlx_tts,baseline_pytorch_tts,mlx_peak_memory,mlx_clone_e2e}.py`
+### 🧠 语音合成后端：PyTorch(MPS) → Apple MLX 8-bit
 
-### 决策
+原先那版靠一行 `PYTORCH_ENABLE_MPS_FALLBACK=1` 才跑得起来，意思是 **MPS 不支持的
+算子静默回退到 CPU**，中间还要把张量搬回来 —— 「统一内存」在这一步被浪费，
+而外部完全看不出来。MLX 没有 fallback：要么全走 Metal GPU，要么报错。
 
-- **Qwen3-TTS 推理框架：PyTorch(MPS) → Apple MLX 8-bit**（决策已落，代码待改）
-  - 实测收益：模型体积 8.4 → 5.8 GB（−31%）、推理 9.32 → 5.29s（×1.76）、
-    峰值内存 6.97 GB；whisper 转写音质无差异
-  - 决策理由 + 全部改动清单见 [docs/MLX_MIGRATION.md](docs/MLX_MIGRATION.md) 与
-    [docs/MLX_MIGRATION_CHECKLIST.md](docs/MLX_MIGRATION_CHECKLIST.md)
-  - 配套：基线/冒烟/内存探测脚本 `tools/smoke_mlx_tts.py`、
-    `tools/baseline_pytorch_tts.py`
-  - 关键风险：`ref_text` 必填、`personas.json` 缺这个字段；mlx_audio base 不支持
-    instruct_ids —— 实测对当前项目无影响（详见文档「已废弃的假设」段）
-  - 配套模型已下载到 `~/.voxflow/models-mlx/{Base,VoiceDesign}-1.7B-8bit/`
+| 指标 | PyTorch + MPS | Apple MLX 8-bit |
+|---|---|---|
+| 模型体积（Base + VoiceDesign） | 8.4 GB | **5.8 GB**（−31%） |
+| 单次推理 | 9.32 s | **5.29 s**（1.76×） |
+| 输出时长 | 4.64 s | 4.56 s |
+| 音质（whisper 转写回读） | 一字不差 | 一字不差 |
+| 峰值内存 | — | 6.97 GB（实测） |
+| 加载 | 14.44 s | 6.55 s 冷 / 5.74 s 热 |
+
+**音色还原度：没有变差，也没有变好。** 一度以为 MLX 只能走 ICL（音色和内容都用上）
+而 PyTorch 的 `x_vector_only` 只取音色向量，条件信息更多就该更像本人 —— 实测否掉了。
+x-vector 余弦相似度：PyTorch 三个 seed 0.9931 / 0.9928 / 0.9925，MLX 0.9934，
+负对照（另一个音色）0.9425。PyTorch 三 seed 极差（**噪声底**）0.0006，
+MLX 与均值之差 +0.0006 —— **恰好落在噪声底上**。所以迁移在音色上是零收益，
+别拿它当丢掉情绪指令的补偿项。
+
+**两个必须知道的代价：**
+
+1. **克隆路径失去动态情绪指令。** PyTorch 的 `instruct_ids` 是**真生效的** ——
+   控制变量实测（固定 seed、只切这一个参数）输出完全分叉：F0 变异系数 +33.9%、
+   F0 动态幅度 +49.9%、能量动态幅度 +136.5%，正是情绪唤醒的声学特征。而 MLX 的
+   Base 模型在源码层就没有 instruct 入口（`_generate_icl()` 签名里没有该参数），
+   所以这是**净损失**，不是「本来就没用」。替代方案：把情绪写进文本本身，
+   或走 VoiceDesign（原生支持指令）。
+   `--tone` / `--emotion` 在克隆路径上现在会**明确提示「本次不会生效」**，
+   不再静默吞掉。
+2. **`ref_text` 必填。** 参考音频的对应文本不填会截断 + 乱码：留空产出 2.08 s、
+   转写「这是一字语音色争要了根根」；填对产出 4.56 s、一字不差。缺字段时直接报错，
+   并告诉你该拿 whisper 转写哪个文件，不会丢一段乱码给你。
+
+**硬件要求收紧：Apple Silicon + macOS，没有例外。** PyTorch 回退链路整个删除
+（它与 mlx-audio 的 `transformers>=5.14` 依赖冲突，留着等于每次改代码维护两套、
+A/B 跑两遍）。`voice doctor` 在非 Apple Silicon 上从 WARN 改为 **FAIL** ——
+「不能用」不该被写成「差一点」，而 WARN 是最容易被忽略的一档。
+
+决策过程、能力矩阵、改动清单、回滚方法：
+[docs/MLX_MIGRATION.md](docs/MLX_MIGRATION.md) · [docs/MLX_MIGRATION_CHECKLIST.md](docs/MLX_MIGRATION_CHECKLIST.md)
+
+### 🐛 修复：迁移没改完的四处（每一处都会让新用户拿到跑不起来的安装）
+
+- **`install.sh` 还在下 PyTorch 权重**：用 modelscope 把 Qwen 原生 4.2 GB ×2 下到
+  `~/.voxflow/models/`，而运行时只读 `models-mlx/`。新用户老老实实跑完 install.sh，
+  拿到 8.4 GB 完全用不上的权重 + 一句「模型未就绪」。改成 `hf download` 下 8-bit 版
+  到 `models-mlx/`
+- **`web/app.py` 的「模型下载卡」下错同一个东西**，而且 `_check_model_dir` /
+  `_model_downloading` / 进度 / 顶栏探针**共 9 处**判定都指旧目录 —— 点按钮下 8.4 GB，
+  下完判定说「就绪」、引擎却去 models-mlx 找，直接 `RuntimeError`。
+  收成一个 `_model_dir()`，路径只在一处拼
+- **`pyproject.toml` 没声明 `mlx`**：代码全切 MLX 了依赖没跟上，新机器
+  `pip install -e .` 装完 doctor 报「MLX 未安装」—— 只有开发机上手动装过的那份能用
+- **`voice doctor` 在健康环境下报 FAIL**：`check_directories` 里的 `REQUIRED_DIRS`
+  早在改用 `DATA_SUBDIRS` / `CODE_SUBDIRS` 时就被删了，两处引用漏改，一跑就是
+  `NameError`。顺带把 `check_models` 从 PyTorch 目录改指 MLX，并按**体积**查完整性
+  （与「目录在不在」分工：下载中断会留下一个通过存在性检查、加载时才报错的目录）
+
+### 🐛 修复：克隆主路径
+
+- **`cloner.py` 导入了一个不存在的 `load_personas`** —— `cloner.run()` 一调就
+  ImportError，`voice clone` / Web 克隆 / preset / preview / dialogue / `main.py`
+  默认路径**自 8-30 起全线不可用**。当时只验了 Web 列表和 `voice voice list`，
+  没跑克隆本身，所以一直没暴露。改用 `get_persona_map()`。
+  **这是 MLX 迁移的前置条件** —— 不修的话 MLX 版 `cloner.run()` 同样跑不起来
+- **`base_instruct` 被合两遍**：`tts.py` 和 `web/app.py` 先合一次、`cloner.py` 再合一次，
+  指令文本变成「中性、清晰、平稳、不带明显情绪 中性、清晰、平稳、不带明显情绪」。
+  契约在 cloner 侧（另三个调用点都只传原始值），所以修调用方
+- **`engine.py` 在请求的模型缺失时静默换成 `Base-0.6B-8bit`** —— 要 VoiceDesign
+  却加载了一个 Base 小模型，外部看不出来。该分支实际永远走不通（0.6B 从没下过），
+  删掉，让「模型目录不存在」的错误信息直接出来
+- **Web 的「下载中」判定漏了 hf 的临时文件**：`*.incomplete` 只查顶层，而
+  `hf download --local-dir` 把临时文件写在 `.cache/huggingface/download/` 子目录里，
+  结果「正在下载」被显示成「未下载」。改成递归找
+
+### 🔧 工具
+
+- `tools/verify_instruct_effect.py` —— 控制变量证明 `instruct_ids` 真实生效：
+  固定 seed、只切该参数，输出完全分叉，并用韵律指标（F0 变异系数、F0 动态幅度、
+  能量动态幅度）确认它传的是「情绪」而不是噪声
+- `tools/compare_voice_fidelity.py` —— 音色还原度，**带负对照 + 噪声底**。
+  方法要点：没有负对照的相似度数字没有刻度（0.99 算好还是差？）；
+  没有噪声底的「略有优势」不是优势（0.0006 的差正好等于换 seed 的抖动）
+
+### 📝 文档
+
+- README 新增「🧠 本地语音合成后端：Apple MLX 8-bit」章节：实测收益、音色还原度复核、
+  两个限制、硬件要求
+- README 修掉两处会误导用户的例子：`voice clone` / `voice dialogue` **都没有 `-o` 参数**
+  （实测报 `No such option`）；克隆示例不该宣传 `--tone` / `--emotion`（迁移后不生效）
+- README 里 7 GB / 3.4 GB / `~/.voxflow/models/` 全部过时，改为 5.8 GB / 2.9 GB / `models-mlx/`
+- README_EN 同步：原文还写着「MPS 不可用时回退 CPU」和
+  `pip install modelscope torch torchaudio`，两处都已不成立
+- `docs/MLX_MIGRATION.md`：第八节「废弃假设 1」纠正回「成立」并附实测数据；
+  新增「复核 3」（音色还原度）与第十节（迁移实现的静默丢失 + 已修的两个克隆 bug）
+- `CLAUDE.md` 去掉「⚠️ 待改：迁 MLX（决策已落，代码未动）」—— 代码早落地了
+
+### ⚠️ 已知问题
+
+- **`mlx-audio` 与 `transformers` 的依赖声明冲突**：mlx-audio 0.5.3 要求
+  `transformers>=5.14.0`，本项目锁 `transformers==4.57.3`（随仓库自带的 `qwen_tts`
+  参考实现需要）。正常 `pip install` 只有两条坏路：把 transformers 顶到 5.x
+  （CLI 直接死在 `cannot import name 'hf_api'`），或静默降级到 mlx-audio 0.2.9
+  （那版没有 `load_model` / `generate(ref_text=)`，装完能 import、一合成才炸）。
+  目前 install.sh 用 `--no-deps` 显式绕过并把真正的运行时依赖单独装上 ——
+  **这是技术债**，等上游放宽约束或本项目升级 transformers 后应改回正常安装
+- **`jxx_host` 的样音本身转写带乱码**（「经经箱影箱」），MLX 克隆输出也跟着乱。
+  不是迁移 bug，是录音问题 —— 要重录参考音，或手工修 `ref_text`
+- `pyproject.toml` 的版本号长期没跟 CHANGELOG 走（CHANGELOG 已到 0.9.0 而它停在
+  0.6.0），而 `release.sh` 正是从 pyproject 取版本号再找 `## [x.y.z]` —— 会打出
+  一个已存在的 tag。本版一并拉到 0.10.0
+
 
 ---
 

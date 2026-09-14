@@ -1,6 +1,9 @@
 # Qwen3-TTS：PyTorch(MPS) → MLX 迁移决策记录
 
-**结论：全迁，且 PyTorch 回退链路整个删掉**。两条路径（克隆 + 设计）都能保，能力不丢，体积 -31%、推理快 1.76×。
+**结论：全迁，且 PyTorch 回退链路整个删掉**。两条路径（克隆 + 设计）都能保，
+体积 −31%、推理快 1.76×。**但有一项净损失**：克隆路径上的「动态情绪指令」
+（PyTorch 的 `instruct_ids`，实测确实生效）在 MLX 的 Base 模型上没有等价实现 ——
+详见第八节「复核 1」与第十节。别把这条读漏。
 **改 `core/engine.py` 之前先读完这一页。**
 
 > 本文档由 AI agent（Claude on macOS）撰写，所有数字来自实测，不来自记忆。
@@ -17,7 +20,11 @@
 | 输出时长 | 4.64 s | 4.56 s | 一致 |
 | 音质（whisper 转写回读） | 一字不差 | 一字不差 | **无损失** |
 | 峰值内存 | — | **6.97 GB**（实测） | 有据可依 |
-| 冷启动加载 | 14.44 s | 53.41 s | ⚠️ 首次慢；MLX 是一次性成本 |
+| 模型加载 | 14.44 s | 6.55 s 冷 / 5.74 s 热 | 首次冷读盘偏慢 |
+
+> 上面 `53.41 s` 那个数字（文档早期版本写的）是**首次冷读盘**、权重还没进
+> page cache 时的值，不是常态。权重进缓存后实测 **6.55 s 冷 / 5.74 s 热**。
+> 拿 53 s 当「MLX 加载慢」的论据是不成立的。
 
 **对 18 GB 机器是决定性的**：TTS 8.4 → 5.8 GB，**才有余量让 ASR + VLM 同时常驻**。
 
@@ -226,7 +233,7 @@ hf download mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit \
 | 指标 | 期望值 |
 |---|---|
 | 加载（冷） | 30-60 s（首次） |
-| 加载（热） | 应远低于冷加载（实测没做完，需补测） |
+| 加载（热） | **实测 6.55 s 冷 / 5.74 s 热**（已补测，见第一节） |
 | 单次推理 | < 6 s |
 | 峰值内存 | < 8 GB |
 
@@ -359,7 +366,11 @@ MLX 只能走 ICL（`ref_audio` + `ref_text`），**音色和内容都用上**�
 
 ## 十、迁移实现中发现的遗留问题
 
-### ⚠️ `core/modes/cloner.py`：情绪指令被算了、打印了，但**没有传给模型**
+### ✅ 已修：`core/modes/cloner.py` 情绪指令被算了、打印了，但**没有传给模型**
+
+> **状态：已修（2026-09-14）。** 现在检测到调用方真要了情绪时，明确打印
+> 「⚠️ MLX base 不支持动态情绪指令，「…」本次不会生效」并说明替代做法。
+> 下面是当时的原始记录，留着说明这类问题的样子。
 
 迁移后的 `cloner.run()` 里：
 
@@ -386,6 +397,7 @@ results = list(self.engine.wrapped_model.generate(
 要么别打印一个没生效的「演技负载」，改成明确提示「MLX base 路径不支持动态情绪指令」。
 
 **建议**：迁移收尾时一并处理，别留在「能跑就行」的状态。
+→ **已处理（2026-09-14）**：改为明确提示不生效。
 
 ### 📌 已修的两个克隆路径 bug（`3c778af`，与 MLX 迁移无关）
 
@@ -395,6 +407,43 @@ results = list(self.engine.wrapped_model.generate(
 | `base_instruct` 被合两遍（`tts.py` + `web/app.py` + `cloner.py`） | 指令文本重复：「中性、清晰、平稳、不带明显情绪 中性、清晰、平稳、不带明显情绪」 |
 
 第一条是**迁移的前置条件** —— 不修的话，MLX 版 `cloner.run()` 同样跑不起来。
+
+### 📌 已修：迁移没改完的四处（2026-09-14 收尾时发现）
+
+「改了 engine 和三个调用点」不等于迁完。下面四处都在运行时之外，
+所以跑一遍合成不会暴露它们 —— 但每一处都会让**新用户**拿到一个
+跑不起来、却看不出为什么的安装：
+
+| 位置 | 漏改后果 | 修法 |
+|---|---|---|
+| `install.sh` | 用 modelscope 下 Qwen 原生 4.2 GB ×2 到 `~/.voxflow/models/`，运行时却只读 `models-mlx/` → 下 8.4 GB 无用权重 + 「模型未就绪」 | 改 `hf download` 下 8-bit 版到 `MODELS_MLX_DIR` |
+| `web/app.py` | 「模型下载卡」下错同一批；`_check_model_dir` / `_model_downloading` / 进度 / 顶栏探针**共 9 处**判定指旧目录 → 下完说「就绪」、引擎去 models-mlx 找，`RuntimeError` | 收成一个 `_model_dir()`，路径只在一处拼 |
+| `pyproject.toml` | 没声明 `mlx` / `mlx-audio` → 新机器 `pip install -e .` 装完 doctor 报「MLX 未安装」 | 声明 `mlx`；`mlx-audio` 因 transformers 冲突走 `--no-deps`（见「已知问题」） |
+| `cli/commands/doctor.py` | `check_directories` 里的 `REQUIRED_DIRS` 早被 `DATA_SUBDIRS`/`CODE_SUBDIRS` 取代，两处引用漏改 → 健康环境直接 `NameError` 报 FAIL；`check_models` 查的还是 PyTorch 目录 | 改用真源清单；模型检查改指 MLX 并按体积查完整性 |
+
+**教训**：`core/paths.py` 的注释里写着「路径只定义一次」，迁移时却新增了一个
+`models-mlx/` 目录**而没有加进 paths.py** —— 于是 engine、web、install.sh 各自
+拼了一遍，三份里有两份是错的。**新增一个目录就该先加进 paths.py**，这是这条
+规矩存在的意义。
+
+### ⚠️ 已知问题：`mlx-audio` 与 `transformers` 的依赖声明冲突
+
+`mlx-audio 0.5.3` 声明 `transformers>=5.14.0`，而本项目锁 `transformers==4.57.3`
+（随仓库自带的 `qwen_tts` 参考实现需要）。本机这个组合**实测能跑**
+（端到端合成 + 全部入口 import 通过），但它是**声明不满足**的状态。
+
+正常 `pip install` 只有两条坏路：
+
+1. 把 transformers 顶到 5.x → CLI 直接死在
+   `ImportError: cannot import name 'hf_api' from 'transformers.utils'`
+   （2026-09-14 16:46 真实发生过）
+2. 静默降级到 `mlx-audio 0.2.9` → 那版没有 `load_model` / `generate(ref_text=)`，
+   **装完能 import、一合成才炸**，是最难查的那种
+
+所以 `install.sh` 用 `--no-deps` 显式绕过、并把真正的运行时依赖
+（`miniaudio` / `scipy` / `sounddevice` / `tqdm`）单独装上。
+**这是技术债，不是干净解法**：等上游放宽约束、或本项目升级 transformers
+之后应改回普通安装。
 
 ---
 
@@ -407,3 +456,4 @@ results = list(self.engine.wrapped_model.generate(
 | 2026-09-14 | 收尾 | 按老爹拍板**删掉 PyTorch 回退链路**——MLX 已实测跑通，回退路径与 mlx-audio 的 transformers>=5.14 依赖冲突（voxflow 锁 4.57.3），留着只会每次改代码都维护两套；回滚方法改为 git revert 本次提交 |
 | 2026-09-14 17:0x | **再修正** | 第八节「废弃假设 1」是**错的**（基于参数名猜测，未读源码未实测）—— 控制变量实测证明 `instruct_ids` 在 PyTorch base 上真实生效，已改回「成立」并附数据；假设 2 结论保留但更正其支撑事实；新增第十节（迁移实现的静默丢失 + 已修的两个克隆 bug）。纠正人：小楠（workbuddy） |
 | 2026-09-14 17:2x | 补复核 3 | 「MLX ICL 音色更准」被实测否掉 —— 与 PyTorch 之差 0.0006 恰等于 seed 噪声底，无实质差别。附 `tools/compare_voice_fidelity.py`（带负对照 + 噪声底）。含义：迁移在音色上是零收益，别拿它当丢掉情绪指令的补偿项。 |
+| 2026-09-14 17:3x | **收尾** | 修迁移没改完的四处（`install.sh` / `web/app.py` / `pyproject.toml` / `doctor.py`，见第十节）；纠正开头「能力不丢」的表述与 53.41 s 冷启动数字（实为首次冷读盘，常态 6.55 s 冷 / 5.74 s 热）；第十节的静默丢失标记为已修；补「已知问题：mlx-audio 与 transformers 依赖声明冲突」。纠正人：小楠（workbuddy） |

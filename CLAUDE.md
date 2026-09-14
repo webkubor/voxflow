@@ -55,10 +55,17 @@
 
 ---
 
-## ⚠️ 待改：Qwen3-TTS 迁 Apple MLX（决策已落，代码未动）
+## 🧠 语音合成后端：Apple MLX 8-bit（2026-09-14 已落地）
 
-详见 [`docs/MLX_MIGRATION.md`](docs/MLX_MIGRATION.md)（决策 + 完整论证）
+**MLX 是唯一后端，PyTorch 回退链路已整个删除。** 改 `core/engine.py` 之前先读
+[`docs/MLX_MIGRATION.md`](docs/MLX_MIGRATION.md)（决策 + 完整论证 + 已知代价）
 和 [`docs/MLX_MIGRATION_CHECKLIST.md`](docs/MLX_MIGRATION_CHECKLIST.md)（改动清单）。
 
-**改 `core/engine.py` 之前必须先读这两份**，否则可能丢掉 ref_text 必填、instruct_ids
-失效等关键差异。回滚方法也在 checklist 里，5 分钟内回到 PyTorch 版。
+改之前必须知道的两件事，否则一定踩：
+
+1. **`ref_text` 是必填的**（`personas.json`），留空会截断 + 乱码
+2. **克隆路径没有动态情绪指令**：MLX 的 Base 模型源码层没有 instruct 入口。
+   PyTorch 的 `instruct_ids` 是真生效的（实测），所以这是**净损失**。
+   传 `--tone` / `--emotion` 时要明确提示不生效，不要打印一个没生效的「演技负载」
+
+回滚方式：`git revert` 相关提交。旧 PyTorch 模型仍在 `~/.voxflow/models/`（8.4 GB）未动。
