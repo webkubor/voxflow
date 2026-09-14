@@ -52,3 +52,13 @@
   只跑 typecheck 漏过真 bug —— 重复 import 只有 build 会报。
 - **验证 UI 要看图，不能只读 DOM**。`display:none` 的节点 `querySelector`
   照样找得到，「在 DOM 里」≠「看得见」。2026-09-06 的整屏黑屏就是这么漏过去的。
+
+---
+
+## ⚠️ 待改：Qwen3-TTS 迁 Apple MLX（决策已落，代码未动）
+
+详见 [`docs/MLX_MIGRATION.md`](docs/MLX_MIGRATION.md)（决策 + 完整论证）
+和 [`docs/MLX_MIGRATION_CHECKLIST.md`](docs/MLX_MIGRATION_CHECKLIST.md)（改动清单）。
+
+**改 `core/engine.py` 之前必须先读这两份**，否则可能丢掉 ref_text 必填、instruct_ids
+失效等关键差异。回滚方法也在 checklist 里，5 分钟内回到 PyTorch 版。

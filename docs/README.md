@@ -21,6 +21,7 @@
 | 数据存在哪、表结构什么样 | [DATA](DATA.md) ✅ |
 | 接下来要做什么、为什么 | [ROADMAP](ROADMAP.md) ✅ · [TODO](TODO.md) ✅ |
 | 克隆儿童声音时首字被吞 | [儿童声音首字保护指南](儿童声音首字保护指南.md) ✅ |
+| **TTS 框架要从 PyTorch(MPS) 迁到 Apple MLX** | [MLX_MIGRATION](MLX_MIGRATION.md) ⚠️（含已废弃假设）+ [改动 Checklist](MLX_MIGRATION_CHECKLIST.md) ✅ |
 | 了解音频资产的产品设计 | [AUDIO_ASSET_CENTER](AUDIO_ASSET_CENTER.md) 📋 |
 | 打包成桌面应用 | [DESKTOP_APP_PLAN](DESKTOP_APP_PLAN.md) 📋 |
 | 封面出图的历史记录 | [COVER_IMAGE_LOG](COVER_IMAGE_LOG.md) ✅ |

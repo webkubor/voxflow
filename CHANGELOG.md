@@ -4,7 +4,18 @@
 
 ## [未发布]
 
-（暂无累积改动）
+### 决策
+
+- **Qwen3-TTS 推理框架：PyTorch(MPS) → Apple MLX 8-bit**（决策已落，代码待改）
+  - 实测收益：模型体积 8.4 → 5.8 GB（−31%）、推理 9.32 → 5.29s（×1.76）、
+    峰值内存 6.97 GB；whisper 转写音质无差异
+  - 决策理由 + 全部改动清单见 [docs/MLX_MIGRATION.md](docs/MLX_MIGRATION.md) 与
+    [docs/MLX_MIGRATION_CHECKLIST.md](docs/MLX_MIGRATION_CHECKLIST.md)
+  - 配套：基线/冒烟/内存探测脚本 `tools/smoke_mlx_tts.py`、
+    `tools/baseline_pytorch_tts.py`
+  - 关键风险：`ref_text` 必填、`personas.json` 缺这个字段；mlx_audio base 不支持
+    instruct_ids —— 实测对当前项目无影响（详见文档「已废弃的假设」段）
+  - 配套模型已下载到 `~/.voxflow/models-mlx/{Base,VoiceDesign}-1.7B-8bit/`
 
 ---
 

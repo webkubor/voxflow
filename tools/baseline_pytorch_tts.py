@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PyTorch 版 Qwen3-TTS 基线：与 MLX 版做同文本同音色的 A/B 对比。
 
-用法（必须用 voxflow 自己的 venv）：
+跑法（必须用 voxflow 自己的 venv）：
     .venv/bin/python tools/baseline_pytorch_tts.py
 """
 import os
