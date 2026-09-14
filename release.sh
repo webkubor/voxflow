@@ -18,8 +18,24 @@ fi
 # 2. 提取当前版本的更新日志
 echo "📝 Extracting release notes from $CHANGELOG_FILE..."
 if [ -f "$CHANGELOG_FILE" ]; then
-    # 提取当前版本号到下一个版本号之间的内容
-    RELEASE_NOTES=$(sed -n "/## \[$VERSION\]/,/## \[/p" "$CHANGELOG_FILE" | sed '$d')
+    # ⚠️ 两个模式都必须锚定行首（^）。
+    #
+    # 原来写的是 `/## \[$VERSION\]/,/## \[/` —— 没锚定，于是 sed 会在**正文里**
+    # 任何含 `## [` 的行提前结束范围。2026-09-14 实际踩到：0.10.0 的正文里有一句
+    # 「`release.sh` 正是从 pyproject 取版本号再找 `## [x.y.z]`」，发版说明就在
+    # 那里被拦腰截断（228 行 vs 完整 233 行），末尾停在半句话上。
+    #
+    # 顺带去掉尾部残留的空行和分隔线 —— 上面 sed '$d' 删掉的是下一个版本的
+    # 标题行，但标题前那行 `---` 会留下来，挂在发版说明末尾很难看。
+    RELEASE_NOTES=$(awk -v v="$VERSION" '
+        $0 ~ "^## \\[" v "\\]" { f = 1 }
+        f && $0 ~ "^## \\[" && $0 !~ "^## \\[" v "\\]" { exit }
+        f { lines[++n] = $0 }
+        END {
+            while (n > 0 && (lines[n] ~ /^[[:space:]]*$/ || lines[n] ~ /^---[[:space:]]*$/)) n--
+            for (i = 1; i <= n; i++) print lines[i]
+        }
+    ' "$CHANGELOG_FILE")
 else
     RELEASE_NOTES="Release version $VERSION of VoxFlow."
 fi
