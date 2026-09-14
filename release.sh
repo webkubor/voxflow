@@ -38,7 +38,16 @@ echo "🧹 Cleaning old builds..."
 rm -rf dist/ build/ *.egg-info/
 
 echo "📦 Building source and wheel packages..."
-if [ -f "./.venv/bin/python" ]; then
+# ⚠️ 别用 `python -m build`：mlx-whisper 的 wheel 打包错了 —— 里面套了三层
+# `build/lib/build/lib/build/lib/mlx_whisper/...`，装进 venv 后 site-packages
+# 里会多出一个杂散的 `build/` **命名空间包**。于是 `import build` 解析到它，
+# `python -m build` 报 `No module named build.__main__`（2026-09-14 实际发生过）。
+#
+# uv build 在隔离的构建环境里跑，不受 venv 的 site-packages 污染影响；
+# uv.lock 也说明 uv 本来就是本项目的工具。找不到 uv 才回落到 pip 的 build。
+if command -v uv &> /dev/null; then
+    uv build
+elif [ -f "./.venv/bin/python" ]; then
     ./.venv/bin/python -m build
 else
     python3 -m build
