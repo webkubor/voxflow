@@ -194,7 +194,23 @@ else
 fi
 
 # ── 7. 创建必要目录 ──
-mkdir -p assets/temp assets/reference_audio out configs/presets
+#
+# 数据目录走真源。这里曾经硬写着 `assets/temp assets/reference_audio out` ——
+# 那是数据**还没搬到 `~/.voxflow`** 之前的路径。搬完之后这三行就一直在建
+# 项目目录里的空目录，而真正该建的数据目录一个都没建：
+#
+#   · 新机器跑完 install.sh，doctor 直接报「缺失 11 个目录: 数据:configs, …」
+#   · `assets/` 在仓库里放的是 branding / screenshots（5 个跟踪文件），
+#     把数据目录混进去只会让人以为数据该放这儿
+#   · `out` 在本机是迁移时留的兼容软链（→ ~/.voxflow/out），新机器上没有，
+#     `mkdir -p out` 会实打实建一个空目录
+#
+# 这就是「拼第二遍就会有第二次对不上」，所以直接问 Python 要。
+# 此时 venv 已激活（第 4 步 source 过）、`pip install -e .` 已执行，core 可导入。
+python -c "from core.paths import ensure_dirs; ensure_dirs()"
+
+# configs/presets 是**代码**目录（CODE_SUBDIRS），本来就该在项目里。
+mkdir -p configs/presets
 
 # ── 8. 运行环境自检 ──
 echo ""
