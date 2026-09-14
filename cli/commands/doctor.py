@@ -20,7 +20,7 @@ from rich.panel import Panel
 #   DATA_DIR    数据根（~/.voxflow）—— 模型、音色、产物
 #   PROJECT_DIR 代码根 —— venv、内置预设、命令入口
 # 这两个混用会得出「模型没下载」「venv 不存在」这种错判。
-from core.paths import DATA_DIR as BASE_DIR, PROJECT_DIR
+from core.paths import DATA_DIR as BASE_DIR, MODELS_MLX_DIR, PROJECT_DIR
 
 console = Console()
 
@@ -77,7 +77,8 @@ def check_venv():
 
 # ── 3. 核心依赖 ─────────────────────────────────────────────
 
-# 2026-09-14：迁 Apple MLX，torch/torchaudio 不再是必需依赖（但保留作回退）
+# 2026-09-14：迁 Apple MLX 后 torch / torchaudio 不再是依赖 ——
+# PyTorch 回退链路已整个删除，MLX 是唯一后端（见 docs/MLX_MIGRATION.md）。
 CORE_PACKAGES = [
     "transformers",
     "mlx",
@@ -113,39 +114,40 @@ def check_dependencies():
         return _ok(f"核心依赖完整（{len(CORE_PACKAGES)} 个）", detail + " ...")
     return _fail(
         f"缺失 {len(missing)} 个依赖: {', '.join(missing)}",
-        "运行 pip install -e . && pip install pydub modelscope",
+        '运行 pip install -e . && pip install pydub "huggingface_hub[cli]"',
     )
 
 
-# ── 4. PyTorch 硬件加速 ─────────────────────────────────────
+# ── 4. MLX 硬件后端 ─────────────────────────────────────────
 
 @register
 def check_mlx_backend():
     """2026-09-14：迁 Apple MLX 后的硬件后端检查。
 
     MLX 链路：必须 macOS + Apple Silicon，Metal GPU 直驱，无 device 概念。
-    PyTorch 链路（回退）：仍然可用，但 MLX 是首选。
+
+    这里两处是 **FAIL 而不是 WARN**：PyTorch 回退链路已经删掉，MLX 是唯一后端，
+    没有 Apple Silicon 就是彻底跑不了。标成 WARN 等于把「不能用」说成「差一点」，
+    而 WARN 是最容易被忽略的一档。
     """
     import platform, sys
     if sys.platform != "darwin":
-        return _warn(
-            "非 macOS 平台",
-            "Apple MLX 仅支持 macOS；当前 PyTorch 回退链路可用但推理速度较慢",
+        return _fail(
+            f"非 macOS 平台（{sys.platform}）",
+            "Apple MLX 仅支持 macOS；PyTorch 回退链路已于 2026-09-14 删除，本机无法本地推理",
         )
     machine = platform.machine()
     if machine not in ("arm64", "aarch64"):
-        return _warn(
+        return _fail(
             f"非 Apple Silicon（{machine}）",
-            "MLX 需要 M 系列芯片；当前走 PyTorch CPU 回退",
+            "MLX 需要 M 系列芯片；PyTorch 回退链路已删除，本机无法本地推理",
         )
     try:
         import mlx.core  # noqa: F401
         import mlx_audio  # noqa: F401
         return _ok("MLX 后端可用（Apple Silicon Metal）")
-    except ImportError as e:
-        return _fail(
-            "MLX 未安装", "运行 pip install mlx mlx-audio（PyTorch 链路仍可用作回退）"
-        )
+    except ImportError:
+        return _fail("MLX 未安装", "运行 pip install mlx mlx-audio")
 
 
 # ── 5. Qwen3-TTS SDK ────────────────────────────────────────
@@ -176,18 +178,24 @@ def check_mlx_models():
     return _ok("MLX 模型完整（Base + VoiceDesign）")
 
 
-# ── 6. 模型就绪状态 ─────────────────────────────────────────
+# ── 6. 模型完整性 ───────────────────────────────────────────
 
 @register
 def check_models():
-    models_dir = BASE_DIR / "models"
-    if not models_dir.exists():
-        return _fail("models/ 目录不存在", "运行 ./install.sh 下载模型")
+    """按体积确认模型**下完了**，不是下到一半。
+
+    与 check_mlx_models 分工：那个只管「目录在不在」，这个管「下全没下全」。
+    下载中断会留下一个能通过存在性检查、却在加载时报错的目录。
+    """
+    if not MODELS_MLX_DIR.exists():
+        return _fail("MLX 模型目录不存在", "运行 ./install.sh 下载模型")
 
     results = []
     all_ok = True
-    for name, min_size_mb in [("Base-1.7B", 3000), ("VoiceDesign-1.7B", 3000)]:
-        model_path = models_dir / name
+    # 8-bit 版单模型约 2.9 GB；阈值放 2.5 GB，只用来识别「明显没下完」
+    for name, min_size_mb in [("Base-1.7B-8bit", 2500),
+                              ("VoiceDesign-1.7B-8bit", 2500)]:
+        model_path = MODELS_MLX_DIR / name
         if not model_path.exists():
             results.append(f"{name}: 缺失")
             all_ok = False
@@ -244,8 +252,9 @@ def check_directories():
     missing += [f"数据:{d}" for d in DATA_SUBDIRS if not (BASE_DIR / d).exists()]
     missing += [f"代码:{d}" for d in CODE_SUBDIRS if not (PROJECT_DIR / d).exists()]
 
+    total = len(DATA_SUBDIRS) + len(CODE_SUBDIRS)
     if not missing:
-        return _ok(f"目录结构完整（{len(REQUIRED_DIRS)} 个）")
+        return _ok(f"目录结构完整（{total} 个）")
     return _warn(
         f"缺失 {len(missing)} 个目录: {', '.join(missing)}",
         "部分功能可能不可用",
@@ -457,7 +466,7 @@ def _try_fix(results):
 
         # 创建缺失目录
         if "目录" in msg:
-            for d in REQUIRED_DIRS:
+            for d in DATA_SUBDIRS:
                 dir_path = BASE_DIR / d
                 if not dir_path.exists():
                     dir_path.mkdir(parents=True, exist_ok=True)
@@ -465,7 +474,7 @@ def _try_fix(results):
                     fixed += 1
 
         # 重新安装依赖
-        if "依赖" in msg or "torch" in msg or "qwen_tts" in msg:
+        if "依赖" in msg:
             console.print(f"  [cyan]→[/cyan] 重新安装依赖...")
             subprocess.run(
                 [sys.executable, "-m", "pip", "install", "-e", "."],

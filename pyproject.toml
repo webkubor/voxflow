@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "voxflow"
-version = "0.6.0"
+version = "0.10.0"
 description = "VoxFlow 声流 — 从 AI 声音到 AI 音乐再到自动发布的一条流水线：本地克隆音色 → Suno 出歌 → 整理物料上架各平台。"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -21,16 +21,33 @@ authors = [{ name = "Webkubor" }]
 dependencies = [
   "transformers==4.57.3",
   "accelerate==1.12.0",
+  # ── 推理引擎：Apple MLX（2026-09-14 起是唯一后端）──────────────
+  # 之前漏在这里：代码全切到 MLX 了，依赖却没声明，新机器 `pip install -e .`
+  # 装完跑 `voice doctor` 报「MLX 未安装」——只有开发机上手动装过的那份能用。
+  # 加 sys_platform 标记是为了让非 macOS 上 `pip install -e .` 不至于直接
+  # 炸在「no matching distribution for mlx」：装得下去，再由 doctor 明确
+  # 报「非 Apple Silicon，无法本地推理」——报错要说人话。
+  #
+  # ⚠️ mlx-audio 故意不在这里声明：它要求 transformers>=5.14.0，而本项目锁
+  # transformers==4.57.3（qwen_tts 参考实现需要）。裸写 `mlx-audio` 的话 pip
+  # 会"解决"这个冲突——静默降级到 0.2.9，那版的 API 和这里用的完全不同
+  # （没有 load_model / generate(ref_text=)），装完能 import、一合成才炸。
+  # 所以它由 install.sh 按 `--no-deps` 显式装，见那个脚本里的说明。
+  "mlx; sys_platform == 'darwin'",
   "fastapi",
   "uvicorn",
   "python-multipart",
   "librosa",
+  # torch / torchaudio 现在只被两处用：随仓库自带的 qwen_tts 参考实现，
+  # 以及 tools/ 里跑 PyTorch 基线的对比脚本。主链路已不依赖它们。
   "torchaudio",
   "soundfile",
   "sox",
   "onnxruntime",
   "einops",
   "pydub",
+  # 下模型用（提供 `hf` 命令）。之前走 modelscope，迁 MLX 后换成 hf。
+  "huggingface_hub[cli]",
   # Python 3.13 起标准库 audioop 被移除（PEP 594），而 pydub 仍 import 它。
   # 不声明这条，3.13+ 上装完依赖后 `voice doctor` 第一步就崩在
   # `ModuleNotFoundError: No module named 'pyaudioop'`，看起来像 pydub 装坏了。

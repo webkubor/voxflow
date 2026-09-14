@@ -18,7 +18,7 @@
 所以分开：代码在项目目录，数据在 `~/.voxflow/`（可用 `VOXFLOW_HOME` 覆盖）。
 工具怎么升级、装几个副本、clone 到哪，数据都在原地。
 
-模型也放数据目录 —— 8.4 GB，重装工具不该重下一遍。
+模型也放数据目录 —— 5.8 GB，重装工具不该重下一遍。
 
 ## 迁移
 
@@ -71,7 +71,14 @@ MUSIC_DIR = OUT_DIR / "music"              # Suno 下载的歌
 PROMO_DIR = OUT_DIR / "promo"              # 宣推短视频产物 (reel-kit 合成)
 PUBLISH_DIR = DATA_DIR / "publish"         # 发布物料：平台规定的结构
 DESIGNS_DIR = DATA_DIR / "voice_designs"   # 音色设计配方
-MODELS_DIR = DATA_DIR / "models"           # TTS 模型：8.4 GB，重装不该重下
+
+# TTS 模型分两代，**当前运行时只用 MLX 那一代**：
+#   models/      PyTorch 原生（4.2 GB × 2 = 8.4 GB）—— 2026-09-14 迁移前的下载，
+#                现在没有任何代码读它，留着只是为了回滚（见 docs/MLX_MIGRATION.md）
+#   models-mlx/  MLX 8-bit（2.9 GB × 2 = 5.8 GB）—— 唯一在用的一代
+# 分开两个目录而不是就地覆盖：回滚只要 git revert，不用重下 8.4 GB。
+MODELS_DIR = DATA_DIR / "models"           # 旧 PyTorch 模型：8.4 GB（可删，见上）
+MODELS_MLX_DIR = DATA_DIR / "models-mlx"   # MLX 8-bit 模型：5.8 GB（当前在用）
 
 PERSONAS_FILE = CONFIG_DIR / "personas.json"
 SCRIPTS_FILE = CONFIG_DIR / "scripts.json"
@@ -92,7 +99,8 @@ BRANDING_DIR = PROJECT_DIR / "assets" / "branding"             # logo
 # 数据搬家之后它拿数据根去找代码目录，报「缺失 6 个目录」。
 # 同一份清单存在两处，就一定会在某次改动后对不上。
 DATA_SUBDIRS = ["configs", "assets", "assets/temp", "assets/reference_audio",
-                "out", "out/music", "out/promo", "publish", "voice_designs", "models"]
+                "out", "out/music", "out/promo", "publish", "voice_designs",
+                "models", "models-mlx"]
 CODE_SUBDIRS = ["cli", "core", "web", "qwen_tts", "configs", "configs/presets", "scripts"]
 
 

@@ -36,7 +36,7 @@ sys.path.insert(0, str(_PROJECT_DIR))
 
 from core.exe import find_exe as _find_exe  # 外部命令一律走它，见 core/exe.py
 from core.paths import (  # noqa: E402
-    DATA_DIR, OUT_DIR, TEMP_DIR, REF_DIR, MODELS_DIR,
+    DATA_DIR, OUT_DIR, TEMP_DIR, REF_DIR, MODELS_MLX_DIR,
     PERSONAS_FILE, SCRIPTS_FILE, PROJECT_DIR, ensure_dirs,
 )
 
@@ -535,29 +535,44 @@ def _run_design_task(task_id: str, params: dict, update_fn):
               completed_at=datetime.now().strftime("%H:%M:%S"))
 
 
+# ── 本地模型目录（唯一出处）─────────────────────────────────
+#
+# 2026-09-14 迁 Apple MLX 后模型换成 8-bit 版、挪到 models-mlx/。而下面这几处
+# （就绪判定 / 下载中判定 / 进度 / 顶栏探针）原来各自把
+# `MODELS_DIR / "<类型>-1.7B"` 拼了一遍，迁移时全漏改 —— 后果是 Web 上点
+# 「下载模型」会去下 8.4 GB 的 PyTorch 权重，下完判定说「就绪」、引擎却去
+# models-mlx 找，直接 RuntimeError。所以收成一个函数，路径只在这里拼。
+def _model_dir(model_type: str) -> Path:
+    return MODELS_MLX_DIR / f"{model_type}-1.7B-8bit"
+
+
+def _incomplete_files(p: Path) -> list:
+    """还没下完的临时文件。
+
+    **递归找**，因为两个下载器的临时文件落点不同：
+    huggingface_hub 带 `--local-dir` 时写 `<dir>/.cache/huggingface/download/*.incomplete`，
+    modelscope 写 `<dir>/*.incomplete`。只看顶层会漏掉前者，
+    表现为「正在下载」被显示成「未下载」。
+    """
+    return list(p.rglob("*.incomplete"))
+
+
 def _check_model_dir(model_type: str) -> bool:
     """检查模型是否下载完成（不是 .incomplete 文件）"""
-    if model_type == "VoiceDesign":
-        p = MODELS_DIR / "VoiceDesign-1.7B"
-    else:
-        p = MODELS_DIR / "Base-1.7B"
+    p = _model_dir(model_type)
     if not p.exists():
         return False
     # 检查是否有完整的 model.safetensors（不是 .incomplete）
     safetensors = list(p.glob("*.safetensors"))
-    incomplete = list(p.glob("*.incomplete"))
-    return len(safetensors) > 0 and len(incomplete) == 0
+    return len(safetensors) > 0 and not _incomplete_files(p)
 
 
 def _model_downloading(model_type: str) -> bool:
     """检查模型是否正在下载"""
-    if model_type == "VoiceDesign":
-        p = MODELS_DIR / "VoiceDesign-1.7B"
-    else:
-        p = MODELS_DIR / "Base-1.7B"
+    p = _model_dir(model_type)
     if not p.exists():
         return False
-    return len(list(p.glob("*.incomplete"))) > 0
+    return bool(_incomplete_files(p))
 
 
 def _get_processor():
@@ -580,8 +595,8 @@ def _get_base_engine():
         if not _check_model_dir("Base"):
             raise RuntimeError(
                 f"Base 模型未下载。请先运行 install.sh 或手动下载:\n"
-                f"  .venv/bin/python -m modelscope.cli.cli download "
-                f"--model Qwen/Qwen3-TTS-12Hz-1.7B-Base --local_dir ./models/Base-1.7B"
+                f"  hf download mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit "
+                f"--local-dir {_model_dir('Base')}"
             )
         from core.engine import TTSBaseEngine
         print("🚀 正在加载 Base-1.7B 引擎...")
@@ -603,8 +618,8 @@ def _get_design_engine():
         if not _check_model_dir("VoiceDesign"):
             raise RuntimeError(
                 f"VoiceDesign 模型未下载。请手动下载:\n"
-                f"  .venv/bin/python -m modelscope.cli.cli download "
-                f"--model Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign --local_dir ./models/VoiceDesign-1.7B"
+                f"  hf download mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit "
+                f"--local-dir {_model_dir('VoiceDesign')}"
             )
         from core.engine import TTSBaseEngine
         print("🚀 正在加载 VoiceDesign-1.7B 引擎...")
@@ -734,15 +749,13 @@ def index():
 # ── API 路由 ──────────────────────────────────────────────
 def _model_download_progress(model_type: str) -> dict:
     """检查模型下载进度"""
-    if model_type == "VoiceDesign":
-        p = MODELS_DIR / "VoiceDesign-1.7B"
-        expected_size = 3_600_000_000  # ~3.6GB
-    else:
-        p = MODELS_DIR / "Base-1.7B"
-        expected_size = 3_600_000_000  # ~3.6GB
+    p = _model_dir(model_type)
+    # MLX 8-bit 版单模型约 2.9 GB（PyTorch 原生是 4.2 GB）——
+    # 这个数只用来算百分比，写大了会让进度条永远到不了头。
+    expected_size = 2_900_000_000
     if not p.exists():
         return {"downloading": False, "downloaded_mb": 0, "total_mb": round(expected_size / 1024 / 1024), "percent": 0}
-    incomplete = list(p.glob("*.incomplete"))
+    incomplete = _incomplete_files(p)
     complete = list(p.glob("*.safetensors"))
     if incomplete:
         size = sum(f.stat().st_size for f in incomplete)
@@ -1083,8 +1096,8 @@ def economics(days: int = 30):
 
 _download_procs: dict[str, object] = {}
 _MODEL_REPOS = {
-    "Base": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
-    "VoiceDesign": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+    "Base": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+    "VoiceDesign": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
 }
 
 
@@ -1092,7 +1105,7 @@ _MODEL_REPOS = {
 def start_model_download(model: str = Form(...)):
     """
     起一个后台子进程下模型。幂等：已经在下或已经下完的直接返回现状，
-    不会重复起进程 —— 连点两下按钮就下两份 7 GB 是很容易发生的。
+    不会重复起进程 —— 连点两下按钮就下两份 5.8 GB 是很容易发生的。
     """
     if model not in _MODEL_REPOS:
         raise HTTPException(400, f"未知模型 {model}，只能是 Base 或 VoiceDesign")
@@ -1103,13 +1116,17 @@ def start_model_download(model: str = Form(...)):
     if proc is not None and getattr(proc, "poll", lambda: 0)() is None:
         return {"ok": True, "status": "downloading", "detail": f"{model} 正在下载"}
 
-    target = MODELS_DIR / f"{model}-1.7B"
+    target = _model_dir(model)
     target.mkdir(parents=True, exist_ok=True)
     import subprocess                                             # noqa: PLC0415
-    # 用当前解释器跑 modelscope，不依赖 PATH 里有没有它 —— 服务是用
-    # .venv/bin/python 起的，那个环境里一定装了（install.sh 装的）。
-    cmd = [sys.executable, "-m", "modelscope.cli.cli", "download",
-           "--model", _MODEL_REPOS[model], "--local_dir", str(target)]
+    # hf 走 core.exe.find_exe 找，不用 shutil.which —— 服务由 launchd / 最小
+    # PATH 起的时候 ~/.local/bin 和 venv/bin 都不在 PATH 里（见 core/exe.py）。
+    # extra 把 venv 自己的 hf 也塞进去，那是 install.sh 一定装过的位置。
+    hf = _find_exe("hf", extra=[str(Path(sys.executable).parent / "hf")])
+    if not hf:
+        raise HTTPException(
+            500, '找不到 hf 命令；运行 pip install "huggingface_hub[cli]" 后重启服务')
+    cmd = [hf, "download", _MODEL_REPOS[model], "--local-dir", str(target)]
     log_path = obs.LOG_DIR / f"download-{model}.log"
     obs.LOG_DIR.mkdir(parents=True, exist_ok=True)
     try:
@@ -1125,7 +1142,7 @@ def start_model_download(model: str = Form(...)):
     obs.log("model_download_started", model=model, repo=_MODEL_REPOS[model],
             target=str(target))
     return {"ok": True, "status": "downloading",
-            "detail": f"{model} 开始下载（约 3.4 GB），可以先去用别的功能",
+            "detail": f"{model} 开始下载（约 2.9 GB），可以先去用别的功能",
             "log": str(log_path)}
 
 
@@ -2476,7 +2493,7 @@ async def capabilities():
         # （首次合成时才加载，约 10 秒），所以对外只给一个 ready，
         # 不把「未装载」这种实现细节顶到界面上。
         try:
-            ok = (MODELS_DIR / "Base-1.7B").exists() and (MODELS_DIR / "VoiceDesign-1.7B").exists()
+            ok = _check_model_dir("Base") and _check_model_dir("VoiceDesign")
             # 顶栏要显示「用的什么模型」，不能只说「本地模型」——
             # 四个绿灯长得一样，人根本分不出哪个是哪个。
             return {

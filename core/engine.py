@@ -11,26 +11,22 @@ class TTSBaseEngine:
     """
 
     def __init__(self, model_type: str, model_size: str):
-        from core.paths import DATA_DIR
+        from core.paths import DATA_DIR, MODELS_MLX_DIR
         self.base_dir = str(DATA_DIR)
 
         # 模型路径：models-mlx/<类型>-<规格>-8bit/
-        self.model_path = os.path.join(
-            self.base_dir, f"models-mlx/{model_type}-{model_size}-8bit"
-        )
-        if not os.path.exists(self.model_path):
-            print(f"⚠️ 路径 {self.model_path} 不存在，尝试默认 Base-0.6B-8bit")
-            self.model_path = os.path.join(
-                self.base_dir, "models-mlx/Base-0.6B-8bit"
-            )
+        # 目录真源是 core/paths.py 的 MODELS_MLX_DIR —— 不在这里拼第二遍。
+        # 拼第二遍就会在下次改目录结构时对不上：install.sh 把模型下到
+        # ~/.voxflow/models/ 而运行时去 models-mlx/ 找，就是这么错的。
+        self.model_path = str(MODELS_MLX_DIR / f"{model_type}-{model_size}-8bit")
         if not os.path.exists(self.model_path):
             raise RuntimeError(
                 f"MLX 模型目录不存在：{self.model_path}\n"
                 f"下载命令：\n"
                 f"  hf download mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit \\\n"
-                f"    --local-dir {self.base_dir}/models-mlx/Base-1.7B-8bit\n"
+                f"    --local-dir {MODELS_MLX_DIR}/Base-1.7B-8bit\n"
                 f"  hf download mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit \\\n"
-                f"    --local-dir {self.base_dir}/models-mlx/VoiceDesign-1.7B-8bit"
+                f"    --local-dir {MODELS_MLX_DIR}/VoiceDesign-1.7B-8bit"
             )
 
         print(f"🚀 正在加载 [MLX] {self.model_path} ...")
