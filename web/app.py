@@ -417,13 +417,14 @@ def _run_clone_task(task_id: str, params: dict, update_fn):
             f"请先上传参考音频"
         )
 
-    # 构建指令
-    base_instruct = pdata.get("instruction", "")
+    # 构建指令：只给「本次的」语气/情绪。personas.json 里的 instruction 由
+    # CloneMode 自己合 —— 两边各合一次会把指令写两遍。
     if req.emotion_priority:
         final_instruct = (req.tone or req.emotion or "").strip()
     else:
-        raw = " ".join(filter(None, [req.tone or "", req.emotion or ""]))
-        final_instruct = f"{base_instruct} {raw}".strip()
+        final_instruct = " ".join(
+            filter(None, [req.tone or "", req.emotion or ""])
+        ).strip()
 
     # 加载引擎
     update_fn(task_id, progress=10, stage="加载模型中...")

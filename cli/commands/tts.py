@@ -94,12 +94,14 @@ def tts_clone(
         )
         raise typer.Exit(1)
 
-    base_instruct = pdata.get("instruction", "")
+    # 只传「本次的」语气/情绪 —— personas.json 里的 instruction 由 CloneMode 自己合
+    # （它读得到 persona_data）。这里再合一次的话指令会被写两遍，实测输出：
+    # 「中性、清晰、平稳、不带明显情绪 中性、清晰、平稳、不带明显情绪」。
+    # emotion_priority 的语义也由 CloneMode 处理，这里不重复判断。
     if emotion_priority:
         final_instruct = (tone or emotion or "").strip()
     else:
-        raw = " ".join(filter(None, [tone or "", emotion or ""]))
-        final_instruct = f"{base_instruct} {raw}".strip()
+        final_instruct = " ".join(filter(None, [tone or "", emotion or ""])).strip()
 
     engine = _init_engine()
     processor = _init_processor()
