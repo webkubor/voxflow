@@ -15,8 +15,20 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# ⚠️ 这两条必须锚定到根目录。
+#
+# 它们来自标准 Python 模板，本意是忽略「就地创建的 venv」的 lib/。但没锚定的
+# `lib/` 会匹配**任意层级**的 lib 目录 —— 于是把前端源码目录
+# `web/ui/src/lib/` 一起吞了：`errors.ts`（被 api/index.ts、stores/errorLog.ts、
+# stores/tasks.ts 三处 import）从来没进过 git。
+#
+# 后果不是「本地能跑」而已 —— 是**任何人 clone 下来都构建不了前端**：
+#   src/api/index.ts(38,62): error TS2307: Cannot find module '../lib/errors'
+# CI 因为这个红了一百次运行都没人发现（因为它从第一次起就没绿过）。
+#
+# 锚定成 `/lib/` 只匹配根目录，原意保留，误伤消除。
+/lib/
+/lib64/
 parts/
 sdist/
 var/

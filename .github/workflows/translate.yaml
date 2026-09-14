@@ -17,8 +17,12 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: lizheming/github-translate-action
+      - uses: actions/checkout@v4
+      # ⚠️ 这里原来写的是 `lizheming/github-translate-action` —— 没有 @ref。
+      # GitHub Actions 要求 `uses` 必须带引用，缺了就是**工作流文件本身非法**：
+      # 每次 push 都会产生一条 0 秒失败、名字显示成文件路径的「运行」。
+      # 查过该 action 的可用 tag，1.1.2 是最新的正式版（v1.0.0-beta.* 是预发布）。
+      - uses: lizheming/github-translate-action@1.1.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
