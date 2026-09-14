@@ -4,6 +4,55 @@
 
 ---
 
+## 📋 最近完成（近 14 天 · 100 commits · +31k / −7.8k）
+
+> 反「做完没人知道」治一下病。完整列表看 `CHANGELOG.md`，这里只列**值得记住的大块**。
+
+### v0.8.0（2026-09-12）—— 完整发布链路
+
+- **草稿专辑 + 发行前改名** `feat(album)` 17ae815：上传歌曲先入草稿，改名后 propagate 到所有平台记录
+- **汽水同步 ego 版**：`scripts/publish_qishui_ego.py` + `sync_qishui.py`
+- **原创存证 + Merkle 锚定** `feat(attest)` 73278d9：留痕 + 证书图导出 + 批量锚定
+- **状态机 bug 修** `fix(album)` 9156731：已发行专辑禁止再加歌
+- **qishui 字段补全** `fix(qishui)` 23744aa：「代理发行中」算已上线
+
+### v0.7.0（2026-09-12）—— UI 重做
+
+- **设计系统单一真源** `tokens.css` + `App.vue` 用 `getComputedStyle` 读
+- **5 个公共组件**：`WarnBanner` / `CurrentPersonaChip` / `TaskTypeBadge` / `PersonaSidebar` / `Icon`（30 SVG）
+- **首屏 bundle -25%**：每个 Tab `defineAsyncComponent` 异步加载（484KB → 363KB）
+- **可观测体系**：`VoxError`（带 status/method/url/stack）+ `errorLog`（200 条 + 60s 去重）+ `reportError` 统一入口 + Toast 时长分级
+- **全局快捷键**：⌘K / Space / M / T / E / 1-7 / ? / Esc（输入框里全部失效）
+- **Suno 三模式**：歌曲 / BGM / 翻唱 + 翻唱历史（真翻唱 🎵 / 文本借鉴 📝 徽章）+ 音频上传
+- **Suno 额度可视化**：顶栏 `Pro · 20/2500` + SunoTab「N 天后重置」倒计时
+- **批量生成**：`/api/suno/batch` + `scripts/batch_bgm.py` + UI 面板 + `--ai 主题` 模式
+- **音乐封面模板** `templates/music-cover-prompt.md`：24 占位符 + 4 preset
+- **AudioBus**：GlobalPlayer + PersonaSidebar 互斥播放
+- **播放器重做**：CoverArt（黑胶唱片 + 哈希取色）/ SpectrumBars（28 根 CSS 动画）
+
+### v0.7.0 ~ v0.8.0 之间的修补 / 重构 / SOP
+
+| Commit | 修了什么 |
+|---|---|
+| `fix(notify)` a19ad7f | **lark-cli 通道从来没生效过** —— only `which` 找不到 |
+| `fix(exe)` 759d85e | **9 个外部命令最小 PATH 下找不到** 统一查找 |
+| `refactor(intake)` f309d7d | 「自动化发布」→「导入音频」改名（措辞更准） |
+| `refactor(intake)` 5d3c46a | 发行页压到一屏 |
+| `refactor(nav)` d713897 | 主线重定义：**挑歌 → 专辑 → 进度** |
+| `feat(promo)` 564d8b9 | 宣推短视频独立成页，理顺一二级导航 |
+| `docs/RELEASE_SOP` d94d95e | **发版 SOP**（何时切版本号、CHANGELOG 怎么写） |
+| `docs(sop)` 58c45e6 + `fix(cover)` e8f011c | 封面禁任何文字，只画音乐元素 |
+| `chore(tools)` 278ef54 | TTS 基线对比 + 冒烟脚本 |
+
+### 「MLX 改造」在哪儿
+
+git reflog / log / stash / 全分支都没找到 MLX 相关 commit —— **没真动手**。
+
+如果是你心里的想法：Apple Silicon 推理替换（PyTorch → MLX）是大改造，
+但目前**没有第二个实现之前不值得动**（已写在下方 ROADMAP § 1）。
+
+---
+
 ## 核心原则：能力可插拔，默认可用
 
 VoxFlow 现在把三样东西写死了：本地 TTS 模型、Suno 出歌、DeepSeek 写文案。
