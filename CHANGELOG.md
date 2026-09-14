@@ -69,6 +69,13 @@ MLX 与均值之差 +0.0006 —— **恰好落在噪声底上**。所以迁移�
   早在改用 `DATA_SUBDIRS` / `CODE_SUBDIRS` 时就被删了，两处引用漏改，一跑就是
   `NameError`。顺带把 `check_models` 从 PyTorch 目录改指 MLX，并按**体积**查完整性
   （与「目录在不在」分工：下载中断会留下一个通过存在性检查、加载时才报错的目录）
+- **`install.sh` 第 7 步建的是错的目录**：`mkdir -p assets/temp assets/reference_audio out`
+  是数据**还没搬到 `~/.voxflow`** 之前的路径。搬完之后它一直在项目里建空目录，
+  而真正该建的数据目录一个都没建 —— 新机器跑完 install.sh，doctor 直接报
+  「缺失 11 个目录: 数据:configs, …」。`assets/` 在仓库里放的是 branding /
+  screenshots，把数据目录混进去只会误导。改成调 `core.paths.ensure_dirs()`
+  （`configs/presets` 是 `CODE_SUBDIRS`，留在项目里）—— 又一次「拼第二遍就会有
+  第二次对不上」
 
 ### ⬆️ 依赖：解掉 `mlx-audio` ↔ `transformers` 的声明冲突
 

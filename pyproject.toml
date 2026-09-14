@@ -85,7 +85,12 @@ dependencies = [
   "requests",
   # 下模型用（提供 `hf` 命令）。之前走 modelscope，迁 MLX 后换成 hf。
   # 注意：transformers>=5.14 会把 huggingface_hub 顶到 1.x（它要 >=1.5,<2.0）。
-  # 项目只用 `hf` 这个 CLI，不用 hub 的 Python API，所以这个 major 跳跃无影响。
+  # 这是跨 major 跳跃，所以核实过 API 面（2026-09-14）：
+  #   · 主链路（core/ cli/ web/）**只用 `hf` 这个 CLI**，不 import hub
+  #   · 只有 qwen_tts（PyTorch 参考实现）用了 Python API —— snapshot_download /
+  #     constants.HF_HUB_OFFLINE。实测 hub 1.31 **这两个都还在**，所以 hub 的
+  #     跳跃对它无影响（它坏是因为 transformers 5.x，见下方 packages 注释）。
+  # 写「项目不用 Python API」是不准确的措辞，别照抄。
   #
   # 不写 `[cli]` extra：hub 1.x 里 `hf` 命令随主包一起装，那个 extra 已经不存在了，
   # 写上只会让 pip 每次装都吐一句
