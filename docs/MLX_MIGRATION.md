@@ -256,13 +256,36 @@ git checkout core/engine.py core/modes/cloner.py core/modes/designer.py
 
 文档上一版（155 行，AI 自留底稿）有以下假设，**实测后确认有误**，废弃：
 
-### ❌ 废弃假设 1：「PyTorch base 里 `x_vector_only_mode` 和 `instruct_ids` 是两条独立通道」
+### ✅ 复核 1：「PyTorch base 里 `x_vector_only_mode` 和 `instruct_ids` 是两条独立通道」——**成立，实测确认**
 
-**当时的说法**：读 `qwen_tts/core/models/modeling_qwen3_tts.py` 后确认 `:2076` 把 instruct 文本 embedding 独立追加到 talker_input_embeds，`:2103` 的 `x_vector_only_mode` 只决定 speaker_embed 取克隆向量还是预置说话人，**两者并存都生效**。
+**原始说法**：读 `qwen_tts/core/models/modeling_qwen3_tts.py` 后确认 `:2076` 把 instruct 文本 embedding 独立追加到 talker_input_embeds，`:2103` 的 `x_vector_only_mode` 只决定 speaker_embed 取克隆向量还是预置说话人，**两者并存都生效**。
 
-**推翻的理由**：调研 voxflow 实际用法后注意到，**两个角色都没在「克隆 + 情绪指令」组合上调用过**——`jxx_host` 传了 `instruct_ids` 但同时开了 `x_vector_only_mode=True`，从字面看这两个参数就有冲突嫌疑；MLX Base 在源码层根本不支持 instruct 又从反面印证了 PyTorch 那条路径在 base 上**可能也是有名无实**（instruct_ids 被忽略了但没报错）。
+**曾一度被标为「废弃」**，理由是「从字面看这两个参数就有冲突嫌疑」+「MLX Base 不支持 instruct，反推 PyTorch 那条路径可能也有名无实」。**这两条都是猜的，没读源码也没跑。**
 
-**结果**：因为当前没有任何角色依赖「克隆 + 情绪」组合，**这条假设的错误对迁移决策没有实际影响**，但写下来防止以后再误用它。
+**2026-09-14 17:00 控制变量实测推翻了那个「推翻」**（脚本 `/tmp/voxflow-ab/test_instruct.py`）：
+同文本、同样音、`torch.manual_seed(42)`、同采样参数，**只切换 `instruct_ids` 有无**。
+seed 固定后输入相同必然逐样本相同，实测却完全分叉：
+
+| | 带 instruct_ids | 不带 | 变化 |
+|---|---|---|---|
+| 样本数 | 46,080（1.920 s） | 36,480（1.520 s） | +26.3% |
+| 逐样本最大差 | — | — | **0.902** |
+| RMS 差 | — | — | **0.214** |
+
+**韵律指标进一步确认它传的是「情绪」而不是噪声**（指令：`用极度愤怒、咆哮的语气说`）：
+
+| 指标 | 带 instruct | 不带 | 变化 |
+|---|---|---|---|
+| F0 变异系数 | 0.330 | 0.246 | **+33.9%** |
+| F0 动态幅度 | 129.5 Hz | 86.3 Hz | **+49.9%** |
+| 能量动态幅度 | 70.8 dB | 30.0 dB | **+136.5%** |
+
+基频起伏变大、动态范围变宽、力度变化剧烈 —— 这正是情绪唤醒的声学特征。
+
+**结论**：PyTorch base 的「克隆 + 情绪指令」是**真在工作的能力**。MLX base 确实没有等价实现（见坑 2），
+所以**迁移会真的丢掉它** —— 这一点必须作为已知代价对待，不能当成「本来就没生效」。
+
+> 纠正人：小楠（workbuddy）。原判断是基于参数名的推测，本条以实测为准。
 
 ### ❌ 废弃假设 2：「MLX 没有『克隆 + 情绪』的等价实现，所以需要老爹拍板情绪是不是硬需求」
 
@@ -270,15 +293,18 @@ git checkout core/engine.py core/modes/cloner.py core/modes/designer.py
 
 **推翻的理由**：看完 voxflow 的 `personas.json` 后确定——
 
-- `jxx_host`：clone 路径，`x_vector_only_mode=True`，**instruct_ids 本来就没生效**
+- `jxx_host`：clone 路径，`x_vector_only_mode=True`。⚠️ **注意**：`instruct_ids` 本身是生效的
+  （见上方复核 1 的实测），只是**当前这次调用没传它** —— 「参数没传」和「参数无效」是两回事，别混。
 - `demo_narrator`：design 路径，**根本不走克隆**，情感控制走的是 VoiceDesign（**MLX 原生支持**）
 
-**「情绪」这词混淆了三个概念**：
+**「情绪」这词混淆了三个概念**（这段是有用的，保留）：
 1. 音色描述（demo_narrator 的 `instruction`）—— VoiceDesign 处理
 2. 文本内容自带的情绪（PyTorch 里写「他愤怒地吼道：……」也会有愤怒语气）—— 与模型无关
-3. 动态情绪指令（instruct_ids 那种）—— **当前无人使用**
+3. 动态情绪指令（instruct_ids 那种）—— **当前无人使用，但它是真能力**
 
-**结果**：决策从「等老爹拍板」变成「无差别全迁」。两个角色都安全。
+**结果**：决策从「等老爹拍板」变成「无差别全迁」—— **结论仍然成立**，因为两个角色当前的调用方式
+都不依赖动态情绪指令。但要写清代价：**迁移后「同一音色 + 动态情绪」这条路没了**
+（MLX base 源码层无入口）。将来真要用，得先定替代方案（文本化情绪 / VoiceDesign / 等上游补）。
 
 ---
 
@@ -305,9 +331,51 @@ git checkout core/engine.py core/modes/cloner.py core/modes/designer.py
 
 ---
 
-## 十、文档更新日志
+## 十、迁移实现中发现的遗留问题
+
+### ⚠️ `core/modes/cloner.py`：情绪指令被算了、打印了，但**没有传给模型**
+
+迁移后的 `cloner.run()` 里：
+
+```python
+final_instruct = f"{base_instruct} {instruct}".strip()          # ← 算出来了
+print(f"👥 模式：指令克隆({priority_tag}) | 角色：{display_name} | "
+      f"演技负载：{final_instruct[:50]}...")                     # ← 还打印了
+
+results = list(self.engine.wrapped_model.generate(
+    text=text, ref_audio=seed, ref_text=self.engine.ref_text_for(persona),
+    lang_code="chinese", temperature=0.7, top_p=0.9, top_k=50,
+))                                                               # ← 但这里没传 final_instruct
+```
+
+`generate()` 的调用参数里**没有** `instruct`。所以：
+
+- 用户传 `--tone` / `--emotion`，或 persona 有 `instruction`，**全部无效**
+- 但控制台照样打印「演技负载：……」，**看起来像生效了**
+
+这是**静默失败** —— 和 `2ca5c0d` 那次「音色找不到就悄悄回退、界面上只表现为播放的好像不是这个音色」是同一类问题。
+
+**这不是「MLX 不支持」造成的**（那是真的，见坑 2），而是**至少应该把话说明白**：
+要么把 `instruct` 接上（MLX base 接不了，但 `voice_design` 可以），
+要么别打印一个没生效的「演技负载」，改成明确提示「MLX base 路径不支持动态情绪指令」。
+
+**建议**：迁移收尾时一并处理，别留在「能跑就行」的状态。
+
+### 📌 已修的两个克隆路径 bug（`3c778af`，与 MLX 迁移无关）
+
+| Bug | 影响 |
+|---|---|
+| `cloner.py:52` 导入不存在的 `load_personas` | `cloner.run()` 一调就 ImportError —— `voice clone` / Web 克隆 / preset / preview / dialogue / `main.py` 默认路径**全线不可用**（自 8-30 `2ca5c0d` 起） |
+| `base_instruct` 被合两遍（`tts.py` + `web/app.py` + `cloner.py`） | 指令文本重复：「中性、清晰、平稳、不带明显情绪 中性、清晰、平稳、不带明显情绪」 |
+
+第一条是**迁移的前置条件** —— 不修的话，MLX 版 `cloner.run()` 同样跑不起来。
+
+---
+
+## 十一、文档更新日志
 
 | 日期 | 变更 | 备注 |
 |---|---|---|
 | 2026-09-14 | 初稿 | 含两个错误假设（见第八节） |
 | 2026-09-14 | 修正 | 推翻两个假设；补完 personas.json 字段现状；新增决策链路表 + 改动清单 + 回退点 |
+| 2026-09-14 17:0x | **再修正** | 第八节「废弃假设 1」是**错的**（基于参数名猜测，未读源码未实测）—— 控制变量实测证明 `instruct_ids` 在 PyTorch base 上真实生效，已改回「成立」并附数据；假设 2 结论保留但更正其支撑事实；新增第十节（迁移实现的静默丢失 + 已修的两个克隆 bug）。纠正人：小楠（workbuddy） |
