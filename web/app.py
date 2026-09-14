@@ -726,7 +726,16 @@ class _NoCacheStaticFiles(StaticFiles):
 
 
 _STATIC_DIR = Path(__file__).parent / "static"
-app.mount("/static", _NoCacheStaticFiles(directory=str(_STATIC_DIR)), name="static")
+# ⚠️ 这个 if 是必须的：web/static/ 是**前端构建产物**，在 .gitignore 里，
+# 所以全新 clone 里根本不存在。而 StaticFiles 在目录缺失时**于 import 期直接抛**
+# `RuntimeError: Directory '...' does not exist` —— 后果有两层：
+#   1. `voice web` 还没起来就崩在一句看不懂的报错上（install.sh 在没装 npm 时
+#      会跳过前端构建，所以这条路径是真实可达的）
+#   2. CI 里 `from web.app import ...` 直接炸，徽章因此一直是红的
+# 下面 /assets 那处本来就用了同样的 `is_dir()` 写法，这里当初漏了。
+# 缺 index.html 时由 index() 给出能照着做的提示，见那里。
+if _STATIC_DIR.is_dir():
+    app.mount("/static", _NoCacheStaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 # index.html 里的 logo 走 /assets/branding/...，但此前只挂了 /static，
 # 于是首页左上角 logo 一直是碎图（README 里的截图也就跟着碎）。
@@ -740,10 +749,19 @@ if _ASSETS_DIR.is_dir():
 def index():
     # 入口页也不缓存 —— 它缓存了，整个前端就都停在旧版本上，
     # 后面所有资源无论怎么改都看不到。
-    return FileResponse(
-        str(_STATIC_DIR / "index.html"),
-        headers={"Cache-Control": "no-store"},
-    )
+    page = _STATIC_DIR / "index.html"
+    if not page.exists():
+        # 前端没构建过。给一句能照着做的提示，而不是丢一个 500 让人猜
+        # （更不该像以前那样在 import 期就抛 RuntimeError）。
+        return JSONResponse(
+            {
+                "error": "前端未构建",
+                "detail": "在 web/ui 目录下运行 npm install && npm run build",
+                "hint": "或直接跑 ./install.sh（装了 Node.js 时它会自动构建）",
+            },
+            status_code=503,
+        )
+    return FileResponse(str(page), headers={"Cache-Control": "no-store"})
 
 
 # ── API 路由 ──────────────────────────────────────────────

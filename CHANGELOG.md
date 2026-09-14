@@ -140,6 +140,50 @@ try/except 兜底 + requests、fastapi、torchaudio），未补声明。
 uv run --with transformers==4.57.3 --with torch python tools/baseline_pytorch_tts.py
 ```
 
+### 🐛 修复：仓库缺一个前端源码文件 —— CI 因此红了一百次
+
+准备发版时查 CI，发现**近 100 次运行全部失败**，往前翻 60 次里一次成功都没有。
+徽章从项目第一天起就是红的，所以所有人都当它是装饰（`test.yml` 的注释里正写着
+「不想得到一个长期红着、然后被所有人忽略的徽章」—— 结果就是它）。
+
+**最严重的一条：`web/ui/src/lib/errors.ts` 从未进过 git。**
+
+`.gitignore` 里的 `lib/` 来自标准 Python 模板（本意是忽略就地创建 venv 的
+`lib/`），但它**没锚定路径**，于是匹配了任意层级的 `lib` —— 把前端源码目录
+`web/ui/src/lib/` 一起吞了。该文件被 `api/index.ts`、`stores/errorLog.ts`、
+`stores/tasks.ts` 三处 import，缺它前端根本构建不了。
+
+本地一直能过，是因为文件就在本机 —— **任何人 clone 下来都会撞上**
+`error TS2307: Cannot find module '../lib/errors'`。
+
+- `.gitignore`：`lib/` → `/lib/`、`lib64/` → `/lib64/`（只匹配根目录，原意保留）
+- 把 `errors.ts` 纳入版本控制
+
+另外两条：
+
+- **`web/app.py` 在 `web/static/` 缺失时于 import 期抛 `RuntimeError`** ——
+  而 `web/static/` 是前端构建产物、在 gitignore 里，全新 clone 里本来就没有。
+  后果两层：`voice web` 还没起来就崩在一句看不懂的报错上（`install.sh` 在没装
+  npm 时会跳过前端构建，这条路径真实可达）；CI 里 `from web.app import …`
+  直接炸。改成 `if _STATIC_DIR.is_dir()`（下面 `/assets` 那处本来就是这个写法，
+  `/static` 当初漏了），并让 `index()` 在前端未构建时返回**能照着做的提示**
+  （503 + 「在 web/ui 下运行 npm install && npm run build」），而不是丢一个 500
+- **`test.yml` 不装任何依赖**，但 `tests/test_obs.py` 里有
+  `from web.app import economics`（测 `/api/economics` 的聚合口径，实现就在
+  FastAPI 模块里）→ `ModuleNotFoundError`。加一步只装 `fastapi python-multipart`，
+  **仍然不装 requirements**（torch / mlx / onnxruntime 要几分钟且与被测逻辑无关）
+- **`translate.yaml` 的 `uses:` 没有 `@ref`** —— GitHub 要求 `uses` 必须带引用，
+  缺了就是工作流文件本身非法，每次 push 产生一条 0 秒失败、名字显示成文件路径的
+  运行。补上 `@1.1.2`
+- **删除 `.github/workflows/ai-init-guard.yml`**：它跑 `npm run ai:check`，而该脚本
+  **全仓只在这个文件里出现过、没有任何定义**，仓库根也没有 package.json。它是
+  2026-02-28 首次提交带进来的模板残留，从第一天起就不可能通过，守着零个东西。
+  git 历史里有（`5e6f602`），要恢复随时可以
+
+**验证方式**：`git clone --depth 1` 到临时目录，只装 `fastapi python-multipart`，
+复刻 CI 两步 —— `test_obs.py` 18 条 + `test_cover.py` 29 条全过，
+`errors.ts` 确实在 clone 里。
+
 ### 🐛 修复：克隆主路径
 
 - **`cloner.py` 导入了一个不存在的 `load_personas`** —— `cloner.run()` 一调就
