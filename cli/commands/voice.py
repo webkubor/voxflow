@@ -189,27 +189,18 @@ def voice_preview(
         cloner = CloneMode(engine, processor)
 
         instruction = data.get("instruction", "")
-        full_instruct = (
-            f"<|im_start|>user\n{instruction}<|im_end|>\n" if instruction else ""
-        )
-        input_objs = engine.processor(
-            text=full_instruct, return_tensors="pt", padding=True
-        )
-        instruct_ids = input_objs["input_ids"].to(engine.device)
-
-        torch.manual_seed(42)
-        wavs, sr = engine.wrapped_model.generate_voice_clone(
+        # 2026-09-14：迁 Apple MLX，instruct_ids 路径失效，直接传字符串
+        # engine.backend 自动分流；engine.ref_text_for(persona_key) 抛清晰错误
+        persona_key = data.get("key") or data.get("persona") or "demo_narrator"
+        results = list(engine.wrapped_model.generate(
             text=text,
-            language="Chinese",
             ref_audio=str(ref_path),
-            x_vector_only_mode=True,
-            instruct_ids=[instruct_ids],
-            do_sample=True,
-            temperature=0.7,
-            top_p=0.9,
-            top_k=50,
-        )
-        sf.write(str(out_path), wavs[0], sr)
+            ref_text=engine.ref_text_for(persona_key),
+            lang_code="chinese",
+            temperature=0.7, top_p=0.9, top_k=50,
+        ))
+        sr = engine.sample_rate
+        sf.write(str(out_path), results[0].audio, sr)
     except Exception as e:
         console.print(f"[red]✗ 生成失败：{e}[/red]")
         raise typer.Exit(1)

@@ -1,5 +1,4 @@
 import os
-import torch
 from ..utils import get_persona_cn, sanitize_path_component
 
 class CloneMode:
@@ -95,26 +94,20 @@ class CloneMode:
             final_instruct = (instruct or "").strip() or base_instruct
         else:
             final_instruct = f"{base_instruct} {instruct}".strip()
-        instruct_text = f"<|im_start|>user\n{final_instruct}<|im_end|>\n"
-        input_objs = self.engine.processor(text=instruct_text, return_tensors="pt", padding=True)
-        instruct_ids = input_objs["input_ids"].to(self.engine.device) 
-
         priority_tag = "情绪优先" if emotion_priority else "人设优先"
         print(f"👥 模式：指令克隆({priority_tag}) | 角色：{display_name} | 演技负载：{final_instruct[:50]}...")
 
-        torch.manual_seed(42)
-        if torch.cuda.is_available(): torch.cuda.manual_seed_all(42)
-
-        # --- 标准答案逻辑：平衡音色与演技张力 ---
-        wavs, sr = self.engine.wrapped_model.generate_voice_clone(
-            text=text, 
-            language=lang, 
-            ref_audio=seed, 
-            x_vector_only_mode=True,
-            instruct_ids=[instruct_ids],
-            do_sample=True,
-            temperature=0.7,  # 标准答案：既有戏，又稳得住音色
-            top_p=0.9,       # 标准答案：保留富有张力的情感分支
-            top_k=50
-        )
+        # 2026-09-14：迁 Apple MLX
+        # - MLX base 不接受 instruct_ids（源码层无入口），情绪控制改靠文本 + ref_audio 本身
+        # - MLX base 必须传 ref_text（不传会截断+乱码），从 personas.json 取
+        # - generate() 返回 generator of GenerationResult，要取首个 .audio + sample_rate
+        results = list(self.engine.wrapped_model.generate(
+            text=text,
+            ref_audio=seed,
+            ref_text=self.engine.ref_text_for(persona),
+            lang_code="chinese",
+            temperature=0.7, top_p=0.9, top_k=50,
+        ))
+        sr = self.engine.sample_rate
+        wavs = [r.audio for r in results]
         return wavs, sr

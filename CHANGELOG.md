@@ -4,6 +4,25 @@
 
 ## [未发布]
 
+### 变更
+
+- **Qwen3-TTS 推理框架：PyTorch(MPS) → Apple MLX 8-bit**（代码落地）
+  - `core/engine.py`：从 `Qwen3TTSModel.from_pretrained` 改为 `mlx_audio.tts.utils.load_model`；
+    新增 `backend="mlx"|"pytorch"` 双链路参数（PyTorch 仍保留作回退）；
+    新增 `ref_text_for(persona)`；删除 MPS 设备检测
+  - `core/modes/cloner.py`：删除 `instruct_ids` 路径，改用 `generate(ref_audio=, ref_text=)`
+    直接传字符串（MLX Base 不支持 instruct_ids，实测对当前项目无影响）
+  - `core/modes/designer.py`：参数顺序适配 `(text, instruct, language)`
+  - `cli/commands/{voice,tts,doctor}.py`：调用点同步改造、doctor 新增 MLX 后端/模型检查
+  - `~/.voxflow/configs/personas.json`：两个角色都补 `ref_text` 字段
+  - 实测 A/B：MLX 加载 7.90s、推理 7.22s、产出 4.48s（对比 PyTorch 33.03s/13.93s/4.64s），
+    whisper 转写 demo_narrator 两版一字不差
+  - **jxx_host 提示**：其样音转写带「经经箱影箱」乱码，导致 MLX 克隆输出「这是一段用于音乐时的任何」乱码
+    ——是录音样音本身问题，非迁移 bug。重新录参考音或重写 `ref_text` 即可
+  - 决策理由 + 全部改动清单见 [docs/MLX_MIGRATION.md](docs/MLX_MIGRATION.md) 与
+    [docs/MLX_MIGRATION_CHECKLIST.md](docs/MLX_MIGRATION_CHECKLIST.md)
+  - 配套：`tools/{smoke_mlx_tts,baseline_pytorch_tts,mlx_peak_memory,mlx_clone_e2e}.py`
+
 ### 决策
 
 - **Qwen3-TTS 推理框架：PyTorch(MPS) → Apple MLX 8-bit**（决策已落，代码待改）

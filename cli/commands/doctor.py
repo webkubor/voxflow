@@ -77,10 +77,11 @@ def check_venv():
 
 # ── 3. 核心依赖 ─────────────────────────────────────────────
 
+# 2026-09-14：迁 Apple MLX，torch/torchaudio 不再是必需依赖（但保留作回退）
 CORE_PACKAGES = [
     "transformers",
-    "torch",
-    "torchaudio",
+    "mlx",
+    "mlx_audio",
     "fastapi",
     "uvicorn",
     "typer",
@@ -89,7 +90,7 @@ CORE_PACKAGES = [
     "soundfile",
     "pydub",
     "einops",
-    "accelerate",
+    "numpy",
 ]
 
 
@@ -119,32 +120,60 @@ def check_dependencies():
 # ── 4. PyTorch 硬件加速 ─────────────────────────────────────
 
 @register
-def check_torch_device():
-    try:
-        import torch
+def check_mlx_backend():
+    """2026-09-14：迁 Apple MLX 后的硬件后端检查。
 
-        if torch.backends.mps.is_available():
-            return _ok("MPS 加速可用（Apple Silicon GPU）")
-        if torch.cuda.is_available():
-            gpu = torch.cuda.get_device_name(0)
-            return _ok(f"CUDA 加速可用（{gpu}）")
-        return _warn("仅 CPU 模式", "推理速度较慢，建议 Apple Silicon 设备")
-    except ImportError:
-        return _fail("torch 未安装", "运行 pip install torch torchaudio")
+    MLX 链路：必须 macOS + Apple Silicon，Metal GPU 直驱，无 device 概念。
+    PyTorch 链路（回退）：仍然可用，但 MLX 是首选。
+    """
+    import platform, sys
+    if sys.platform != "darwin":
+        return _warn(
+            "非 macOS 平台",
+            "Apple MLX 仅支持 macOS；当前 PyTorch 回退链路可用但推理速度较慢",
+        )
+    machine = platform.machine()
+    if machine not in ("arm64", "aarch64"):
+        return _warn(
+            f"非 Apple Silicon（{machine}）",
+            "MLX 需要 M 系列芯片；当前走 PyTorch CPU 回退",
+        )
+    try:
+        import mlx.core  # noqa: F401
+        import mlx_audio  # noqa: F401
+        return _ok("MLX 后端可用（Apple Silicon Metal）")
+    except ImportError as e:
+        return _fail(
+            "MLX 未安装", "运行 pip install mlx mlx-audio（PyTorch 链路仍可用作回退）"
+        )
 
 
 # ── 5. Qwen3-TTS SDK ────────────────────────────────────────
 
 @register
-def check_qwen_tts():
-    try:
-        from qwen_tts import Qwen3TTSModel
+def check_mlx_models():
+    """2026-09-14：迁 MLX 后改检查 ~/.voxflow/models-mlx/ 而非 ~/.voxflow/models/
 
-        return _ok("qwen_tts SDK 可用")
-    except ImportError:
-        return _fail("qwen_tts 未安装", "项目包未正确安装，运行 pip install -e .")
-    except Exception as e:
-        return _warn(f"qwen_tts 导入异常: {e}", "可能缺少依赖")
+    MLX 8-bit 模型放在 models-mlx/ 子目录下，PyTorch 原生模型仍在 models/。
+    至少需要 Base-1.7B-8bit 才能跑克隆路径，加 VoiceDesign-1.7B-8bit 才能跑设计路径。
+    """
+    models_mlx = BASE_DIR / "models-mlx"
+    if not models_mlx.exists():
+        return _fail(
+            "MLX 模型目录不存在",
+            "运行 hf download mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit --local-dir ~/.voxflow/models-mlx/Base-1.7B-8bit",
+        )
+    base_ok = (models_mlx / "Base-1.7B-8bit").exists()
+    vd_ok = (models_mlx / "VoiceDesign-1.7B-8bit").exists()
+    missing = []
+    if not base_ok: missing.append("Base-1.7B-8bit")
+    if not vd_ok: missing.append("VoiceDesign-1.7B-8bit")
+    if missing:
+        return _warn(
+            f"MLX 模型不完整：缺 {', '.join(missing)}",
+            "部分功能（克隆/设计）可能不可用",
+        )
+    return _ok("MLX 模型完整（Base + VoiceDesign）")
 
 
 # ── 6. 模型就绪状态 ─────────────────────────────────────────

@@ -122,16 +122,7 @@ def tts_clone(
         TimeElapsedColumn(),
         console=console,
     ) as pbar:
-        pbar.add_task("[cyan]加载模型 Base-1.7B...", total=None)
-        input_instruct = f"<|im_start|>user\n{final_instruct}<|im_end|>\n"
-        input_objs = engine.processor(
-            text=input_instruct, return_tensors="pt", padding=True
-        )
-        instruct_ids = input_objs["input_ids"].to(engine.device)
-
-        import torch
-
-        torch.manual_seed(42)
+        pbar.add_task("[cyan]加载模型 Base-1.7B-8bit (MLX)...", total=None)
 
         pbar.add_task(f"[cyan]生成语音 ({display_name})...", total=None)
         wavs, sr = cloner.run(
