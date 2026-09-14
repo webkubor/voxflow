@@ -1125,7 +1125,7 @@ def start_model_download(model: str = Form(...)):
     hf = _find_exe("hf", extra=[str(Path(sys.executable).parent / "hf")])
     if not hf:
         raise HTTPException(
-            500, '找不到 hf 命令；运行 pip install "huggingface_hub[cli]" 后重启服务')
+            500, '找不到 hf 命令；运行 pip install huggingface_hub 后重启服务')
     cmd = [hf, "download", _MODEL_REPOS[model], "--local-dir", str(target)]
     log_path = obs.LOG_DIR / f"download-{model}.log"
     obs.LOG_DIR.mkdir(parents=True, exist_ok=True)

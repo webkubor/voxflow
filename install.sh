@@ -93,25 +93,15 @@ pip install "setuptools<70"
 
 echo "→ 安装项目依赖..."
 pip install -e .
-# huggingface_hub[cli] 提供 `hf` 命令 —— 下模型用它。
+# `hf` 命令（下模型用）随 huggingface_hub 主包一起装 —— hub 1.x 已没有 `[cli]` extra，
+# 写上去 pip 会吐 `does not provide the extra 'cli'` 的警告。
 # 2026-09-14 迁 MLX 前用的是 modelscope（下 PyTorch 原生权重），现在不用了。
-pip install pydub "huggingface_hub[cli]"
-
-# ── 推理引擎 mlx-audio（要绕开依赖声明，原因见下）──
 #
-# mlx-audio 0.5.3 声明 transformers>=5.14.0，而本项目锁 transformers==4.57.3
-# （随仓库自带的 qwen_tts 参考实现需要）。不绕过的话 pip 只有两条路：
-#   ① 把 transformers 顶到 5.x —— 实测 CLI 直接死在
-#      ImportError: cannot import name 'hf_api' from 'transformers.utils'
-#   ② 静默降级到 mlx-audio 0.2.9 —— 那版没有 load_model / generate(ref_text=)，
-#      装完能 import、一合成才炸，是最难查的那种
-# 实测 0.5.3 在 transformers 4.57.3 上跑得通（端到端合成 + 全部入口 import 通过），
-# 所以这里显式绕过声明，把真正需要的运行时依赖单独装上。
-#
-# ⚠️ 这是**已知的依赖冲突**，不是干净解法。等上游放宽约束、或本项目升级
-# transformers 之后，应改回普通的 pip install。见 docs/MLX_MIGRATION.md。
-pip install --no-deps "mlx-audio==0.5.3"
-pip install miniaudio scipy sounddevice tqdm
+# mlx-audio 也由 `pip install -e .` 一起装（已在 pyproject 里正常声明）。
+# 这里曾经有一坨 `pip install --no-deps mlx-audio==0.5.3` + 单独补运行时依赖的
+# 绕过代码 —— 那是 transformers 版本冲突（mlx-audio 要 >=5.14，本项目锁 4.57.3）
+# 下的权宜之计。冲突已解（transformers 放开到 >=5.14），恢复普通安装。
+pip install pydub
 
 echo "✓ 依赖安装完成"
 
@@ -143,10 +133,10 @@ for _m in Base-1.7B-8bit VoiceDesign-1.7B-8bit; do
   fi
 done
 
-# hf 来自 huggingface_hub[cli]，上面刚装过。找不到就说人话 ——
+# hf 来自 huggingface_hub 主包，上面刚装过。找不到就说人话 ——
 # 等到「模型下载失败」才让用户猜原因，是最没必要的一步。
 if ! command -v hf > /dev/null 2>&1; then
-  echo "⚠️ 找不到 hf 命令（huggingface_hub[cli] 没装上？）"
+  echo "⚠️ 找不到 hf 命令（huggingface_hub 没装上？）"
   echo "   已跳过模型下载；装好后手动跑下面两条命令即可。"
   SKIP_MODELS=true
 fi

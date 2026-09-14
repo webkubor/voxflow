@@ -114,7 +114,7 @@ def check_dependencies():
         return _ok(f"核心依赖完整（{len(CORE_PACKAGES)} 个）", detail + " ...")
     return _fail(
         f"缺失 {len(missing)} 个依赖: {', '.join(missing)}",
-        '运行 pip install -e . && pip install pydub "huggingface_hub[cli]"',
+        '运行 pip install -e . && pip install pydub',
     )
 
 

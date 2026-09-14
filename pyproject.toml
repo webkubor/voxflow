@@ -19,7 +19,25 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Webkubor" }]
 
 dependencies = [
-  "transformers==4.57.3",
+  # ── transformers：从 `==4.57.3` 放开到 `>=5.14`（2026-09-14 升级）──
+  #
+  # 原来锁死 4.57.3，理由是「随仓库自带的 qwen_tts 参考实现需要」。但那是
+  # 把**历史实验脚本**的需求当成了产品需求：主链路（MLX）对 transformers
+  # 只有一处依赖 —— mlx_audio 里 `from transformers import AutoTokenizer`，
+  # 而且包在 try/except 里，失败只打 warning。
+  #
+  # 锁死的代价是环境不自洽：mlx-audio 要 transformers>=5.14，两边打架，
+  # 于是 pip 只有两条坏路 —— 把 transformers 顶到 5.x（CLI 死在
+  # `cannot import name 'hf_api'`），或静默降级到 mlx-audio 0.2.9（API 完全
+  # 不同，能 import、一合成才炸）。09-14 16:46 真实发生过一次。
+  # 更糟的是**任何人跑 `pip install <随便什么>` 都可能被 pip「顺手修好」**。
+  #
+  # 升级前实测（transformers 5.17.0 + huggingface_hub 1.31 + tokenizers 0.23）：
+  # 8 个入口 import 全绿、克隆路径 4.41s/24kHz、设计路径 5.28s/24kHz、
+  # `hf download` CLI 正常。**只有 qwen_tts 会炸**（见下方 packages 注释）。
+  #
+  # 不写 `==x.y.z` 而写 `>=`：锁死正是这次冲突的成因，不该再犯一次。
+  "transformers>=5.14",
   "accelerate==1.12.0",
   # ── 推理引擎：Apple MLX（2026-09-14 起是唯一后端）──────────────
   # 之前漏在这里：代码全切到 MLX 了，依赖却没声明，新机器 `pip install -e .`
@@ -28,12 +46,10 @@ dependencies = [
   # 炸在「no matching distribution for mlx」：装得下去，再由 doctor 明确
   # 报「非 Apple Silicon，无法本地推理」——报错要说人话。
   #
-  # ⚠️ mlx-audio 故意不在这里声明：它要求 transformers>=5.14.0，而本项目锁
-  # transformers==4.57.3（qwen_tts 参考实现需要）。裸写 `mlx-audio` 的话 pip
-  # 会"解决"这个冲突——静默降级到 0.2.9，那版的 API 和这里用的完全不同
-  # （没有 load_model / generate(ref_text=)），装完能 import、一合成才炸。
-  # 所以它由 install.sh 按 `--no-deps` 显式装，见那个脚本里的说明。
+  # mlx-audio 现在**正常声明**。之前它被排除在外、由 install.sh 用 --no-deps
+  # 绕过，那是 transformers 冲突下的权宜之计；冲突已解（见上），恢复普通安装。
   "mlx; sys_platform == 'darwin'",
+  "mlx-audio; sys_platform == 'darwin'",
   "fastapi",
   "uvicorn",
   "python-multipart",
@@ -47,7 +63,13 @@ dependencies = [
   "einops",
   "pydub",
   # 下模型用（提供 `hf` 命令）。之前走 modelscope，迁 MLX 后换成 hf。
-  "huggingface_hub[cli]",
+  # 注意：transformers>=5.14 会把 huggingface_hub 顶到 1.x（它要 >=1.5,<2.0）。
+  # 项目只用 `hf` 这个 CLI，不用 hub 的 Python API，所以这个 major 跳跃无影响。
+  #
+  # 不写 `[cli]` extra：hub 1.x 里 `hf` 命令随主包一起装，那个 extra 已经不存在了，
+  # 写上只会让 pip 每次装都吐一句
+  # `WARNING: huggingface-hub 1.31.0 does not provide the extra 'cli'`。
+  "huggingface_hub",
   # Python 3.13 起标准库 audioop 被移除（PEP 594），而 pydub 仍 import 它。
   # 不声明这条，3.13+ 上装完依赖后 `voice doctor` 第一步就崩在
   # `ModuleNotFoundError: No module named 'pyaudioop'`，看起来像 pydub 装坏了。
@@ -65,12 +87,20 @@ Repository = "https://github.com/webkubor/voxflow"
 [project.scripts]
 voice = "cli.app:app"
 tts = "cli.app:app"
-qwen-tts-demo = "qwen_tts.cli.demo:main"
+# qwen-tts-demo 入口已摘除：它是 qwen_tts 参考实现自带的 demo，产品路径不用它，
+# 而 transformers 升到 5.x 后 qwen_tts 在 import 阶段就炸
+# （`check_model_inputs()` 在 5.x 改成要 func 参数了）。留着一个装得上、
+# 一跑就报错的命令，比没有这个命令更糟。
 
 [tool.setuptools]
 # core 之前漏在这里，一直靠调用方 sys.path.insert 才能 import ——
 # 侥幸能跑，但任何不设 sys.path 的入口（比如 .venv/bin/voice）都会
 # ModuleNotFoundError。它本来就是包的一部分。
+#
+# qwen_tts 仍然打包：它是 PyTorch 时代的参考实现，tools/ 里两个对比脚本
+# 还 import 它。但**它只兼容 transformers 4.57.3** —— 5.x 下 import 就炸
+# （`check_model_inputs()` 签名变了）。要跑那两个脚本得单独开环境：
+#   uv run --with transformers==4.57.3 --with torch python tools/baseline_pytorch_tts.py
 packages = { find = { where = ["."] , include = ["qwen_tts*", "cli*", "web*", "core*"] } }
 include-package-data = true
 
