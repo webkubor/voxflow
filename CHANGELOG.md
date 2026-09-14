@@ -95,6 +95,23 @@ MLX 与均值之差 +0.0006 —— **恰好落在噪声底上**。所以迁移�
 - 摘除 `qwen-tts-demo` console script —— 它在 5.x 下 import 就炸，
   留一个装得上、一跑就报错的命令比没有更糟
 
+**顺带抓出两个漏声明**（用干净 venv 复刻新用户路径实测出来的）：
+
+- **`pillow` 从没被声明过** —— `core/cover.py:302` 硬 import（无 try/except），
+  封面裁切会直接 `ModuleNotFoundError`。而 Pillow 在 huggingface_hub /
+  transformers 里**只存在于 extra**（transformers 的 `vision` / `all` / `dev`），
+  pip 不会因为它们而装。旁证：`core/cover.py:336` 的 `_image_size()` 包了
+  try/except 并注释「不让缺 Pillow 挡住出图」—— 作者当时就撞过这个坑，
+  用兜底绕过去了，没回来补声明
+- **`requests` 只被 transitive 满足** —— `core/suno_api.py:424` 硬 import，
+  干净环境里它是被 `librosa → pooch` 顺带带进来的。能用，但这条链不是契约。
+  （hub 1.x 已改用 `httpx`，不再提供 requests）
+
+判断标准不是「装完能不能 import」，而是「**产品路径直接 import 的包有没有被
+显式声明**」—— transitively 满足是运气，不是契约。
+`certifi` / `pydantic` / `torch` 经核实是软依赖或有硬性上游保证（分别是
+try/except 兜底 + requests、fastapi、torchaudio），未补声明。
+
 升级后实测（真实环境）：
 
 | 项 | 结果 |
