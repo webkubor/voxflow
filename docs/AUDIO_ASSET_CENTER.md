@@ -324,3 +324,13 @@ AI 设计 ──┘                                      → 标注 source_type
 7. **歌唱能力**：采用哪一种实际支持选中音色演唱的模型/服务；样本量、费用、分轨能力与失败边界是什么？
 
 在以上决定明确前，不应开始改库、改接口或补 UI 按钮。
+
+## 封面语义质检（2026-09-14 新增）
+
+`scripts/check_covers.py` 只查尺寸；语义层面（有没有标题、主体是否明确、
+色调是否合格）用 [mlx-vlm-kit](https://github.com/webkubor/mlx-vlm-kit)：
+
+```bash
+vlm cover-check ~/.voxflow/out/待上传 --batch   # 批量质检，2/2 合格式输出
+vlm reverse-prompt cover.jpg --lang en          # 好封面反推 prompt，喂 museav gen 复刻
+```
