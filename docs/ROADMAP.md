@@ -44,12 +44,28 @@
 | `docs(sop)` 58c45e6 + `fix(cover)` e8f011c | 封面禁任何文字，只画音乐元素 |
 | `chore(tools)` 278ef54 | TTS 基线对比 + 冒烟脚本 |
 
-### 「MLX 改造」在哪儿
+### 「MLX 改造」已落地（v0.10.0，2026-09-14）
 
-git reflog / log / stash / 全分支都没找到 MLX 相关 commit —— **没真动手**。
+我前一次回答「git 里没找到 MLX commit」是**错的**——其实就在我回答前两天刚 commit。
+CLAUDE.md 已更新：
 
-如果是你心里的想法：Apple Silicon 推理替换（PyTorch → MLX）是大改造，
-但目前**没有第二个实现之前不值得动**（已写在下方 ROADMAP § 1）。
+- **MLX 是唯一后端**，PyTorch 回退链路整个删除
+- **Qwen3-TTS 迁 Apple MLX 8-bit**：体积 -31%、推理快 1.78×
+- 旧 PyTorch 模型仍在 `~/.voxflow/models/`（8.4 GB）未动，留着万一回滚
+
+**两个必须知道的坑**（CLAUDE.md 也明确标了）：
+
+1. **`ref_text` 是 `personas.json` 的必填字段**，留空会截断 + 乱码
+2. **克隆路径没有动态情绪指令**：MLX Base 模型源码层没 instruct 入口，
+   传 `--tone` / `--emotion` 时**不生效**，但还在打印「演技负载」—— 有意无意骗用户。
+
+详细决策 + 改动清单 + 回归脚本：
+
+- `docs/MLX_MIGRATION.md` —— 决策 + 完整论证 + 已知代价
+- `docs/MLX_MIGRATION_CHECKLIST.md` —— 改动清单
+
+回滚：`git revert` MLX 相关 commit。旧 PyTorch 模型在 `~/.voxflow/models/`
+未动。
 
 ---
 
