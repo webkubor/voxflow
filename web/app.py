@@ -3995,3 +3995,85 @@ if __name__ == "__main__":
     print("  http://localhost:8866")
     print("=" * 50)
     uvicorn.run(app, host="0.0.0.0", port=8866)
+
+
+# ── 发行资产 API（给浏览器插件 voxflow-publisher 用）────────────────
+#
+# 插件在音乐平台的发布页里跑，要两样东西：元数据（填表）和文件（上传）。
+# 两者都只在 127.0.0.1 上流转，不出本机 —— 延续 VoxFlow「音频不出本机」的口径。
+# 插件仓库：~/dev/browser-plugins/voxflow-publisher
+
+@app.get("/api/release/pending")
+def release_pending(platform: str = "qishui"):
+    """某平台待发行的曲目 + 填表要的全部元数据。
+
+    判据是「有音频、且这个平台还没有上架/已提交记录」。
+    is_instrumental / music_type 这些不在这里重推 —— 用 pipeline.publish_fields，
+    那是同一份推导规则的真源（备料阶段就定死，发布时纯搬运）。
+    """
+    from core import pipeline as _pipe
+
+    done = ("online", "published", "submitted")
+    out = []
+    for t in _pipe.list_tracks():
+        if not (t.get("audio_file") or "").strip():
+            continue
+        if ((t.get("platforms") or {}).get(platform) or {}).get("status") in done:
+            continue
+        f = _pipe.publish_fields(t["id"])
+        audio = BASE_DIR / t["audio_file"] if not Path(t["audio_file"]).is_absolute() else Path(t["audio_file"])
+        out.append({
+            "id": t["id"],
+            # 发出去的歌名必须唯一，所以优先 release_title
+            "title": (t.get("release_title") or t.get("title") or "").strip(),
+            "lyrics": t.get("lyrics") or "",
+            "instrumental": f["is_instrumental"],
+            "music_type": f["music_type"],
+            "ai_tool": f["ai_tool"],
+            "already_released": f["already_released"],
+            "tags": t.get("tags") or "",
+            "album_desc": t.get("album_desc") or "",
+            "duration": t.get("duration") or 0,
+            "audio_name": Path(t["audio_file"]).name,
+            "cover_name": Path(t.get("cover_file") or "").name,
+            # 插件按体积决定等平台解析多久；给的是转码后的估算，wav 按 1/5 算
+            "audio_mb": round((audio.stat().st_size / 1048576 / 5) if audio.is_file()
+                              and audio.suffix.lower() == ".wav" else
+                              (audio.stat().st_size / 1048576 if audio.is_file() else 6), 1),
+        })
+    return out
+
+
+@app.get("/api/release/{track_id}/asset/{kind}")
+def release_asset(track_id: str, kind: str):
+    """音频或封面的字节流。kind: audio | cover
+
+    音频一律先转 320k MP3（见 core/release.py 里那条规则的由来）。
+    """
+    from core import pipeline as _pipe
+    from core.release import to_mp3
+
+    if kind not in ("audio", "cover"):
+        raise HTTPException(400, "kind 只能是 audio 或 cover")
+    t = _pipe.get_track(track_id)
+    if not t:
+        raise HTTPException(404, f"没有这首作品: {track_id}")
+
+    rel = (t.get("audio_file") if kind == "audio" else t.get("cover_file")) or ""
+    if not rel:
+        raise HTTPException(404, f"这首没有 {kind} 文件")
+    path = Path(rel) if Path(rel).is_absolute() else BASE_DIR / rel
+    if not path.is_file():
+        raise HTTPException(404, f"文件不在: {path}")
+
+    if kind == "audio":
+        path = to_mp3(path)
+    # 曲库里 wav / m4a / mp3 都有（Suno 下来的是 m4a）。不要用 mimetypes 猜 ——
+    # 它给 .m4a 的是老掉牙的 audio/mp4a-latm，浏览器和平台都不认。
+    media = {
+        ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4",
+        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
+    }.get(path.suffix.lower(), "audio/mpeg" if kind == "audio" else "image/jpeg")
+
+    # filename 要带出去 —— 插件靠文件名判断平台有没有真的收下（不能读 input.files）
+    return FileResponse(str(path), media_type=media, filename=path.name)
