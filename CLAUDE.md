@@ -68,4 +68,9 @@
    PyTorch 的 `instruct_ids` 是真生效的（实测），所以这是**净损失**。
    传 `--tone` / `--emotion` 时要明确提示不生效，不要打印一个没生效的「演技负载」
 
-回滚方式：`git revert` 相关提交。旧 PyTorch 模型仍在 `~/.voxflow/models/`（8.4 GB）未动。
+回滚方式：`git revert` 相关提交。
+⚠️ **2026-09-29：旧 PyTorch 权重（`~/.voxflow/models/`，8.4 GB）已删除** ——
+本文件早期版本写的「仍在、未动」是过期信息。现在
+`tools/baseline_pytorch_tts.py` 与 `tools/verify_instruct_effect.py` 默认跑不了
+（前置检查直接说明原因并给出从 U 盘拷回的命令），它们只剩
+「MLX 出问题时做 A/B 回滚对照」这一个用途。

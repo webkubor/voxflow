@@ -172,7 +172,7 @@ git checkout core/engine.py core/modes/cloner.py core/modes/designer.py
 git checkout cli/commands/voice.py cli/commands/tts.py cli/commands/doctor.py
 git checkout paths.py cli/commands/preset.py
 
-# 旧模型仍在 ~/.voxflow/models/，旧路径自动生效
+# 旧模型已于 2026-09-29 删除；MLX 稳定确认后不再自动生效
 ```
 
 不需要重新下载，回滚 5 分钟内回到 PyTorch 版。
@@ -180,6 +180,7 @@ git checkout paths.py cli/commands/preset.py
 ## 完成后清理（可选）
 
 - [ ] 卸载 qwen_tts（迁完没用了）：`.venv/bin/pip uninstall qwen_tts`
-- [ ] 但**不要**立即删 `~/.voxflow/models/`（PyTorch 原生模型）—— 至少留到确认 MLX 版稳定一周后
+- [x] `~/.voxflow/models/`（PyTorch 原生模型）—— **2026-09-29 已删**，MLX 稳定已超两周。
+      保留它没有任何运行时用途；回滚需要时从 U 盘 `pytorch/Qwen3-TTS-1.7B/Base` 拷回即可。
 - [ ] U 盘备份：把 `~/.voxflow/models-mlx/` 整个目录纳入 `MLX/` 分类（已有此分类结构）
 - [ ] CHANGELOG.md 加一行："2026-09-14: Qwen3-TTS 切到 Apple MLX 8-bit，体积 -31%、推理 1.76×"

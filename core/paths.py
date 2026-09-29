@@ -73,11 +73,14 @@ PUBLISH_DIR = DATA_DIR / "publish"         # 发布物料：平台规定的结�
 DESIGNS_DIR = DATA_DIR / "voice_designs"   # 音色设计配方
 
 # TTS 模型分两代，**当前运行时只用 MLX 那一代**：
-#   models/      PyTorch 原生（4.2 GB × 2 = 8.4 GB）—— 2026-09-14 迁移前的下载，
-#                现在没有任何代码读它，留着只是为了回滚（见 docs/MLX_MIGRATION.md）
+#   models/      PyTorch 原生 —— 2026-09-14 迁移前的下载，**2026-09-29 已删除**。
+#                没有任何代码读它；只剩 tools/ 下两个 A/B 对照脚本引用，
+#                且那两处都加了前置检查，权重缺失时直接报清楚而不是 import 时炸。
 #   models-mlx/  MLX 8-bit（2.9 GB × 2 = 5.8 GB）—— 唯一在用的一代
-# 分开两个目录而不是就地覆盖：回滚只要 git revert，不用重下 8.4 GB。
-MODELS_DIR = DATA_DIR / "models"           # 旧 PyTorch 模型：8.4 GB（可删，见上）
+# 保留这个常量是因为回滚文档与那两个对照脚本还要引用它；
+# 目录本身不再预建。回滚需要权重时从 U 盘拷：
+#   pytorch/Qwen3-TTS-1.7B/Base → ~/.voxflow/models/Base-1.7B
+MODELS_DIR = DATA_DIR / "models"           # 旧 PyTorch 模型：已删，仅回滚时手动恢复
 MODELS_MLX_DIR = DATA_DIR / "models-mlx"   # MLX 8-bit 模型：5.8 GB（当前在用）
 
 PERSONAS_FILE = CONFIG_DIR / "personas.json"

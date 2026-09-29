@@ -22,6 +22,10 @@ seed 固定后，输入相同则输出必然逐样本相同；实测若分叉，
     .venv/bin/python tools/verify_instruct_effect.py [输出目录]
 
 需要 PyTorch 链路可用（`~/.voxflow/models/Base-1.7B`）。
+⚠️ **2026-09-29 起该权重已删除**，本脚本默认跑不了（见下方前置检查）。
+   需要时从 U 盘拷回 `pytorch/Qwen3-TTS-1.7B/Base` 即可。
+   另注：`instruct_ids` 是 **PyTorch 独有**能力，MLX 的 Base 模型没有 instruct 入口
+   （见 CLAUDE.md「已知代价」），所以这个实验只在回滚对照时才有意义。
 """
 import os
 import sys
@@ -42,6 +46,17 @@ REF = os.path.expanduser("~/.voxflow/assets/temp/当前参考_温柔旁白.wav")
 MODEL = os.path.expanduser("~/.voxflow/models/Base-1.7B")
 TEXT = "你怎么能这样对我说话！"
 INSTRUCT = "中性、清晰、平稳、不带明显情绪 用极度愤怒、咆哮的语气说"
+
+# 前置检查：先说清「为什么不能跑」，别等到 import torch 才炸
+if not os.path.isdir(MODEL):
+    sys.exit(
+        f"[x] PyTorch 权重不存在：{MODEL}\n"
+        f"    PyTorch 回退链路 2026-09-14 已删除，本实验仅供回滚对照。\n"
+        f"    需要时：\n"
+        f"      mkdir -p {os.path.dirname(MODEL)}\n"
+        f"      cp -a '/Volumes/AI素材资源/开源模型/pytorch/Qwen3-TTS-1.7B/Base' {MODEL}\n"
+        f"    日常链路是 MLX（models-mlx/），instruct_ids 在 MLX 上不存在。"
+    )
 
 import numpy as np
 import soundfile as sf

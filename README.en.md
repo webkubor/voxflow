@@ -85,7 +85,7 @@ Or install everything up front:
 
 > Models land in **`~/.voxflow/models-mlx/`** (data dir), not the project dir — reinstall tools, switch branches, `git clean`, none of them will make you re-download 5.8 GB.
 >
-> Pre-2026-09-14 downloads were Qwen native PyTorch weights (`~/.voxflow/models/`, 8.4 GB). No code reads those anymore; they're kept only for rollback. Once MLX is confirmed stable, feel free to delete and reclaim space.
+> Pre-2026-09-14 downloads were Qwen native PyTorch weights (`~/.voxflow/models/`, 8.4 GB). No code reads those anymore; **they were deleted on 2026-09-29** once MLX proved stable. For a rollback comparison, copy `pytorch/Qwen3-TTS-1.7B/Base` back from the backup drive.
 
 ---
 
