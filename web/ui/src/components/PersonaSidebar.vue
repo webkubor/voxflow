@@ -4,10 +4,10 @@
       <div class="sider-header">
         <div class="sider-title-row">
           <Icon name="voice" size="sm" />
-          <h3>音色库</h3>
-          <span class="count">{{ personas.length }}</span>
+          <h3>我的声音资产</h3>
+          <span class="count" :title="`已拥有 ${personas.length} 位角色`">{{ personas.length }}</span>
         </div>
-        <button class="add-btn" @click="$emit('addPersona')" title="注册新音色">
+        <button class="add-btn" @click="$emit('addPersona')" title="登记新声音角色">
           <Icon name="plus" size="sm" />
         </button>
       </div>
@@ -18,7 +18,7 @@
           ref="searchInput"
           v-model="keyword"
           type="text"
-          placeholder="搜索音色…（按 / 聚焦）"
+          placeholder="搜索声音角色…（按 / 聚焦）"
           class="search-input"
         />
         <button v-if="keyword" class="search-clear" @click="keyword = ''" title="清除">
@@ -78,9 +78,9 @@
         </div>
 
         <div v-if="filteredPersonas.length === 0" class="empty">
-          <p v-if="keyword">没有匹配「{{ keyword }}」的音色</p>
-          <p v-else>暂无音色资产</p>
-          <span v-if="!keyword">点击右上角 ✚ 注册新音色</span>
+          <p v-if="keyword">没有匹配「{{ keyword }}」的声音资产</p>
+          <p v-else>暂无声音资产</p>
+          <span v-if="!keyword">点击右上角 ✚ 登记，或在「音色设计」中塑造</span>
         </div>
       </div>
     </aside>
@@ -90,11 +90,11 @@
   <button
     v-if="collapsed"
     class="sider-rail"
-    title="展开音色库"
+    title="展开我的声音资产"
     @click="$emit('toggleCollapse')"
   >
     <Icon name="chevron-right" size="sm" />
-    <span class="rail-label">音色</span>
+    <span class="rail-label">资产</span>
     <span class="rail-count">{{ personas.length }}</span>
   </button>
 </template>

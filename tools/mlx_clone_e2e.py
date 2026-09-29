@@ -50,5 +50,5 @@ print(f"      ✓ {out}  时长 {len(audio)/sr:.2f}s")
 
 print(f"[4/4] whisper 转写验证")
 import mlx_whisper
-r = mlx_whisper.transcribe(out, path_or_hf_repo="/Users/webkubor/.cache/voiceinput/models/whisper-large-v3-4bit", language="zh")
+r = mlx_whisper.transcribe(out, path_or_hf_repo="/Users/webkubor/.cache/mlx-whisper/whisper-large-v3-4bit", language="zh")
 print(f"      ✓ 转写: {r['text'].strip()}")

@@ -116,22 +116,61 @@
         </div>
 
         <div v-if="hotSongs.length" class="hot-chart">
-          <div class="chart-title"><Icon name="flame" size="sm" />当前热度榜 Top{{ hotSongs.length }}</div>
-          <div v-for="s in hotSongs" :key="s.name" class="chart-row">
-            <span class="chart-rank">{{ s.rank }}</span>
-            <span class="chart-name">{{ s.name }}</span>
-            <span class="chart-artist">{{ s.artist }}</span>
-            <span v-if="s.platforms.length > 1" class="chart-both" title="网易云 + QQ 双榜上榜">双榜</span>
-            <span class="chart-score">{{ s.score }}</span>
+          <div class="chart-header-row">
+            <div class="chart-title">
+              <Icon name="flame" size="sm" />
+              <span>全网热歌榜（网易云 × QQ 音乐交叉）</span>
+              <span class="chart-count-badge">共 {{ hotSongs.length }} 首</span>
+            </div>
             <button
-              v-if="mode === 'cover'"
-              class="cover-pick-btn"
-              :title="`用你的声音翻唱《${s.name}》`"
-              @click="pickCoverSong(s)"
+              v-if="hotSongs.length > 8"
+              class="chart-toggle-btn"
+              @click="toggleShowAllHotSongs"
             >
-              <Icon name="layers" size="sm" />
-              <span>翻唱这首</span>
+              <span>{{ showAllHotSongs ? '收起榜单' : `展开全部 (${hotSongs.length}首)` }}</span>
+              <Icon :name="showAllHotSongs ? 'chevron-up' : 'chevron-down'" size="sm" />
             </button>
+          </div>
+
+          <div class="chart-list">
+            <div
+              v-for="s in displayedHotSongs"
+              :key="s.name + s.artist"
+              class="chart-row"
+              :class="{ 'is-top3': s.rank <= 3 }"
+            >
+              <span class="chart-rank" :class="`rank-${s.rank}`">{{ s.rank }}</span>
+              <div class="chart-info">
+                <span class="chart-name" :title="s.name">{{ s.name }}</span>
+                <span class="chart-artist" :title="s.artist">{{ s.artist }}</span>
+              </div>
+              <div class="chart-meta">
+                <span v-if="s.platforms && s.platforms.length > 1" class="chart-badge both" title="网易云 + QQ 双榜同步上榜">🔥 双榜</span>
+                <span v-else-if="s.platforms && s.platforms.includes('netease')" class="chart-badge netease" title="网易云热歌榜">网易云</span>
+                <span v-else-if="s.platforms && s.platforms.includes('qq')" class="chart-badge qq" title="QQ 音乐热歌榜">QQ</span>
+                <span class="chart-score" title="热度评分">{{ s.score }}分</span>
+              </div>
+              <div class="chart-actions">
+                <button
+                  v-if="mode === 'cover'"
+                  class="cover-pick-btn"
+                  :title="`用你的声音翻唱《${s.name}》`"
+                  @click="pickCoverSong(s)"
+                >
+                  <Icon name="layers" size="sm" />
+                  <span>翻唱这首</span>
+                </button>
+                <button
+                  v-else
+                  class="cover-pick-btn inspire-btn"
+                  :title="`以《${s.name}》为灵感创作全新歌曲`"
+                  @click="pickInspirationSong(s)"
+                >
+                  <Icon name="sparkles" size="sm" />
+                  <span>取其灵感</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -630,6 +669,10 @@ const sunoRenewHint = computed(() => {
 // 抖音热门分类单独列在前 4 个：BPM 在 110-130 甜蜜区，drop 明确，
 // 副歌位置在 1:00-1:30 区间让剪辑师能卡到。
 const BGM_PRESETS = [
+  // 个人矩阵高频场景（深度对齐 SocialHub 自媒体矩阵）
+  { label: '📸 人像大片', tags: 'lofi hip hop, warm rhodes piano, vinyl crackle, gentle nylon guitar, ambient synth pads, mellow bass, late afternoon golden hour chill, relaxing, nostalgic, intimate, 82 BPM' },
+  { label: '🐱 萌宠猫咪', tags: 'playful acoustic, bouncy pizzicato strings, cheerful marimba, xylophone, cheeky woodwinds, cute cat paws walking, whimsical, quirky, 115 BPM' },
+  { label: '😂 搞笑反转', tags: 'quirky comedy, upbeat ukulele, catchy whistling, stomps, hand claps, slide whistle accent, funny brass drops, awkward pause effect, slapstick fail, 125 BPM' },
   // 抖音热门（前 4 个都是「火过或在火」的细分场景）
   { label: '🔥 抖音卡点', tags: 'trap, transition hit, drop, cinematic, 110 BPM' },
   { label: '💔 深夜伤感', tags: 'sad piano, emotional strings, lo-fi, melancholic, 80 BPM' },
@@ -875,7 +918,27 @@ const trend = ref(null);
 const trendError = ref('');
 const trendLoading = ref(false);
 const trendUpdated = ref('');
-const hotSongs = ref([]);
+const showAllHotSongs = ref(false);
+const displayedHotSongs = computed(() =>
+  showAllHotSongs.value ? hotSongs.value : hotSongs.value.slice(0, 8),
+);
+
+const toggleShowAllHotSongs = () => {
+  showAllHotSongs.value = !showAllHotSongs.value;
+};
+
+const pickInspirationSong = (song) => {
+  sunoForm.title = `${song.name} (灵感)`;
+  if (trend.value?.tags) {
+    const current = sunoForm.tags.trim();
+    sunoForm.tags = current ? `${current}, ${trend.value.tags}` : trend.value.tags;
+  }
+  const themes = trend.value?.themes?.length
+    ? trend.value.themes.join(' / ')
+    : song.name;
+  lyricsPrompt.value = `汲取《${song.name}》的情感与叙事，创作一首全新原创歌词，主题：${themes}`;
+  tasksStore.showToast(`已将《${song.name}》设为创作灵感`, 'success');
+};
 
 const loadTrending = async () => {
   trendLoading.value = true;
@@ -886,7 +949,7 @@ const loadTrending = async () => {
       trendError.value = data.error || '热点获取失败';
     } else {
       trend.value = data.trend || null;
-      hotSongs.value = (data.songs || []).slice(0, 5);
+      hotSongs.value = data.songs || [];
       trendUpdated.value = data.updated || '';
     }
   } catch (cause) {
@@ -1268,43 +1331,157 @@ const personaOptions = computed(() => {
 .hot-chart {
   border-top: 1px dashed var(--vf-border);
   padding-top: var(--vf-space-3);
+  margin-top: var(--vf-space-2);
 }
-.chart-title { font-size: 11px; color: var(--vf-text-3); margin-bottom: var(--vf-space-2); }
+.chart-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--vf-space-3);
+}
+.chart-title {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-1);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--vf-text-2);
+}
+.chart-count-badge {
+  font-size: 11px;
+  color: var(--vf-text-3);
+  background: var(--vf-bg-input);
+  padding: 1px 6px;
+  border-radius: var(--vf-radius-full);
+}
+.chart-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--vf-primary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--vf-radius-sm);
+  transition: all 0.15s ease;
+}
+.chart-toggle-btn:hover {
+  background: var(--vf-primary-soft);
+}
+.chart-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
 .chart-row {
   display: flex;
   align-items: center;
   gap: var(--vf-space-2);
   font-size: 12px;
-  padding: 3px 0;
+  padding: 6px 8px;
+  border-radius: var(--vf-radius-sm);
+  background: var(--vf-bg-card);
+  transition: background 0.15s ease;
+}
+.chart-row:hover {
+  background: var(--vf-bg-hover);
+}
+.chart-row.is-top3 {
+  background: rgba(255, 255, 255, 0.03);
 }
 .chart-rank {
-  width: 18px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
   color: var(--vf-text-3);
+  background: var(--vf-bg-input);
   font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.chart-rank.rank-1 {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+.chart-rank.rank-2 {
+  background: rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+}
+.chart-rank.rank-3 {
+  background: rgba(217, 119, 6, 0.2);
+  color: #f59e0b;
+  border: 1px solid rgba(217, 119, 6, 0.4);
+}
+.chart-info {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+  min-width: 0;
+  flex: 1;
 }
 .chart-name {
   color: var(--vf-text-1);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  max-width: 200px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
 }
 .chart-artist {
   color: var(--vf-text-3);
   font-size: 11px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 130px;
 }
-.chart-both {
+.chart-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.chart-badge {
   font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--vf-radius-full);
+  line-height: 1.2;
+}
+.chart-badge.both {
   color: #ff8a50;
   border: 1px solid #ff8a50;
-  border-radius: var(--vf-radius-full);
-  padding: 0 6px;
-  flex: none;
+  background: rgba(255, 138, 80, 0.1);
+}
+.chart-badge.netease {
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.08);
+}
+.chart-badge.qq {
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.08);
 }
 .chart-score {
-  margin-left: auto;
-  color: var(--vf-text-2);
+  color: var(--vf-text-3);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
+  width: 44px;
+  text-align: right;
+}
+.chart-actions {
+  flex-shrink: 0;
 }
 .cover-pick-btn {
   display: inline-flex;
@@ -1318,11 +1495,18 @@ const personaOptions = computed(() => {
   border-radius: var(--vf-radius-full);
   cursor: pointer;
   transition: all 0.15s var(--vf-ease);
-  margin-left: var(--vf-space-2);
   flex: none;
 }
 .cover-pick-btn:hover {
   background: var(--vf-primary);
+  color: white;
+}
+.cover-pick-btn.inspire-btn {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+}
+.cover-pick-btn.inspire-btn:hover {
+  background: #0284c7;
   color: white;
 }
 

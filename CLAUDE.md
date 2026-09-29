@@ -48,7 +48,7 @@
 - **中台的内部实现不抄到这里**。voxflow 是调用方，只记「接口怎么用、多少钱」。
   要查中台注意分两层：规则在 `museav-manager` 仓库，运行时状态（上游启用情况、
   租户额度）在数据库里、仓库中查不到。详见 `core/cover.py` 文件头。
-- **改前端后跑 `npm run check`**（typecheck + build 两步都要）。
+- **改前端后跑 `npm run check`**（在 `web/ui/` 目录下；typecheck + build 两步都要）。
   只跑 typecheck 漏过真 bug —— 重复 import 只有 build 会报。
 - **验证 UI 要看图，不能只读 DOM**。`display:none` 的节点 `querySelector`
   照样找得到，「在 DOM 里」≠「看得见」。2026-09-06 的整屏黑屏就是这么漏过去的。

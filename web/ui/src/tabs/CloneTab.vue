@@ -3,11 +3,107 @@
     <!-- 模型未就绪 / 正在下载 -->
     <ModelSetupCard v-if="!modelStatus.base.ready" model="Base" />
 
+    <!-- 顶层流程指引 -->
+    <div class="clone-flow-banner">
+      <div class="banner-left">
+        <Icon name="voice" size="sm" />
+        <div class="banner-text-group">
+          <span class="banner-title">声音工坊 · 文本配音：选定声线角色，一键口播朗读</span>
+          <span class="banner-desc">在左侧挑选已入库的声音角色，输入台词与语气描述，即刻生成广播级品质旁白与配音音频。</span>
+        </div>
+      </div>
+      <div class="banner-right">
+        <button class="goto-design-btn" @click="goToDesign">
+          <Icon name="sparkles" size="sm" />
+          <span>✨ 捏造新声线角色</span>
+          <Icon name="arrow-right" size="sm" />
+        </button>
+      </div>
+    </div>
+
     <div class="clone-workbench">
-      <!-- 核心工作台卡片 -->
+      <!-- 左侧：发音角色资产库（310px，与 DesignTab 预设库完全对称） -->
+      <aside class="personas-sidebar">
+        <div class="sidebar-header">
+          <div class="section-title">
+            <Icon name="voice" size="sm" />
+            <span>🎙️ 我的声音资产</span>
+          </div>
+          <span class="persona-badge">{{ personasArr.length }} 位</span>
+        </div>
+
+        <div class="persona-search-box">
+          <Icon name="search" size="sm" class="search-icon" />
+          <input
+            v-model="personaSearch"
+            type="text"
+            placeholder="搜索发音角色、描述..."
+            class="persona-search-input"
+          />
+          <button v-if="personaSearch" class="clear-search-btn" @click="personaSearch = ''" title="清除">
+            <Icon name="close" size="sm" />
+          </button>
+        </div>
+
+        <div class="personas-scroll-list scroll-y">
+          <div
+            v-for="p in filteredPersonas"
+            :key="p.key"
+            class="persona-card"
+            :class="{ active: selectedPersona === p.key }"
+            tabindex="0"
+            @click="selectPersona(p.key)"
+            @keydown.enter.prevent="selectPersona(p.key)"
+          >
+            <div class="persona-card-head">
+              <div class="persona-avatar">
+                {{ (p.name || p.key).charAt(0).toUpperCase() }}
+              </div>
+              <div class="persona-name-col">
+                <div class="persona-name-row">
+                  <span class="persona-name" :title="p.name || p.key">{{ p.name || p.key }}</span>
+                  <span v-if="selectedPersona === p.key" class="using-badge">配音中</span>
+                </div>
+                <span class="persona-status-tag" :class="p.has_audio ? 'ready' : 'empty'">
+                  {{ p.has_audio ? '✓ 样音就绪' : '待配置' }}
+                </span>
+              </div>
+              <button
+                v-if="p.has_audio"
+                class="persona-play-btn"
+                :class="{ playing: previewKey === p.key }"
+                :title="previewKey === p.key ? '暂停试听' : '试听样音'"
+                @click.stop="togglePreview(p.key)"
+              >
+                <Icon :name="previewKey === p.key ? 'pause' : 'play'" size="sm" />
+              </button>
+            </div>
+            <div class="persona-desc" :title="p.desc || p.instruction">
+              {{ p.desc || p.instruction || '已装载声音特征' }}
+            </div>
+          </div>
+          <div v-if="filteredPersonas.length === 0" class="persona-empty">
+            <p v-if="personaSearch">未找到「{{ personaSearch }}」相关角色</p>
+            <p v-else>暂无发音角色</p>
+          </div>
+        </div>
+
+        <button class="new-persona-btn" @click="goToDesign">
+          <Icon name="plus" size="sm" />
+          <span>✨ 捏造/录制新声线</span>
+        </button>
+      </aside>
+
+      <!-- 右侧：核心配音输入工作区 -->
       <section class="studio">
-        <!-- 顶栏辅助操作：AI 帮写抽屉开关 + 历史草稿 -->
-        <div class="workbench-sub-bar">
+        <!-- 顶栏状态与快捷工具栏 -->
+        <div class="studio-header-bar">
+          <div class="speaker-indicator" :class="{ 'warning-indicator': !selectedPersona }">
+            <Icon name="voice" size="sm" />
+            <span v-if="selectedPersona">当前发音人：<strong>{{ currentPersonaName }}</strong></span>
+            <span v-else class="warn-text">⚠️ 请在左侧选择发音角色</span>
+          </div>
+
           <div class="sub-bar-left">
             <button
               class="tool-tab-btn"
@@ -71,7 +167,7 @@
           <n-input
             v-model:value="cloneForm.text"
             type="textarea"
-            :rows="5"
+            :rows="6"
             maxlength="400"
             show-count
             placeholder="在此输入要合成语音的文本内容（支持 1-400 字）…"
@@ -139,7 +235,8 @@
 </template>
 
 <script setup>
-import { reactive, onMounted, ref } from 'vue';
+import { reactive, onMounted, ref, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import AIHelpSection from '../components/AIHelpSection.vue';
 import ModelSetupCard from '../components/ModelSetupCard.vue';
@@ -150,14 +247,43 @@ import { useSynthStore } from '../stores/synth';
 import { useTasksStore } from '../stores/tasks';
 import { useVoicesStore } from '../stores/voices';
 
+const router = useRouter();
 const capabilitiesStore = useCapabilitiesStore();
 const synthStore = useSynthStore();
 const tasksStore = useTasksStore();
 const voicesStore = useVoicesStore();
 
 const { modelStatus } = storeToRefs(capabilitiesStore);
-const { selectedPersona } = storeToRefs(voicesStore);
+const { selectedPersona, personas, previewKey } = storeToRefs(voicesStore);
+const { selectPersona, togglePreview } = voicesStore;
 const { savedScripts } = storeToRefs(synthStore);
+
+const personaSearch = ref('');
+
+const personasArr = computed(() =>
+  Object.entries(personas.value || {}).map(([key, p]) => ({ key, ...p })),
+);
+
+const filteredPersonas = computed(() => {
+  const kw = personaSearch.value.trim().toLowerCase();
+  if (!kw) return personasArr.value;
+  return personasArr.value.filter(
+    (p) => (p.name || '').toLowerCase().includes(kw)
+      || p.key.toLowerCase().includes(kw)
+      || (p.desc || '').toLowerCase().includes(kw)
+      || (p.instruction || '').toLowerCase().includes(kw),
+  );
+});
+
+const currentPersonaName = computed(() => {
+  if (!selectedPersona.value) return '';
+  const p = personas.value?.[selectedPersona.value];
+  return p?.name || selectedPersona.value;
+});
+
+const goToDesign = () => {
+  router.push({ name: 'design' });
+};
 
 const showAIHelp = ref(false);
 const showDrafts = ref(false);
@@ -192,7 +318,7 @@ const toggleMood = (mood) => {
 };
 
 const handleSynthesize = () => {
-  if (!selectedPersona.value) return tasksStore.showToast('请先选择音色', 'warning');
+  if (!selectedPersona.value) return tasksStore.showToast('请先选择发音角色', 'warning');
   if (!cloneForm.text.trim()) return tasksStore.showToast('请输入合成文案', 'warning');
   synthStore.doClone({
     mode: 'clone',
@@ -209,15 +335,15 @@ const saveScript = async () => {
   try {
     await synthStore.saveScript(cloneForm.text);
     tasksStore.showToast('已存入草稿箱', 'success');
-  } catch (cause) {
-    await tasksStore.reportError(cause, { action: 'script.save' });
+  } catch {
+    // 错误已进日志
   }
 };
 
 const loadScript = (script) => {
-  cloneForm.text = script.content;
+  synthStore.loadScript(script);
   showDrafts.value = false;
-  tasksStore.showToast(`已装载「${script.title}」`, 'info');
+  tasksStore.showToast('已载入草稿内容', 'info');
 };
 
 const deleteScript = (id) => synthStore.deleteScript(id);
@@ -227,17 +353,298 @@ onMounted(() => synthStore.loadScripts());
 
 <style scoped>
 .tab-content-container {
-  max-width: 1080px;
+  max-width: 1180px;
   margin: 0 auto;
 }
 
-.clone-workbench {
+/* 顶层指引横幅 */
+.clone-flow-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-md);
+  margin-bottom: var(--vf-space-4);
+}
+.banner-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.banner-text-group {
   display: flex;
   flex-direction: column;
-  gap: var(--vf-space-4);
+  gap: 2px;
+}
+.banner-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vf-primary);
+}
+.banner-desc {
+  font-size: 12px;
+  color: var(--vf-text-3);
+  line-height: 1.4;
+}
+.goto-design-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--vf-bg-3);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-full);
+  color: var(--vf-text-1);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s var(--vf-ease);
+  white-space: nowrap;
+}
+.goto-design-btn:hover {
+  background: var(--vf-bg-hover);
+  border-color: var(--vf-primary);
+  color: var(--vf-primary);
+  transform: translateX(2px);
 }
 
-/* 核心工作台 */
+/* 左右分栏工作台：严格 310px + 1fr 对齐 DesignTab */
+.clone-workbench {
+  display: grid;
+  grid-template-columns: 310px 1fr;
+  gap: var(--vf-space-4);
+  align-items: start;
+}
+
+/* 左侧：发音角色资产库 */
+.personas-sidebar {
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-md);
+  padding: var(--vf-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--vf-space-3);
+  height: 560px;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--vf-space-2);
+  border-bottom: 1px solid var(--vf-border);
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--vf-space-2);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vf-text-1);
+}
+
+.persona-badge {
+  font-size: 11px;
+  color: var(--vf-text-3);
+  background: var(--vf-bg-3);
+  padding: 1px 7px;
+  border-radius: var(--vf-radius-full);
+}
+
+.persona-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.persona-search-box .search-icon {
+  position: absolute;
+  left: 8px;
+  color: var(--vf-text-3);
+  pointer-events: none;
+}
+.persona-search-input {
+  width: 100%;
+  padding: 6px 26px 6px 28px;
+  background: var(--vf-bg-1);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-sm);
+  color: var(--vf-text-1);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.persona-search-input:focus {
+  border-color: var(--vf-primary);
+}
+.clear-search-btn {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  color: var(--vf-text-3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+}
+.clear-search-btn:hover {
+  color: var(--vf-text-1);
+}
+
+.personas-scroll-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vf-space-2);
+  flex: 1;
+  padding-right: 4px;
+}
+
+.persona-card {
+  padding: var(--vf-space-3);
+  background: var(--vf-bg-3);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-sm);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.15s var(--vf-ease);
+  outline: none;
+}
+.persona-card:hover,
+.persona-card:focus-visible {
+  border-color: var(--vf-border-strong);
+  background: var(--vf-bg-hover);
+  transform: translateY(-1px);
+}
+.persona-card.active {
+  border-color: var(--vf-primary);
+  background: var(--vf-primary-soft);
+}
+
+.persona-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.persona-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--vf-bg-4);
+  color: var(--vf-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.persona-name-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.persona-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.persona-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vf-text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.using-badge {
+  font-size: 10px;
+  color: var(--vf-primary);
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid var(--vf-primary);
+  padding: 0 5px;
+  border-radius: var(--vf-radius-full);
+  white-space: nowrap;
+}
+.persona-status-tag {
+  font-size: 10px;
+}
+.persona-status-tag.ready {
+  color: var(--vf-primary);
+}
+.persona-status-tag.empty {
+  color: var(--vf-text-3);
+}
+.persona-play-btn {
+  background: var(--vf-bg-4);
+  border: 1px solid var(--vf-border);
+  color: var(--vf-text-2);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.persona-play-btn:hover {
+  background: var(--vf-primary);
+  color: white;
+  border-color: var(--vf-primary);
+}
+.persona-play-btn.playing {
+  background: var(--vf-primary);
+  color: white;
+  border-color: var(--vf-primary);
+  animation: pulse 1.5s infinite;
+}
+.persona-desc {
+  font-size: 11px;
+  color: var(--vf-text-3);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.persona-empty {
+  padding: 30px 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--vf-text-3);
+}
+
+.new-persona-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px;
+  background: var(--vf-bg-3);
+  border: 1px dashed var(--vf-border-strong);
+  border-radius: var(--vf-radius-sm);
+  color: var(--vf-text-2);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.new-persona-btn:hover {
+  border-color: var(--vf-primary);
+  color: var(--vf-primary);
+  background: var(--vf-primary-soft);
+}
+
+/* 右侧核心工作台 */
 .studio {
   background: var(--vf-bg-2);
   border: 1px solid var(--vf-border);
@@ -249,12 +656,35 @@ onMounted(() => synthStore.loadScripts());
 }
 
 /* 顶栏辅助操作区 */
-.workbench-sub-bar {
+.studio-header-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding-bottom: var(--vf-space-3);
   border-bottom: 1px solid var(--vf-border);
+  gap: 12px;
+}
+
+.speaker-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--vf-text-1);
+  background: var(--vf-bg-3);
+  padding: 4px 10px;
+  border-radius: var(--vf-radius-full);
+  border: 1px solid var(--vf-border);
+}
+.speaker-indicator strong {
+  color: var(--vf-primary);
+}
+.speaker-indicator.warning-indicator {
+  background: rgba(234, 179, 8, 0.1);
+  border-color: rgba(234, 179, 8, 0.3);
+}
+.warn-text {
+  color: #f59e0b;
 }
 
 .sub-bar-left {
@@ -490,7 +920,13 @@ onMounted(() => synthStore.loadScripts());
 
 
 
-@media (max-width: 768px) {
+@media (max-width: 860px) {
+  .clone-workbench {
+    grid-template-columns: 1fr;
+  }
+  .personas-sidebar {
+    height: 260px;
+  }
   .params-grid {
     grid-template-columns: 1fr;
   }

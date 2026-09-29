@@ -101,23 +101,9 @@
         </div>
       </n-layout-header>
 
-      <!-- 中部主内容 -->
-      <n-layout has-sider class="app-body">
-        <!-- 左侧音色库：**只在真用得上音色的屏显示**（克隆/设计/剧本）。
-             音乐、发行、卡片墙、运营台上它既不能操作什么，又吃掉 170px 宽度 ——
-             而这几屏恰恰是内容最密的（卡片墙一行少放一张卡）。
-             音色的完整管理本来就在「音色」那一组里，侧边栏在那里才是顺手的位置。 -->
-        <PersonaSidebar
-          v-if="needsPersona"
-          ref="sidebarRef"
-          :collapsed="siderCollapsed"
-          @toggle-collapse="siderCollapsed = !siderCollapsed"
-          @add-persona="showAddPersona = true"
-          @edit-persona="openEditPersona"
-          @delete-persona="confirmDeletePersona"
-        />
-
-        <!-- 右侧主创作工作区 -->
+      <!-- 中部主内容：全局保持稳定视口，消灭切 Tab 时的布局跳动与侧边栏挤压 -->
+      <n-layout class="app-body">
+        <!-- 主创作工作区 -->
         <n-layout-content class="main-content">
           <!-- Tab 导航：图标 + 文字 -->
           <!-- 一级：三个入口。二级只在选中那一组里出现。 -->
@@ -146,23 +132,6 @@
             >{{ t.label }}</button>
           </nav>
 
-          <!-- 共享的「当前音色」状态条 -->
-          <div v-if="needsPersona" class="current-persona-row">
-            <CurrentPersonaChip />
-            <div v-if="currentTab === 'clone' || currentTab === 'design'" class="model-pill">
-              <span class="model-pill-label">模型</span>
-              <span class="model-pill-value">{{ modelLabel }}</span>
-              <n-progress
-                v-if="modelDownloading"
-                type="line"
-                :percentage="modelProgress"
-                :show-indicator="false"
-                :height="3"
-                class="model-pill-bar"
-              />
-            </div>
-          </div>
-
           <!-- Tab 主体：保留 n-tabs 提供的路由同步能力 -->
           <n-tabs
             v-model:value="currentTab"
@@ -172,19 +141,19 @@
           >
             <!-- 顺序与 tab 名跟上面的 TABS 保持一致。导航条被 .hidden-tabs
                  藏起来了、这些 tab 文案看不见，但留着旧名会误导下一个人。 -->
-            <n-tab-pane name="clone" tab="克隆"><CloneTab /></n-tab-pane>
-            <n-tab-pane name="design" tab="设计"><DesignTab /></n-tab-pane>
-            <n-tab-pane name="dialogue" tab="剧本"><DialogueTab /></n-tab-pane>
-            <n-tab-pane name="library" tab="音频"><LibraryTab /></n-tab-pane>
-            <n-tab-pane name="suno" tab="音乐"><SunoTab /></n-tab-pane>
-            <n-tab-pane name="intake" tab="入库"><IntakeTab /></n-tab-pane>
-            <n-tab-pane name="albums" tab="专辑"><AlbumsTab /></n-tab-pane>
-            <n-tab-pane name="promo" tab="宣推"><PromoTab /></n-tab-pane>
-            <n-tab-pane name="attest" tab="存证"><AttestTab /></n-tab-pane>
-            <n-tab-pane name="works" tab="发歌"><PipelineBoard /></n-tab-pane>
-            <n-tab-pane name="gallery" tab="卡片墙"><GalleryTab /></n-tab-pane>
-            <n-tab-pane name="publish" tab="发行"><PublishTab /></n-tab-pane>
-            <n-tab-pane name="ops" tab="运营"><OpsTab /></n-tab-pane>
+            <n-tab-pane name="design" tab="音色设计"><DesignTab /></n-tab-pane>
+            <n-tab-pane name="clone" tab="文本配音"><CloneTab /></n-tab-pane>
+            <n-tab-pane name="dialogue" tab="剧本演播"><DialogueTab /></n-tab-pane>
+            <n-tab-pane name="suno" tab="AI 出歌"><SunoTab /></n-tab-pane>
+            <n-tab-pane name="gallery" tab="作品展厅"><GalleryTab /></n-tab-pane>
+            <n-tab-pane name="albums" tab="专辑制作"><AlbumsTab /></n-tab-pane>
+            <n-tab-pane name="promo" tab="宣推短视频"><PromoTab /></n-tab-pane>
+            <n-tab-pane name="works" tab="发歌看板"><PipelineBoard /></n-tab-pane>
+            <n-tab-pane name="publish" tab="全网发行"><PublishTab /></n-tab-pane>
+            <n-tab-pane name="attest" tab="原创存证"><AttestTab /></n-tab-pane>
+            <n-tab-pane name="ops" tab="收益运营"><OpsTab /></n-tab-pane>
+            <n-tab-pane name="library" tab="媒体资产"><LibraryTab /></n-tab-pane>
+            <n-tab-pane name="intake" tab="导入音频"><IntakeTab /></n-tab-pane>
           </n-tabs>
         </n-layout-content>
       </n-layout>
@@ -297,19 +266,19 @@ const lazyTab = (loader, label) => defineAsyncComponent({
   },
 });
 
-const AlbumsTab = lazyTab(() => import('../tabs/AlbumsTab.vue'), '专辑');
+const AlbumsTab = lazyTab(() => import('../tabs/AlbumsTab.vue'), '专辑制作');
 const PromoTab = lazyTab(() => import('../tabs/PromoTab.vue'), '宣推短视频');
 const AttestTab = lazyTab(() => import('../tabs/AttestTab.vue'), '原创存证');
-const CloneTab = lazyTab(() => import('../tabs/CloneTab.vue'), '声音克隆');
+const CloneTab = lazyTab(() => import('../tabs/CloneTab.vue'), '文本配音');
 const DesignTab = lazyTab(() => import('../tabs/DesignTab.vue'), '音色设计');
-const DialogueTab = lazyTab(() => import('../tabs/DialogueTab.vue'), '剧本创作');
-const SunoTab = lazyTab(() => import('../tabs/SunoTab.vue'), 'AI 音乐');
-const PipelineBoard = lazyTab(() => import('./PipelineBoard.vue'), '发歌记录');
+const DialogueTab = lazyTab(() => import('../tabs/DialogueTab.vue'), '剧本演播');
+const SunoTab = lazyTab(() => import('../tabs/SunoTab.vue'), 'AI 出歌');
+const PipelineBoard = lazyTab(() => import('./PipelineBoard.vue'), '发歌看板');
 const PublishTab = lazyTab(() => import('../tabs/PublishTab.vue'), '全网发行');
-const LibraryTab = lazyTab(() => import('../tabs/LibraryTab.vue'), '音频文件');
+const LibraryTab = lazyTab(() => import('../tabs/LibraryTab.vue'), '媒体资产');
 const IntakeTab = lazyTab(() => import('../tabs/IntakeTab.vue'), '导入音频');
-const GalleryTab = lazyTab(() => import('../tabs/GalleryTab.vue'), '音乐卡片墙');
-const OpsTab = lazyTab(() => import('../tabs/OpsTab.vue'), '运营台');
+const GalleryTab = lazyTab(() => import('../tabs/GalleryTab.vue'), '作品展厅');
+const OpsTab = lazyTab(() => import('../tabs/OpsTab.vue'), '收益运营');
 import GlobalPlayer from './GlobalPlayer.vue';
 import TaskPanel from './TaskPanel.vue';
 import AddPersonaModal from './AddPersonaModal.vue';
@@ -348,13 +317,11 @@ const { player } = storeToRefs(libraryStore);
 const errorLogStore = useErrorLogStore();
 const { unreadCount: errorCount } = storeToRefs(errorLogStore);
 
-// 「模型未就绪」时哪些 tab 需要显示下载提示
-const NEEDS_PERSONA_TABS = new Set(['clone', 'design', 'dialogue']);
 const route = useRoute();
 const router = useRouter();
 
 const currentTab = computed({
-  get: () => (TAB_NAMES.has(route.name) ? route.name : 'clone'),
+  get: () => (TAB_NAMES.has(route.name) ? route.name : (modelStatus.value?.design?.ready ? 'design' : 'suno')),
   set: (tab) => {
     if (route.name !== tab) router.push({ name: tab });
   },
@@ -394,35 +361,30 @@ watch(
  */
 const TAB_GROUPS = [
   {
-    key: 'voice', title: '音色', icon: 'voice', needsModel: true,
+    key: 'voice', title: '声音工坊', icon: 'voice', needsModel: true,
     tabs: [
-      { name: 'clone', label: '声音克隆', icon: 'clone', hint: '用参考音频克隆一个音色' },
-      { name: 'design', label: '音色设计', icon: 'design', hint: '用文字描述设计一个音色' },
-      { name: 'dialogue', label: '剧本创作', icon: 'dialogue', hint: '多角色对话合成' },
-      { name: 'library', label: '音频文件', icon: 'library', hint: '本机生成过的音频文件' },
+      { name: 'design', label: '音色设计', icon: 'design', hint: '文字捏音色 / 录音样音克隆，打造专属 AI 声线' },
+      { name: 'clone', label: '文本配音', icon: 'clone', hint: '选定音色角色，一键朗读台词与口播合成' },
+      { name: 'dialogue', label: '剧本演播', icon: 'dialogue', hint: '多角色多轨对话剧情演播' },
     ],
   },
   {
-    key: 'music', title: '音乐', icon: 'suno',
+    key: 'music', title: '音乐制作', icon: 'suno',
     tabs: [
-      { name: 'suno', label: 'AI 音乐', icon: 'suno', hint: '生成歌曲 / BGM / 翻唱（需 Suno 会员）' },
+      { name: 'suno', label: 'AI 出歌', icon: 'suno', hint: '生成新歌 / 场景 BGM / 热歌翻唱（双榜灵感）' },
+      { name: 'gallery', label: '作品展厅', icon: 'library', hint: '卡片网格浏览所有已成作品、试听、对比提示词' },
+      { name: 'albums', label: '专辑制作', icon: 'board', hint: '把挑好的歌打包成专辑：定辑名、排曲序、出专辑封面' },
     ],
   },
   {
-    key: 'release', title: '发行', icon: 'publish',
-    // 顺序 = 一次发行真实的做事顺序：**挑歌 → 组成专辑 → 看进度**。
-    // 导入外部音频收进卡片墙（它只是挑歌时的一个小动作），不单独占位；
-    // 任何歌都要进专辑才能发，所以专辑紧跟着挑歌。
-    // 卡片墙是这条链的**起点**（选歌就在那儿翻），不是末尾的素材库 ——
-    // 把它排到最后，等于让人从流程中段开始找入口。
+    key: 'release', title: '发行与经营', icon: 'publish',
     tabs: [
-      { name: 'gallery', label: '卡片墙 · 选歌', icon: 'library', hint: '翻所有做好的歌，挑出要发的；外部音频也从这里导入' },
-      { name: 'albums', label: '专辑', icon: 'board', hint: '把选中的歌组成一张辑：定辑名、排曲序、出一张共用封面' },
-      { name: 'works', label: '发歌记录', icon: 'board', hint: '哪些发过、哪些没发、谁负责' },
-      { name: 'publish', label: '全网发行', icon: 'publish', hint: '各平台账号与已上架作品' },
-      { name: 'ops', label: '运营台', icon: 'pulse', hint: '成本、收益、回本播放量' },
-      { name: 'promo', label: '宣推短视频', icon: 'suno', hint: '把歌合成竖版宣推片，发抖音带流量' },
-      { name: 'attest', label: '原创存证', icon: 'publish', hint: '导出创作留痕与证书图，证明独创性；批量锚定上链' },
+      { name: 'promo', label: '宣推短视频', icon: 'suno', hint: '竖屏卡片 MV、短视频引流带货与模板发布' },
+      { name: 'works', label: '发歌看板', icon: 'board', hint: '从草稿到精选、发布的一站式流转看板' },
+      { name: 'publish', label: '全网发行', icon: 'publish', hint: '汽水音乐 / QQ / 网易云发行表单与账号同步' },
+      { name: 'attest', label: '原创存证', icon: 'publish', hint: '区块链存证证书导出与上链留痕' },
+      { name: 'ops', label: '收益运营', icon: 'pulse', hint: '单曲成本、千播收益率、回本测算与财务分析' },
+      { name: 'library', label: '媒体资产', icon: 'library', hint: '物理音频文件管理、在线试听与批量下载' },
     ],
   },
 ];
@@ -440,8 +402,7 @@ const goTab = (name) => {
   if (route.name !== name) router.push({ name });
 };
 
-// 哪些 tab 需要显示「当前音色」条
-const needsPersona = computed(() => NEEDS_PERSONA_TABS.has(currentTab.value));
+
 
 // 模型下载进度 / 状态文本
 const modelDownloading = computed(() => {

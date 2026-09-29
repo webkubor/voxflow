@@ -813,8 +813,37 @@ def get_status():
     }
 
 
+def _find_preset_audio_file(voice_name: str) -> Optional[Path]:
+    """寻找预设对应的最新生成样音文件"""
+    candidates = []
+    short_name = voice_name.split("-")[0].split("_")[0].strip()
+    # out/design/ 下按日期分目录（20260830/…），**不能写死日期** —— 写死的那版
+    # 只认 0828/0830 两天，今天生成的样音一律找不到。这里列出全部子目录。
+    design_root = DATA_DIR / "out" / "design"
+    search_dirs = [DATA_DIR / "assets" / "temp", DATA_DIR / "out"]
+    if design_root.is_dir():
+        search_dirs += sorted((d for d in design_root.iterdir() if d.is_dir()), reverse=True)
+    # 精确命中（文件名含完整 voice_name）和模糊命中（只含 short_name）分两组：
+    # short_name 砍掉了「-」「_」之后的部分，「朝朝-元气阳光」和「朝朝-温柔」
+    # 的 short_name 都是「朝朝」。混在一起按 mtime 排，查 A 会返回更晚生成的 B。
+    exact, fuzzy = [], []
+    for d in search_dirs:
+        if not d.exists():
+            continue
+        for f in d.glob("*.wav"):
+            if voice_name in f.name:
+                exact.append(f)
+            elif len(short_name) >= 2 and short_name in f.name:
+                fuzzy.append(f)
+    candidates = exact or fuzzy
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+    return candidates[0]
+
+
 def _scan_design_presets() -> list:
-    """扫描 configs/presets/ 目录，加载设计配方"""
+    """扫描 configs/presets/ 目录，加载设计配方，并自动探测是否有已生成样音"""
     # presets 是代码自带的内置预设，留在项目里跟着版本走；
     # 你自己存的预设落在数据目录。两处都扫。
     preset_dirs = [DATA_DIR / "configs" / "presets", PROJECT_DIR / "configs" / "presets"]
@@ -831,12 +860,16 @@ def _scan_design_presets() -> list:
             voice_name = cfg.get("voice_name", "").strip()
             if not voice_name:
                 continue
+            audio_file = _find_preset_audio_file(voice_name)
+            has_generated = audio_file is not None
             result.append({
                 "voice_name": voice_name,
                 "config_file": f.name,
                 "tone": cfg.get("tone", ""),
                 "emotion": cfg.get("emotion", ""),
                 "text": cfg.get("text", ""),
+                "has_generated": has_generated,
+                "audio_url": f"/api/preset-audio?voice_name={quote(voice_name)}" if has_generated else None,
             })
         except Exception:
             continue
@@ -1214,6 +1247,15 @@ def get_persona_audio(key: str):
             return FileResponse(str(ref_path), media_type="audio/wav")
 
     raise HTTPException(404, f"音色 {key} 没有可用的参考音频")
+
+
+@app.get("/api/preset-audio")
+def get_preset_audio(voice_name: str):
+    """根据预设名字返回对应的生成样音"""
+    audio_file = _find_preset_audio_file(voice_name)
+    if not audio_file or not audio_file.exists():
+        raise HTTPException(404, f"未找到预设「{voice_name}」的生成样音")
+    return FileResponse(str(audio_file), media_type="audio/wav")
 
 
 @app.get("/api/personas")
@@ -2649,7 +2691,7 @@ def trending():
             return {"ok": False, "error": "拿不到热歌榜"}
         result = analyze_trending(songs)
         data = {"ok": True, "updated": time.strftime("%Y-%m-%d %H:%M"),
-                "songs": songs[:5], "trend": result}
+                "songs": songs, "trend": result}
         # LLM 翻车时（空标签）不缓存 —— 下次点会重试，别把坏结果锁 30 分钟
         if result.get("tags"):
             _trend_cache.update(at=now, data=data)

@@ -3,20 +3,53 @@
     <!-- 模型未就绪卡片 -->
     <ModelSetupCard v-if="!modelStatus.design.ready" model="VoiceDesign" />
 
+    <!-- 顶层流程指引 -->
+    <div class="design-flow-banner">
+      <div class="banner-left">
+        <Icon name="sparkles" size="sm" />
+        <div class="banner-text-group">
+          <span class="banner-title">声音工坊 · 音色设计：凭空塑造独一无二的 AI 专属声线</span>
+          <span class="banner-desc">
+            从左侧「官方灵感预设」挑选模板或自由填写；合成入库后将沉淀至「我的声音资产」，供【文本配音】与【Suno 歌手】调用！
+          </span>
+        </div>
+      </div>
+      <div class="banner-right">
+        <button class="goto-assets-btn" @click="goToAssets">
+          <Icon name="voice" size="sm" />
+          <span>查看我的声音资产 ({{ personasCount }})</span>
+          <Icon name="arrow-right" size="sm" />
+        </button>
+      </div>
+    </div>
+
     <div class="design-workbench">
-      <!-- 左侧：声音配方库（紧凑可滚动选择栏） -->
+      <!-- 左侧：官方灵感预设库（Prompt 模板，点击即自动填入右侧表单） -->
       <aside v-if="designPresets.length > 0" class="presets-sidebar">
         <div class="sidebar-header">
           <div class="section-title">
             <Icon name="sparkles" size="sm" />
-            <span>预设配方库</span>
+            <span>✨ 官方灵感预设</span>
           </div>
-          <span class="preset-badge">{{ designPresets.length }} 款</span>
+          <span class="preset-badge">{{ filteredPresets.length }} 款模板</span>
+        </div>
+
+        <div class="preset-search-box">
+          <Icon name="search" size="sm" class="search-icon" />
+          <input
+            v-model="presetSearch"
+            type="text"
+            placeholder="搜索预设风格、语气描述..."
+            class="preset-search-input"
+          />
+          <button v-if="presetSearch" class="clear-search-btn" @click="presetSearch = ''" title="清除">
+            <Icon name="close" size="sm" />
+          </button>
         </div>
 
         <div class="presets-scroll-list scroll-y">
           <div
-            v-for="(p, idx) in designPresets"
+            v-for="(p, idx) in filteredPresets"
             :key="idx"
             class="preset-item"
             :class="{ active: selectedPresetName === p.voice_name }"
@@ -26,10 +59,13 @@
           >
             <div class="preset-item-head">
               <span class="preset-name">{{ p.voice_name }}</span>
-              <span v-if="selectedPresetName === p.voice_name" class="active-dot" />
+              <span v-if="selectedPresetName === p.voice_name" class="using-badge">已套用</span>
             </div>
             <div class="preset-tone">{{ p.tone }}</div>
             <div class="preset-text" :title="p.text">{{ p.text }}</div>
+          </div>
+          <div v-if="filteredPresets.length === 0" class="preset-empty">
+            没有匹配「{{ presetSearch }}」的灵感模板
           </div>
         </div>
       </aside>
@@ -40,11 +76,12 @@
           <div class="form-card-head">
             <div class="pane-title">
               <Icon name="design" size="sm" />
-              <span>音色参数配置</span>
+              <span>凭空捏造新声线</span>
             </div>
-            <span v-if="selectedPresetName" class="using-preset-tag">
-              已套用: {{ selectedPresetName }}
-            </span>
+            <div v-if="selectedPresetName" class="using-preset-tag">
+              <span>已套用预设: {{ selectedPresetName }}</span>
+              <button class="clear-preset-btn" title="清除并清空表单" @click="clearPreset">✕</button>
+            </div>
           </div>
 
           <div class="grid-2">
@@ -89,7 +126,7 @@
             <label class="commit-row">
               <n-switch v-model:value="designForm.commit" />
               <span>满意后存入标准样音库</span>
-              <span class="commit-tip">合成完成自动入库并带上 ✓ 样音标识</span>
+              <span class="commit-tip">合成完成自动沉淀为【我的声音资产】并带上 ✓ 样音标识</span>
             </label>
             <n-button type="primary" class="glow"
               :disabled="!designForm.name.trim() || !designForm.text.trim() || !modelStatus.design.ready"
@@ -106,22 +143,40 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useCapabilitiesStore } from '../stores/capabilities';
 import { useSynthStore } from '../stores/synth';
+import { useVoicesStore } from '../stores/voices';
 import { useTasksStore } from '../stores/tasks';
 import ModelSetupCard from '../components/ModelSetupCard.vue';
 import Icon from '../components/Icon.vue';
 
+const router = useRouter();
 const synthStore = useSynthStore();
 const { designPresets } = storeToRefs(synthStore);
 const { designForm, doDesign } = synthStore;
 const capabilitiesStore = useCapabilitiesStore();
 const { modelStatus } = storeToRefs(capabilitiesStore);
+const voicesStore = useVoicesStore();
+const { personas } = storeToRefs(voicesStore);
 const { showToast } = useTasksStore();
 
 const selectedPresetName = ref('');
+const presetSearch = ref('');
+
+const personasCount = computed(() => Object.keys(personas.value || {}).length);
+
+const filteredPresets = computed(() => {
+  const kw = presetSearch.value.trim().toLowerCase();
+  if (!kw) return designPresets.value;
+  return designPresets.value.filter(
+    (p) => (p.voice_name || '').toLowerCase().includes(kw)
+      || (p.tone || '').toLowerCase().includes(kw)
+      || (p.text || '').toLowerCase().includes(kw),
+  );
+});
 
 const applyPreset = (preset) => {
   selectedPresetName.value = preset.voice_name || '';
@@ -131,12 +186,77 @@ const applyPreset = (preset) => {
   designForm.emotion = preset.emotion || '';
   showToast(`已套用预设: ${preset.voice_name}`, 'success');
 };
+
+const clearPreset = () => {
+  selectedPresetName.value = '';
+  designForm.name = '';
+  designForm.tone = '';
+  designForm.text = '';
+  designForm.emotion = '';
+};
+
+const goToAssets = () => {
+  router.push({ name: 'clone' });
+};
 </script>
 
 <style scoped>
 .tab-content-container {
   max-width: 1180px;
   margin: 0 auto;
+}
+
+/* 顶层指引横幅 */
+.design-flow-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: var(--vf-bg-2);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-md);
+  margin-bottom: var(--vf-space-4);
+}
+.banner-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.banner-text-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.banner-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vf-primary);
+}
+.banner-desc {
+  font-size: 12px;
+  color: var(--vf-text-3);
+  line-height: 1.4;
+}
+
+.goto-assets-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--vf-bg-3);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-full);
+  color: var(--vf-text-1);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s var(--vf-ease);
+  white-space: nowrap;
+}
+.goto-assets-btn:hover {
+  background: var(--vf-bg-hover);
+  border-color: var(--vf-primary);
+  color: var(--vf-primary);
+  transform: translateX(2px);
 }
 
 /* 左右分栏工作台 */
@@ -156,7 +276,53 @@ const applyPreset = (preset) => {
   display: flex;
   flex-direction: column;
   gap: var(--vf-space-3);
-  height: 520px;
+  height: 560px;
+}
+
+.preset-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.preset-search-box .search-icon {
+  position: absolute;
+  left: 8px;
+  color: var(--vf-text-3);
+  pointer-events: none;
+}
+.preset-search-input {
+  width: 100%;
+  padding: 6px 26px 6px 28px;
+  background: var(--vf-bg-1);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-sm);
+  color: var(--vf-text-1);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.preset-search-input:focus {
+  border-color: var(--vf-primary);
+}
+.clear-search-btn {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  color: var(--vf-text-3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+}
+.clear-search-btn:hover {
+  color: var(--vf-text-1);
+}
+.preset-empty {
+  padding: 24px 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--vf-text-3);
 }
 
 .sidebar-header {
@@ -229,12 +395,12 @@ const applyPreset = (preset) => {
   color: var(--vf-text-1);
 }
 
-.active-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--vf-primary);
-  box-shadow: 0 0 6px var(--vf-primary);
+.using-badge {
+  font-size: 10px;
+  color: var(--vf-primary);
+  background: var(--vf-primary-soft);
+  padding: 1px 6px;
+  border-radius: var(--vf-radius-full);
 }
 
 .preset-tone {
@@ -285,11 +451,26 @@ const applyPreset = (preset) => {
 }
 
 .using-preset-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   color: var(--vf-primary);
   background: var(--vf-primary-soft);
   padding: 2px 8px;
   border-radius: var(--vf-radius-full);
+}
+.clear-preset-btn {
+  background: none;
+  border: none;
+  color: var(--vf-primary);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 11px;
+  opacity: 0.7;
+}
+.clear-preset-btn:hover {
+  opacity: 1;
 }
 
 .grid-2 {
