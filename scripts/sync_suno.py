@@ -16,8 +16,10 @@ voxflow 的曲库原本只记**它自己发起的**那些生成。可 Suno 网�
 ## 只补不改
 
 云端记录只用来**补齐本地没有的曲目**。本地已有的行一个字都不动 ——
-本地那些字段（歌词、发布状态、平台链接、封面）是人和流水线攒出来的，
+本地那些字段（发布状态、平台链接、封面）是人和流水线攒出来的，
 云端没有，覆盖过去等于把它们清空。
+
+**歌词是唯一的例外，而且只补空、不覆盖**：见下面 `lyrics_from` 的说明。
 
 匹配用 clip id，不是标题：Suno 一次出两首**同名**歌，按标题匹配必然串行。
 """
@@ -57,6 +59,27 @@ def fetch_all() -> list[dict]:
     return clips
 
 
+def lyrics_from(meta: dict) -> str:
+    """
+    从 clip 的 metadata 里取歌词。
+
+    **歌词不在顶层，在 `metadata.prompt`。** 2026-10-04 之前这个脚本只抄了
+    `metadata.tags`，整个 `prompt` 字段被丢掉 —— 于是所有带词的歌在台账里
+    lyrics 都是空字符串，而且**不报错**。空值安静地躺在那儿，直到有人问
+    「这首歌词呢」才暴露。歌词是两个平台的发布必填项，丢了就得重跑一次。
+
+    存**原文**（含 `[Verse 1]` 这类段落标记）。发布表单要纯文本是**发布那一刻**
+    的格式要求，不是存储时的 —— 段落结构是原数据，剥掉就找不回来了。
+    转纯文本在 `sync_lyrics.py:lyric_to_plain()` 那一侧做。
+
+    `[Instrumental]` 是纯音乐标记，不是歌词，返回空。
+    """
+    prompt = (meta.get("prompt") or "").strip()
+    if not prompt or prompt.replace(" ", "") == "[Instrumental]":
+        return ""
+    return prompt
+
+
 def main() -> int:
     try:
         clips = fetch_all()
@@ -72,7 +95,7 @@ def main() -> int:
             "SELECT clip_id FROM tracks WHERE clip_id IS NOT NULL AND clip_id != ''")}
         titles = {r["title"] for r in c.execute("SELECT title FROM tracks")}
 
-    added, skipped, timed, renamed = 0, 0, 0, 0
+    added, skipped, timed, renamed, filled = 0, 0, 0, 0, 0
     for cl in clips:
         cid = cl.get("id") or ""
         if not cid:
@@ -85,6 +108,7 @@ def main() -> int:
                 seconds = int(round(float(dur)))
         except (TypeError, ValueError):
             seconds = None
+        lyrics = lyrics_from(meta)
         if cid in have:
             # 已有曲目也回填时长 —— 匹配改名后的上架记录靠这个。
             if seconds and not DRY:
@@ -93,6 +117,18 @@ def main() -> int:
                         "UPDATE tracks SET duration=? WHERE clip_id=? AND (duration IS NULL OR duration=0)",
                         (seconds, cid))
                     timed += cur.rowcount
+            # ── 回填歌词（只补空，绝不覆盖）────────────────────
+            #
+            # 「只补不改」针对的是**覆盖**，不是**填空**。人写进去的歌词要保住；
+            # 但空着的从来就没人写过，直接从云端补上不损失任何东西。
+            # 条件写死成 `lyrics IS NULL OR lyrics=''`，宁可漏补也不覆盖。
+            if lyrics and not DRY:
+                with db.connect() as c:
+                    cur = c.execute(
+                        "UPDATE tracks SET lyrics=? WHERE (clip_id=? OR id=?) "
+                        "AND (lyrics IS NULL OR TRIM(lyrics)='')",
+                        (lyrics, cid, cid))
+                    filled += cur.rowcount
             # ── 同步标题改动 ──────────────────────────────────
             #
             # **标题的真源在 Suno**：人在网页端改了名，本地不跟着变的话，
@@ -127,18 +163,20 @@ def main() -> int:
             # 但人看列表时会懵，所以标一下，别让人以为是重复数据。
             note += " · 与已有曲目同名（Suno 一次出两首，正常）"
         if DRY:
-            print(f"  + {title}  {created}  {cl.get('model_name','')}  {seconds or '-'}s")
+            print(f"  + {title}  {created}  {cl.get('model_name','')}  {seconds or '-'}s"
+                  f"  歌词 {len(lyrics) if lyrics else '无'}字")
             added += 1
             continue
         with db.connect() as c:
             c.execute(
-                """INSERT INTO tracks (id, title, stage, tags, clip_id, duration, note, created_at, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?)""",
-                (cid, title, "generated", meta.get("tags", ""), cid, seconds, note, created, created),
+                """INSERT INTO tracks (id, title, stage, tags, clip_id, duration, lyrics, note, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (cid, title, "generated", meta.get("tags", ""), cid, seconds, lyrics, note, created, created),
             )
         added += 1
 
-    print(f"{'（预演）' if DRY else ''}新增 {added} 首，已有 {skipped} 首，回填时长 {timed} 首，同步改名 {renamed} 首")
+    print(f"{'（预演）' if DRY else ''}新增 {added} 首，已有 {skipped} 首，"
+          f"回填时长 {timed} 首，回填歌词 {filled} 首，同步改名 {renamed} 首")
     if not DRY and added:
         print(f"库：{DATA_DIR / 'voxflow.db'}")
     return 0

@@ -38,6 +38,9 @@ from core import pipeline as P                      # noqa: E402
 from core import db                                  # noqa: E402
 
 TIMESTAMP_RE = re.compile(r"^(\[\d+:\d+(\.\d+)?\])+")
+# Suno 歌词自带的段落标记：[Verse 1] [Pre-Chorus] [Chorus] [Outro] [Bridge] …
+# 2026-10-04 补：原先只剥时间码，这些会原样漏进发布表单。
+SECTION_RE = re.compile(r"^\s*\[[^\]\d][^\]]*\]\s*")
 
 
 def fetch_lyric(song_id: str) -> str:
@@ -63,13 +66,26 @@ def fetch_lyric(song_id: str) -> str:
 
 
 def lyric_to_plain(lrc: str) -> str:
-    """LRC → 纯文本（去掉时间戳行和空行），发布表单用。"""
+    """
+    LRC / 带段落标记的原文 → 发布表单要的纯文本。
+
+    要剥两类标记，少一类都会漏进表单：
+
+    1. **时间戳** `[00:12.3]` —— LRC 的行内时间码
+    2. **段落标记** `[Verse 1]` `[Chorus]` `[Pre-Chorus]` `[Outro]` ——
+       Suno 出的词自带这些（存进台账的就是原文，见 `sync_suno.py:lyrics_from`）
+
+    第 2 类是 2026-10-04 补的：原来的 `TIMESTAMP_RE` 只认数字时间码，
+    `[Verse 1]` 不匹配，会**原样漏进发布表单**。纯音乐标记 `[Instrumental]`
+    剥掉之后整行就空了，按空行处理。
+    """
     lines = []
     for line in lrc.splitlines():
         if not line.strip():
             continue
-        # 合并一行里的多个时间戳段：[00:12.3][00:20.1]词 → 词
-        text = TIMESTAMP_RE.sub("", line).strip()
+        # 先时间戳，再段落标记 —— 顺序无所谓，两者互不重叠
+        text = TIMESTAMP_RE.sub("", line)
+        text = SECTION_RE.sub("", text).strip()
         if text:
             lines.append(text)
     return "\n".join(lines)
