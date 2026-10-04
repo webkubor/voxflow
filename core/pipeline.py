@@ -413,7 +413,16 @@ def find_title_owner(title: str, except_id: str = "") -> dict[str, str] | None:
 
 def submit_release(track_id: str, platform: str, release_title: str) -> dict[str, Any]:
     """
-    人点「确认发版」。独家授权 + 发行歌名唯一。
+    **定发行身份**（备料阶段），不表示「已经交出去了」。
+
+    人点「确认发版」时走这里：锁定独家授权 + 发行歌名唯一性，
+    状态落到 `preparing`（备料）。**按下平台提交按钮是另一个动作** ——
+    那个动作叫 `mark_submitted()`。
+
+    以前这两个动作共用一个名字，而函数体只做前者，于是「提交」在台账里
+    留不下任何痕迹。2026-10-04 查出来：9/26 提交的 5 首歌，
+    `submitted_at` 空着、`publish_events` 没写事件，8 天后没人说得清
+    什么时候交的、审到哪一步了 —— 只能靠公开 API 反推。
 
     - 一首只能投一个平台（再投是违约）
     - 发出去的歌名全局唯一（Suno 生成名可以重复）
@@ -443,6 +452,55 @@ def submit_release(track_id: str, platform: str, release_title: str) -> dict[str
 
     upsert(track_id, release_title=title, release_platform=platform)
     return set_platform_status(track_id, platform, "preparing", platform_title=title)
+
+
+def mark_submitted(track_id: str, platform: str, *, note: str = "") -> dict[str, Any]:
+    """
+    **真的交出去了** —— 在平台后台按下提交的那一刻调它。
+
+    做两件此前系统里根本不存在的事：
+
+    1. 状态 `preparing`/`uploaded` → `reviewing`。这一格以前**没有任何代码
+       能写入**，状态机画了但进不去也出不来。
+    2. 写 `submitted_at`。这个字段 schema 里有、`db.py` 能存，但全项目
+       没有任何一处传过值 —— 于是「什么时候交的」永远答不出来。
+
+    审核通过/驳回由 `scripts/sync_<platform>.py` 回读平台实况覆盖，本函数
+    只负责「交出去了」这一跳。`submitted_at` **只在首次提交时写**，重复调用
+    不覆盖（首次提交时刻才是有价值的那个）。
+
+    必须在 `submit_release()` 之后调 —— 没有发行身份就没法确认发到哪。
+    """
+    if platform not in PLATFORMS:
+        raise ValueError(f"未知平台: {platform}")
+    track = get_track(track_id)
+    if not track:
+        raise ValueError(f"没有这首作品: {track_id}")
+    if not (track.get("release_title") or "") or not (track.get("release_platform") or ""):
+        raise ValueError(
+            "还没定发行身份 —— 先调 submit_release() 锁定发行歌名和平台，"
+            "否则这条记录说不清发到哪、叫什么")
+
+    db.init()
+    with db.connect() as c:
+        row = c.execute(
+            "SELECT * FROM track_platforms WHERE track_id=? AND platform=? "
+            "ORDER BY id LIMIT 1", (track_id, platform)).fetchone()
+    if not row:
+        raise ValueError(f"这首作品在 {platform} 还没有备料记录")
+    cur = row["status"] or ""
+    if cur in ("online", "published"):
+        raise ValueError(f"已经上架了，不能再标提交（当前 {cur}）")
+    if cur == "reviewing" and (row["submitted_at"] or ""):
+        # 已在审且有提交时间 —— 幂等返回。返回形状必须和下面正常路径一致
+        #（set_platform_status 返回的是整首 track），不然调用方得写两套取值。
+        return get_track(track_id) or {}
+
+    # submitted_at 只在「还没记录过」时写
+    extra: dict[str, Any] = {"note": note or "已提交平台，等审核"}
+    if not (row["submitted_at"] or ""):
+        extra["submitted_at"] = _now()
+    return set_platform_status(track_id, platform, "reviewing", **extra)
 
 
 # 改名的门槛线：到了这些状态，歌已经在平台后台了，名字不能再动
