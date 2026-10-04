@@ -27,11 +27,24 @@ app = typer.Typer(help="发行流程：备料 / 提交留痕 / 查进度")
 
 
 def _resolve(ident: str) -> str:
-    """歌名或 ID 都收。发行歌名和生成名都试；同名多首要人给 ID。"""
+    """
+    歌名、完整 ID、**ID 前缀**都收。
+
+    前缀是必须的：整个项目（看板、日志、我自己所有汇报）一律用 8 位前缀
+    指代作品，只认完整 UUID 等于让人每次都得先去查一遍。
+    """
     t = P.get_track(ident)
     if t:
         return t["id"]
-    hits = [x for x in P.list_tracks()
+    tracks = P.list_tracks()
+    # 前缀匹配：命中唯一一条就用，命中多条让���给更长的前缀
+    by_prefix = [x for x in tracks if (x.get("id") or "").startswith(ident)]
+    if len(by_prefix) == 1:
+        return by_prefix[0]["id"]
+    if len(by_prefix) > 1:
+        raise typer.BadParameter(
+            f"前缀「{ident}」匹配到 {len(by_prefix)} 首，请给更长的 ID 前缀")
+    hits = [x for x in tracks
             if (x.get("title") or "") == ident
             or (x.get("release_title") or "") == ident]
     if len(hits) == 1:

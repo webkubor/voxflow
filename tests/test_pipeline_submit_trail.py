@@ -102,6 +102,28 @@ def main() -> int:
     check("derived_stage 认得 reviewing", P.derived_stage({"netease": {"status": "reviewing"}}) == "publishing",
           P.derived_stage({"netease": {"status": "reviewing"}}))
 
+    print("\nCLI 取值：歌名 / 完整 ID / ID 前缀都要认")
+    import importlib
+    import typer
+    rel = importlib.import_module("cli.commands.release")
+    # 用真 UUID 长度，才能测出「8 位前缀唯一」这件事
+    uid = "0b722139-dcc3-4dc7-8370-6e36541d314b"
+    P.upsert(uid, title="前缀测试曲", stage="selected")
+    check("完整 ID", rel._resolve(uid) == uid)
+    check("8 位 ID 前缀", rel._resolve(uid[:8]) == uid, rel._resolve(uid[:8]))
+    check("歌名", rel._resolve("测试曲") == "t-1")
+    check("发行歌名", rel._resolve("测试曲·发行") == "t-1")
+    try:
+        rel._resolve("查无此物的名字")
+        check("查无此物应报错", False, "居然解析成功了")
+    except typer.BadParameter:
+        check("查无此物 → 明确报错", True)
+    try:
+        rel._resolve("t-")                     # t-1 / t-2 / t-3 都匹配
+        check("歧义前缀应报错", False, "居然解析成功了")
+    except typer.BadParameter:
+        check("歧义前缀 → 明确报错", True)
+
     print(f"\n✅ {len(PASSED)} 条断言全过")
     return 0
 
