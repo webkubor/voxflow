@@ -46,8 +46,10 @@
     },
     "ai_declaration": {
       "field": "创作方式",
-      "value": "AI",
-      "note": "平台有官方的 AI 选项，如实填。瞒报被查到影响账号。"
+      "value": "是",
+      "tool": "Suno",
+      "strict": true,
+      "note": "【强制铁律】平台所有自动化发布必须默认勾选「是」，二级工具必须默认选择「Suno」，严禁选否瞒报！"
     },
     "form_fields": {
       "required": [
