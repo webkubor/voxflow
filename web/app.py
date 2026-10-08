@@ -4039,11 +4039,14 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8866)
 
 
-# ── 发行资产 API（给浏览器插件 voxflow-publisher 用）────────────────
+# ── 发行资产 API（给发行工具用）────────────────────────────
 #
-# 插件在音乐平台的发布页里跑，要两样东西：元数据（填表）和文件（上传）。
+# 消费方在音乐平台的发布页里跑，要两样东西：元数据（填表）和文件（上传）。
 # 两者都只在 127.0.0.1 上流转，不出本机 —— 延续 VoxFlow「音频不出本机」的口径。
-# 插件仓库：~/dev/browser-plugins/voxflow-publisher
+# 消费方仓库：https://github.com/webkubor/suno-publisher
+#
+# 响应里的 clip_id / audio_sha256 是**关联键**，别当噪音删：发行台账拆去了
+# suno-publisher 的独立 sqlite，跨库没有外键，只能靠这两个字段认领作品。
 
 @app.get("/api/release/pending")
 def release_pending(platform: str = "qishui"):
@@ -4054,6 +4057,7 @@ def release_pending(platform: str = "qishui"):
     那是同一份推导规则的真源（备料阶段就定死，发布时纯搬运）。
     """
     from core import pipeline as _pipe
+    from core.attest import _sha256_file
 
     done = ("online", "published", "submitted")
     out = []
@@ -4064,8 +4068,24 @@ def release_pending(platform: str = "qishui"):
             continue
         f = _pipe.publish_fields(t["id"])
         audio = BASE_DIR / t["audio_file"] if not Path(t["audio_file"]).is_absolute() else Path(t["audio_file"])
+        # 关联键，供 suno-publisher 那边的新台账认领作品。
+        #
+        # 为什么必须给：发行台账拆去了独立仓（不共用 sqlite），跨库没有外键，
+        # 只能靠内容键关联。**绝不能用标题** —— Suno 一次出两首同名歌，
+        # 按标题匹配必然串行（见 scripts/sync_suno.py 顶部注释）。
+        # clip_id 覆盖 Suno 生成的歌，audio_sha256 覆盖本地 TTS 合成的（没有 clip_id）。
+        #
+        # 哈希只算音频、不算封面：发行身份锚在音频内容上，改封面不该让记录失联。
+        # 代价是每次请求都要读一遍音频文件 —— 曲库规模（几百首、每首几 MB）下
+        # 可接受；真到慢了再在下面加一层 LRU 缓存，别一上来就加。
+        try:
+            audio_hash = _sha256_file(audio) if audio.is_file() else ""
+        except OSError:
+            audio_hash = ""
         out.append({
             "id": t["id"],
+            "clip_id": t.get("clip_id") or "",
+            "audio_sha256": audio_hash,
             # 发出去的歌名必须唯一，所以优先 release_title
             "title": (t.get("release_title") or t.get("title") or "").strip(),
             "lyrics": t.get("lyrics") or "",
