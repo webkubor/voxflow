@@ -131,6 +131,16 @@ configs/artist.json
 # 作品台账含歌词与发布配置，属于个人数据
 configs/pipeline.json
 
+# 平台发行知识是个人项目资产，只保存在本机，不进仓库。
+# 里面既有可公开的平台通用坑（表单怎么填、哪个字段会骗人），也有不可公开的
+# 商业状态（选了哪种签约模式、账号还剩几次入驻机会、收益区间）—— 后者一旦
+# 进公开仓就等于把合约状态发出去，删文件也收不回已被 clone 的副本。
+#
+# 运行时不用改代码：core/pipeline.py:79 的 _load_platforms() 先读
+# ~/.voxflow/configs/platforms.json，找到就 break，不再看项目内置那份。
+# 新克隆的人需要它，去 suno-publisher 拿 platforms.schema.json + example 生成。
+configs/platforms.json
+
 # 数据已经搬到 ~/.voxflow —— 这些目录不该再出现在项目里。
 # 留着规则是防止将来手滑又在项目里生成数据。
 /out
