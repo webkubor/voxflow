@@ -72,9 +72,13 @@ def _load_platforms() -> dict[str, dict[str, Any]]:
 
     加平台 = 改那份 JSON，不动代码。
     """
-    from core.paths import CONFIG_DIR, PLATFORMS_FILE
+    from core.paths import CONFIG_DIR, PLATFORMS_EXAMPLE_FILE, PLATFORMS_FILE
     out: dict[str, dict[str, Any]] = {}
-    for f in (CONFIG_DIR / "platforms.json", PLATFORMS_FILE):
+    # 三级回退：用户目录 → 项目目录 → 示例文件。
+    # 最后一级是 platforms.example.json —— 2026-10-08 起 platforms.json 脱管成了
+    # 个人资产（只在本机），没有它的话全新 clone 拿到的 PLATFORMS 会是空 dict，
+    # 发行相关页面静默退化成空白且不报错（实测 publication_board() 返回空而非抛错）。
+    for f in (CONFIG_DIR / "platforms.json", PLATFORMS_FILE, PLATFORMS_EXAMPLE_FILE):
         if not f.exists():
             continue
         try:

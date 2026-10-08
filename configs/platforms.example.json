@@ -1,0 +1,184 @@
+{
+  "_说明": [
+    "这是**示例**文件 —— 脱敏后的平台知识骨架，字段结构与真实文件一致。",
+    "真实文件是个人资产（含签约模式、入驻名额、收益区间），只保存在本机：",
+    "  ~/.voxflow/configs/platforms.json",
+    "core/pipeline.py 的 _load_platforms() 按 用户目录 → 项目目录 → 本示例 三级回退，",
+    "所以 clone 下来开箱可用，但平台细节（表单坑位、封面色、AI 声明细则）需要你自己实测补。",
+    "加平台 = 复制本文件到 ~/.voxflow/configs/platforms.json 后改，不动代码。"
+  ],
+  "qishui": {
+    "label": "汽水音乐",
+    "verified_at": null,
+    "console": "https://music.douyin.com/console",
+    "reach": "字节系 APP + 全球 150+ 流媒体平台",
+    "entries": {
+      "single": {
+        "label": "发布作品 · 全曲",
+        "url": "https://music.douyin.com/console/publish",
+        "needs": [],
+        "note": "网页直传，不需要 SFTP。⚠️ 不同账号入口不同：有的账号 /console/publish 直接进表单，有的先出「选择类型」页（发布全曲 / 发布片段），要先点「发布全曲」。"
+      },
+      "batch": {
+        "label": "批量发布",
+        "url": "https://music.douyin.com/console/multi_publish_song",
+        "needs": [
+          "sftp_account"
+        ],
+        "note": "单次最多 1000 首。SFTP 账号要联系平台管理员分配（提供机构名 + 抖音 UID），24 小时内短信告知。"
+      }
+    },
+    "audio": {
+      "formats": [
+        "wav",
+        "mp3",
+        "m4a"
+      ],
+      "prefer": "wav"
+    },
+    "cover": {
+      "min_size": "1440x1440",
+      "ratio": "1:1",
+      "formats": [
+        "jpg",
+        "jpeg",
+        "png"
+      ],
+      "max_mb": 10,
+      "note": "Suno 自带封面只有 360x360，放大会糊 —— 必须重新生成。"
+    },
+    "ai_declaration": {
+      "field": "创作方式",
+      "value": "是",
+      "tool": "Suno",
+      "strict": true,
+      "note": "【强制铁律】平台所有自动化发布必须默认勾选「是」，二级工具必须默认选择「Suno」，严禁选否瞒报！"
+    },
+    "form_fields": {
+      "required": [
+        "歌曲名称",
+        "歌手",
+        "曲作者",
+        "歌词",
+        "专辑名称",
+        "专辑歌手",
+        "专辑封面"
+      ],
+      "optional": [
+        "授权证明",
+        "所属厂牌",
+        "专辑介绍",
+        "站外期望发行时间",
+        "字节系平台上架时间"
+      ],
+      "note": "字段名来自 2026-08-30 页面实测。「保存」可存草稿，「下一步」进下一屏。"
+    },
+    "batch_upload": {
+      "protocol": "sftp",
+      "host_example": "52.80.104.27",
+      "port": 2222,
+      "layout": "/Audio/YYYYMMDD/ 下放音源 + 歌词 txt + 封面",
+      "excel": "publish/templates/batch_import_template.xlsx",
+      "note": "Excel 里的文件名必须和 SFTP 上传的完全一致。歌曲/专辑版本/风格/语言/上架平台必须填模板 sheet 里的预置值。"
+    },
+    "revenue": null,
+    "steps": {
+      "1_上传作品": {
+        "note": "AI 声明选「是」后平台会自动带出「使用的AI工具」并识别为 Suno。音频上传后平台会自动生成「歌曲片段」剪辑版。",
+        "坑": []
+      },
+      "2_授权作品": {
+        "note": "真实姓名要法律姓名不是艺名（版权登记和收益结算用）。制作人用「添加自己」按钮填，手打不进标签。",
+        "坑": []
+      },
+      "3_签署协议": {
+        "note": "实名认证由电子牵提供。**这一步不做自动化** —— 三种方式都要本人核验（短信验证码 / 银行卡预留手机 / 手机扫脸），法律上签约主体必须本人。人脸认证最快，平台也标了推荐。",
+        "automation": "none",
+        "坑": []
+      }
+    },
+    "automation_boundary": "自动化到「填表完成」为止：第 1、2 步全自动，第 3 步实名认证和签约由人做。这不是能力问题 —— 签名和身份核验的法律效力归属本人，代做没有意义。",
+    "自动化前置条件": [
+      "【浏览器】browser-harness（开源）附着**日常那个 Chrome**，一个 Chrome 一个会话；多账号要用 ego-browser 的任务空间（独立登录上下文，互不影响）。",
+      "【harness 超时】它的 socket 超时写死 5 秒（helpers.py `ipc.connect(timeout=5.0)`），通过 CDP 传大文件必然 TimeoutError —— 报错长得像网络问题。在脚本里 monkeypatch 抬到 180 秒。",
+      "【Chrome 授权】首次使用会弹「Allow remote debugging?」**在那儿等人点**，表现为脚本超时。之前几次「超时」都是这个。",
+      "【系统代理】开着抓包代理（Reqable / Charles）时浏览器上传会失败 —— 代理为展示请求体先整个缓存，大文件撑爆。浏览器的代理归系统管，脚本改不了，只能关掉。"
+    ],
+    "错误检测": [
+      "表单校验失败只给一句「平台内发行表单填写错误，请检查」。",
+      "字段级提示是**普通颜色的文字挂在字段下面**，不是红字 —— 只找红色文字永远找不到原因，会反复点同一个按钮。",
+      "**字段标签本身也含「请选择」字样**（如「请选择音乐类型」），扫静态文本会把正常字段当成错误。要用 MutationObserver 只抓**点击后新出现**的文字。",
+      "校验失败后页面会**自动滚到第一个出错的字段** —— 看 window.scrollY 比猜快。"
+    ]
+  },
+  "netease": {
+    "label": "网易云音乐",
+    "verified_at": null,
+    "console": "https://music.163.com/musician",
+    "entries": {
+      "single": {
+        "label": "上传作品",
+        "url": "",
+        "needs": [],
+        "note": "仅网页，无批量通道"
+      }
+    },
+    "audio": {
+      "formats": [
+        "wav",
+        "mp3"
+      ],
+      "prefer": "wav"
+    },
+    "cover": {
+      "min_size": "1400x1400",
+      "ratio": "1:1",
+      "formats": [
+        "jpg",
+        "png"
+      ],
+      "max_mb": 10
+    },
+    "ai_declaration": {
+      "field": "AI 音乐人身份",
+      "value": "是",
+      "note": "有官方 AI 音乐人身份，但权益降级。"
+    },
+    "revenue": null
+  },
+  "tencent": {
+    "label": "腾讯音乐人",
+    "verified_at": null,
+    "console": "https://y.qq.com/musician",
+    "entries": {
+      "single": {
+        "label": "上传作品",
+        "url": "",
+        "needs": [],
+        "note": "仅网页"
+      }
+    },
+    "audio": {
+      "formats": [
+        "wav",
+        "mp3"
+      ],
+      "prefer": "wav"
+    },
+    "cover": {
+      "min_size": "待确认",
+      "ratio": "1:1",
+      "formats": [
+        "jpg",
+        "png"
+      ],
+      "max_mb": null
+    },
+    "ai_declaration": {
+      "field": "待确认",
+      "value": "",
+      "note": "零一手资料，需登录实测后再填这里。"
+    },
+    "revenue": null
+  }
+}

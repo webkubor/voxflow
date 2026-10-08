@@ -91,7 +91,8 @@ PUBLISH_ACCOUNTS_FILE = CONFIG_DIR / "publish_accounts.json"
 PLATFORM_ACCOUNTS_FILE = CONFIG_DIR / "platform_accounts.json"   # 各平台账号与已发布曲目
 
 # ── 代码自带的资源（跟着版本走，进 git）──────────────────
-PLATFORMS_FILE = PROJECT_DIR / "configs" / "platforms.json"   # 平台 SOP
+PLATFORMS_FILE = PROJECT_DIR / "configs" / "platforms.json"   # 平台 SOP（个人资产，已脱管）
+PLATFORMS_EXAMPLE_FILE = PROJECT_DIR / "configs" / "platforms.example.json"  # 脱敏骨架，跟版本走
 TEMPLATES_DIR = PROJECT_DIR / "publish" / "templates"          # Excel 模板
 BRANDING_DIR = PROJECT_DIR / "assets" / "branding"             # logo
 
