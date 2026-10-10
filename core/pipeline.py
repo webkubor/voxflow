@@ -415,6 +415,28 @@ def find_title_owner(title: str, except_id: str = "") -> dict[str, str] | None:
     return None
 
 
+# ══════════════════════════════════════════════════════════════════════
+# 发行能力已迁往 suno-publisher（2026-10-10）
+#
+# 这些函数原本在 voxflow 里管「把曲库的歌发到音乐平台」：发行身份锁定、
+# 上架状态流转、专辑与平台账号台账、备料检查、事件流。全部搬到了
+# github.com/webkubor/suno-publisher，连同四张表（track_platforms /
+# albums / platform_accounts / publish_events）和那份平台发行知识。
+#
+# 为什么搬：voxflow 的定位收敛为「纯 AI 音频生成工具」（语音克隆 / 音色设计 /
+# 播客 / BGM / Suno 音乐生成），发行是另一件事，混在一起两边都难维护。
+#
+# ## 现在为什么还留着这些函数
+#
+# 还没删，因为**有读取方**：/api/release/pending 依赖 publish_fields()，
+# 浏览器发行扩展（extension/）也靠那个端点拿元数据和音频。删函数之前必须
+# 先让扩展切到 suno-publisher 自己的取数路径，否则插件会当场失联。
+#
+# 迁移动作与对账记录见 suno-publisher 的 scripts/migrate_from_voxflow.py：
+#   60 条上架 = 22 已上市 + 20 无 song_id + 18 其他；47 事件 → 46 + 1 条
+#   2026-01 历史数据（三个关联键全空，真孤儿）。
+# ══════════════════════════════════════════════════════════════════════
+
 def submit_release(track_id: str, platform: str, release_title: str) -> dict[str, Any]:
     """
     **定发行身份**（备料阶段），不表示「已经交出去了」。

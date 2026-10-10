@@ -62,10 +62,9 @@ CREATE TABLE IF NOT EXISTS tracks (
     cover_file  TEXT DEFAULT '',
     note        TEXT DEFAULT '',
     cloud_backup TEXT DEFAULT '{}',     -- JSON：R2 同步位置，预留
-    -- 发行身份。生成歌名（title）可以重复（Suno 一次出两首同名）；
-    -- 发出去的歌名必须唯一。独家授权：一首只能投一个平台。
-    release_title    TEXT DEFAULT '',
-    release_platform TEXT DEFAULT '',
+    -- 发行身份两列已于 2026-10-10 迁往 suno-publisher（独立仓 + 独立 sqlite）。
+    -- 保留列定义但不再写入：直接 DROP 会让老库的 SELECT * 顺序错位，
+    -- 且 voxflow 还有脚本在读这张表。等确认无读取方后再单独一次迁移删列。
     -- 音频时长（秒）。歌名会改，时长几乎不变，对不上名字时靠它认原曲。
     duration    INTEGER,
     created_at  TEXT,
