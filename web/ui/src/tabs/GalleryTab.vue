@@ -85,11 +85,15 @@
             >
               {{ c.stage === 'generated' ? '选它去发' : '已选中' }}
             </n-button>
-            <n-button
-              v-for="p in c.platforms" :key="p.platform"
-              size="small" tag="a" :href="p.url" target="_blank" rel="noopener"
-            >
-              {{ p.platform }}<template v-if="p.plays"> · {{ p.plays }} 播</template>
+            <!--
+              「发到哪了」的按钮（平台 · 播放量 · 线上地址）2026-10-10 拆走了。
+              那些数据取自平台后台、存在上架台账里，台账已迁到 suno-publisher。
+              这里留一行指路的，而不是让它无声消失 —— 不然用惯了的人只会发现
+              「按钮不见了」，不知道是搬走了还是坏了。
+            -->
+            <n-button size="small" tag="a" href="http://127.0.0.1:8867"
+                      target="_blank" rel="noopener" quaternary>
+              发到哪了 → 发行台
             </n-button>
           </div>
         </div>

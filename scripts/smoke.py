@@ -67,7 +67,13 @@ def get(path: str):
 print("── 后端端点 ──")
 try:
     for path in ("/api/status", "/api/personas", "/api/pipeline",
+                 # 前端各屏真正调的端点。**必须逐个列出来** —— 2026-10-11
+                 # 删发行表时 /api/gallery 因为查了已删的 track_platforms 而
+                 # 500，但这个清单里没有它，smoke 全绿而「作品展厅」整屏空白。
+                 # 端点坏了不报错、只是没数据，正是这里要卡的东西。
                  "/api/catalog/tracks", "/api/capabilities",
+                 "/api/gallery", "/api/artist",
+                 "/api/scripts", "/api/audio-list", "/api/attest/batches/list",
                  # 可观测性四件套。它们坏了不会有人立刻发现 —— 没人会每天
                  # 主动打开成本看板，等到想看的时候才发现三个月没数据了。
                  "/api/health", "/api/metrics", "/api/logs", "/api/economics"):

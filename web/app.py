@@ -2321,8 +2321,11 @@ def gallery(limit: int = 60, only_with_prompt: bool = False):
     每次都要翻记录。做成卡片之后，**提示词和成品摆在一起**，可以横着对比：
     同样是搞笑，加了 bassoon 的和加了 ukulele 的差在哪，听一遍就知道。
 
-    数据本来就齐：tracks 有 tags/lyrics/cover/cloud_backup(R2)，
-    track_platforms 有 song_url 和播放量。这里只是把它们拼到一起。
+    数据本来就齐：tracks 有 tags/lyrics/cover/cloud_backup(R2)。
+
+    **线上地址与播放量不在其中**（2026-10-10 拆分）：那些取自上架台账，
+    台账已经迁到 suno-publisher —— 本仓没有那张表了，硬查会 500。
+    要「这首歌发到哪了」去发行台（按 `clip_id` / `audio_sha256` 认领）。
     """
     from core import db as _db                                 # noqa: PLC0415
 
@@ -2333,14 +2336,7 @@ def gallery(limit: int = 60, only_with_prompt: bool = False):
                    duration, created_at, stage, clip_id
             FROM tracks ORDER BY created_at DESC LIMIT ?
         """, (max(1, min(limit, 200)),)).fetchall()
-        plats = {}
-        for r in c.execute("""
-            SELECT track_id, platform, song_url, plays, status
-            FROM track_platforms WHERE song_url IS NOT NULL AND song_url != ''
-        """):
-            plats.setdefault(r["track_id"], []).append(
-                {"platform": r["platform"], "url": r["song_url"],
-                 "plays": r["plays"], "status": r["status"]})
+        plats: dict = {}      # 线上地址见 suno-publisher，本仓不再持有
 
     cards = []
     for r in rows:
