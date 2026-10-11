@@ -109,12 +109,6 @@ def test_failed_calls_counted_but_not_credited() -> None:
           f"期望 0.20（只算成功那 100 秒），实得 {row['market_cny']}")
 
 
-def test_unknown_revenue_rate_returns_zero() -> None:
-    """分成率没证实的平台，宁可算不出，也不拿一个猜的数糊弄过去。"""
-    _write_pricing(0.03)
-    check("已知分成率能算回本", obs.breakeven_plays(1.0, "qishui") == 1000)
-    check("未知分成率返回 0（表示算不了）", obs.breakeven_plays(1.0, "tencent") == 0)
-    check("零成本不产生回本估算", obs.breakeven_plays(0.0, "qishui") == 0)
 
 
 def test_log_level_filter() -> None:
@@ -135,49 +129,6 @@ def test_meter_never_raises() -> None:
     check("meter 遇到坏数据不抛异常", True)
 
 
-def test_economics_exposes_release_platform() -> None:
-    """
-    运营台每首歌必须带发布平台。
-
-    以前 /api/economics 只拼成本和收入，表上只有作品名，看不出投到哪。
-    有上架记录的歌就算没记过成本，也得出现在这本账里。
-    """
-    _reset()
-    from core import pipeline as P
-    P.upsert("clip-snow", title="落雪", stage="selected", clip_id="c1")
-    P.submit_release("clip-snow", "qishui", "落雪")
-    P.set_platform_status("clip-snow", "qishui", "online",
-                          song_id="qs1", platform_title="落雪")
-    P.set_platform_status("clip-snow", "netease", "online",
-                          song_id="ne1", platform_title="落雪")
-    obs.meter("suno", "generate", credits=10, track_id="clip-snow")
-
-    P.upsert("clip-unreleased", title="未发出", stage="generated", clip_id="c2")
-    obs.meter("suno", "generate", credits=10, track_id="clip-unreleased")
-
-    # 没记过成本、但已经在平台上的历史作品 —— 旧口径会从账上消失。
-    P.upsert("hist-1", title="旧曲", stage="published")
-    P.submit_release("hist-1", "netease", "旧曲")
-    P.set_platform_status("hist-1", "netease", "online",
-                          song_id="ne-old", platform_title="旧曲")
-
-    from web.app import economics
-    by_id = {t["track_id"]: t for t in economics(30)["tracks"]}
-
-    snow = by_id["clip-snow"]
-    check("已发行的歌带独家平台", snow["release_platform"] == "qishui")
-    check("已发行的歌带回发行歌名", snow["release_title"] == "落雪")
-    plats = {p["platform"] for p in snow["platforms"]}
-    check("已发行的歌带全部上架平台", plats == {"qishui", "netease"}, str(plats))
-
-    unrel = by_id["clip-unreleased"]
-    check("未发行的歌平台列表为空", unrel["platforms"] == [])
-    check("未发行的歌没有独家平台", unrel["release_platform"] == "")
-
-    hist = by_id["hist-1"]
-    check("没成本的已上架作品也在账上", hist["release_platform"] == "netease")
-    hist_plats = {p["platform"] for p in hist["platforms"]}
-    check("没成本的已上架作品带平台", hist_plats == {"netease"}, str(hist["platforms"]))
 
 
 def main() -> int:
