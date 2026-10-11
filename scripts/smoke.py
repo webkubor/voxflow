@@ -167,13 +167,16 @@ check("UI 元件位没有 emoji（图标统一走 Icon.vue）",
 
 _, eco = get("/api/economics")
 check("成本端点带覆盖率（0 元要能和「没记账」区分开）",
-      "covered" in eco and "total_tracks" in eco and "revenue_covered" in eco)
-# null 和 0 必须分开：「—」是还没抓数据，「0」是真的没播。混在一起会让
-# 「没同步」被读成「没人听」，那是两个完全不同的行动。
-_no_rev = [t for t in eco.get("tracks", []) if t.get("earned_cny") is None]
-check("没有收入数据的作品用 null 而不是 0 表示",
-      all(t.get("plays") is None and t.get("roi") is None for t in _no_rev),
-      "有作品 earned_cny 是 null 但 plays/roi 给了 0，含义会被读错")
+      "covered" in eco and "total_tracks" in eco)
+# 收益**不该**出现在这里（2026-10-10 拆分）。卡的是「拆完又长回来」：
+# 收益的输入是平台报的播放量和提现金额，那些在上架台账里，而本仓已经没有
+# 那张表 —— 在这里重算只能靠猜，算出来的数字看着合理但没人能验证。
+# 真正的收益口径在 suno-publisher 的 /api/economics，那边才配得齐成本与收益。
+_leaked = [k for k in ("revenue", "pnl", "rates", "avg_breakeven_plays")
+           if k in eco or k in (eco.get("summary") or {})]
+check("收益不该出现在生成侧成本端点里", not _leaked, f"混进来了：{_leaked}")
+check("成本端点指路到收益的真源", bool(eco.get("revenue_moved_to")),
+      "少了 revenue_moved_to —— 收益搬走了但没人告诉调用方去哪找")
 
 _, pipe = get("/api/pipeline")
 

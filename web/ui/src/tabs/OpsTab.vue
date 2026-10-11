@@ -17,22 +17,25 @@
         <div class="kpi-value">¥{{ fmt(eco?.summary.saved_cny) }}</div>
         <div class="kpi-sub">同样的量走商业 API 要 ¥{{ fmt(marketTotal) }}</div>
       </div>
-      <div class="kpi kpi-earn">
-        <div class="kpi-label">累计收益</div>
-        <div class="kpi-value">¥{{ fmt(eco?.pnl.lifetime_earned_cny) }}</div>
-        <div class="kpi-sub">
-          {{ (eco?.pnl.total_plays || 0).toLocaleString() }} 次播放 ·
-          实测 ¥{{ (eco?.pnl.cny_per_1k_plays_measured || 0).toFixed(2) }}/千播
-        </div>
-      </div>
       <div class="kpi">
         <div class="kpi-label">单曲均价</div>
-        <div class="kpi-value">¥{{ fmt(eco?.avg_cost_per_track_cny) }}</div>
+        <div class="kpi-value">¥{{ fmt(avgCost) }}</div>
         <div class="kpi-sub">
-          <template v-if="eco?.avg_breakeven_plays">
-            播 {{ eco.avg_breakeven_plays.toLocaleString() }} 次回本
-          </template>
-          <template v-else>还没有计过量的作品</template>
+          {{ eco?.covered || 0 }} 首计过量
+        </div>
+      </div>
+      <!--
+        收益与回本不在这里了（2026-10-10 拆分）。算「回本」要平台报的播放量和
+        提现金额，那是发行侧的事实，在 suno-publisher 的发行台。
+        这里留一张说明卡而不是直接删掉：不然从旧版升上来的人只会发现「收益卡
+        不见了」，不知道去哪找。
+      -->
+      <div class="kpi kpi-moved">
+        <div class="kpi-label">收益 / 回本</div>
+        <div class="kpi-value kpi-value-sm">在发行台</div>
+        <div class="kpi-sub">
+          上架后的播放与收益归 suno-publisher —— 见
+          <a href="http://127.0.0.1:8867" target="_blank" rel="noopener">发行台</a>
         </div>
       </div>
       <div class="kpi" :class="`kpi-health-${health?.status || 'unknown'}`">
@@ -56,48 +59,23 @@
       <!-- ══ 生意 ══ -->
       <n-tab-pane name="business" tab="这门生意">
         <div class="pane-body">
-          <!-- 收入侧：这门生意真正赚回来的钱 -->
+          <!-- 收益侧已搬去发行台（2026-10-10 拆分） -->
           <section class="card">
             <div class="section-title">
               <Icon name="trend-up" size="sm" />
               <span>赚回来多少</span>
-              <span class="title-hint">数据来自各平台后台，由 scripts/sync_*.py 同步</span>
-            </div>
-            <div v-if="!revenueRows.length" class="empty">
-              还没有平台收益数据。跑一次 <code>scripts/sync_netease.py</code> 之类的同步脚本。
-            </div>
-            <div v-else class="rev-grid">
-              <div v-for="r in revenueRows" :key="r.key" class="rev-card">
-                <div class="rev-head">
-                  <span class="rev-name">
-                    <PlatformMark :platform="r.key" size="sm" />
-                    {{ r.label }}
-                  </span>
-                  <span class="rev-earn">¥{{ fmt(r.earned_cny) }}</span>
-                </div>
-                <div v-if="r.artist" class="rev-artist">{{ r.artist }}</div>
-                <div class="rev-stats">
-                  <span>{{ r.songs }} 首在线</span>
-                  <span>{{ r.plays.toLocaleString() }} 播放</span>
-                  <span>{{ r.fans }} 粉丝</span>
-                </div>
-                <div class="rev-rate">
-                  ¥{{ r.cny_per_1k_plays.toFixed(3) }}/千播
-                  <span class="src" :class="r.rate_source">
-                    {{ r.rate_source === 'measured' ? '实测' : '估算' }}
-                  </span>
-                </div>
-                <div v-if="r.plays_7d" class="rev-7d">
-                  近 7 天 {{ r.plays_7d }} 次播放<template v-if="r.plays_7d < 200">
-                    <span class="warn-text"> · 增长已基本停滞</span>
-                  </template>
-                </div>
-              </div>
+              <span class="title-hint">已移至发行台</span>
             </div>
             <p class="foot-note">
-              标「实测」的千播单价是<b>后台可提现金额 ÷ 累计播放量</b>反推出来的 ——
-              比公开资料的区间中位数准，因为它已经包含了这个账号的实际权益档位。
-              标「估算」的还没有收益数据，用的是 <code>configs/pricing.json</code> 里的公开值。
+              上架之后的播放量、收益、千播单价与回本测算，现在都在
+              <a href="http://127.0.0.1:8867" target="_blank" rel="noopener">suno-publisher 发行台</a>
+              的「收益」页。
+            </p>
+            <p class="foot-note">
+              <b>为什么搬走：</b>算「回本」要拿平台报的收益配这里的生成成本。收益的
+              输入在发行侧的仓里（上架台账与平台账号），放在这里就得跨进程取数 ——
+              那边没起时，连本仓完全自有的成本都会一起看不了。
+              现在各算各的：成本在这里，收益在那边，回本结论只在那边产生。
             </p>
           </section>
 
@@ -196,7 +174,7 @@
             </div>
             <p class="foot-note">
               <b>播放量</b>是网易云音乐人后台的近 30 日数据（公开 API 给不了 ——
-              <code>playedNum</code> 恒为 0）。跑 <code>scripts/ncm_track_stats.py</code> 更新，需登录。
+              <code>playedNum</code> 恒为 0）。跑 suno-publisher 从平台后台同步（那边才有上架台账）。
               <br />
               <b>折算收益</b> = 播放量 × 实测千播单价（账号总收益 ÷ 账号总播放）。
               后台没有单曲收益列，所以这是<b>折算值不是平台实付</b> ——
@@ -380,12 +358,12 @@ const uptime = computed(() => {
   return `${Math.floor(s / 3600)} 小时 ${Math.floor((s % 3600) / 60)} 分`;
 });
 
-/** 收入行，按收益从多到少。没上架的平台（0 首）不显示 —— 空行没有信息。 */
-const revenueRows = computed(() =>
-  Object.entries(eco.value?.revenue || {})
-    .map(([key, v]) => ({ key, ...v }))
-    .filter((r) => r.songs > 0)
-    .sort((a, b) => b.earned_cny - a.earned_cny));
+/** 单曲均价 = 总成本 ÷ 计过量的作品数。收益侧已搬去发行台，这里只算成本。 */
+const avgCost = computed(() => {
+  const covered = eco.value?.covered || 0;
+  if (!covered) return 0;
+  return (eco.value?.summary.total_cny || 0) / covered;
+});
 
 const providerLabel = (key: string) =>
   eco.value?.pricing.providers[key]?.label || key;

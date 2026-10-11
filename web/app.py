@@ -318,8 +318,6 @@ def _task_worker():
                 _run_cover_task(task_id, task["params"], _update_task)
             elif task["type"] == "cover_upscale":
                 _run_cover_upscale_task(task_id, task["params"], _update_task)
-            elif task["type"] == "publish":
-                _run_publish_task(task_id, task["params"], _update_task)
             elif task["type"] == "suno_cover":
                 _run_suno_cover_task(task_id, task["params"], _update_task)
         except Exception as e:
@@ -990,149 +988,48 @@ def logs_endpoint(limit: int = 200, level: str = "", event: str = "", days: int 
 
 @app.get("/api/economics")
 def economics(days: int = 30):
-    """
-    单位经济学 —— 这门生意的账。
+    """生成成本看板 —— **只算花了多少钱，不算赚了多少**。
 
-    为什么它值得一个端点：本地 TTS 免费、Suno 走订阅、出图烧中台积分，
-    三条成本链路各记各的，**没有任何一个地方能回答「这首歌到底花了多少、
-    发出去回本了吗」**。不合起来看，就只能凭感觉判断要不要继续做。
+    2026-10-10 拆分：原来这个端点还兼算收益、千播单价、回本播放数。那半边需要
+    平台报的播放量和提现金额，是发行侧的事实 —— 现在归 suno-publisher 的
+    `/api/economics`（它会从本仓的 `/api/catalog/costs` 取成本）。
 
-    回本播放数按各平台公开分成率算；分成率没证实的平台（腾讯系）返回 0
-    表示算不了 —— 见 configs/pricing.json 里为什么不填猜的数。
+    为什么拆开而不是留一个合起来的：收益的输入在另一个仓，跨进程取数会失败。
+    合在一起的话，那边没起时这一屏连**成本**都看不了 —— 而成本是本仓完全
+    自有、随时算得出来的数据。看得到的账不该被看不到的账拖累。
+
+    要「这首歌回本了吗」→ 去发行台，那里成本收益都齐。
     """
     summary = obs.usage_summary(days)
     costs = obs.track_costs()
 
-    titles: dict[str, str] = {}
-    stages: dict[str, str] = {}
-    release_plat: dict[str, str] = {}
-    release_title: dict[str, str] = {}
-    listings_by: dict[str, list] = {}
-    try:
-        from core import db
-        db.init()
-        with db.connect() as c:
-            for r in c.execute(
-                "SELECT id, title, stage, "
-                "IFNULL(release_platform,'') rp, IFNULL(release_title,'') rt "
-                "FROM tracks"
-            ):
-                titles[r["id"]] = r["title"]
-                stages[r["id"]] = r["stage"]
-                if r["rp"]:
-                    release_plat[r["id"]] = r["rp"]
-                if r["rt"]:
-                    release_title[r["id"]] = r["rt"]
-            for r in c.execute(
-                "SELECT track_id, platform, status, "
-                "IFNULL(platform_title,'') title FROM track_platforms"
-            ):
-                listings_by.setdefault(r["track_id"], []).append({
-                    "platform": r["platform"],
-                    "status": r["status"],
-                    "title": r["title"],
-                })
-    except Exception as e:
-        # 查不到不能把整本账弄没，但必须留下痕迹 —— 运营台缺发布平台
-        # 就是这样被静默 except 吃掉、看起来像「从来没有这个字段」。
-        obs.log("economics_track_lookup_failed", level="error", error=str(e)[:300])
-
-    # 收入侧。回本播放数优先用**实测**千播单价（后台的累计收益 ÷ 累计播放），
-    # 它比公开资料的区间中位数准 —— 实测已经包含了这个账号的实际权益档位。
-    revenue = obs.platform_revenue()
-    rates = {k: (v["cny_per_1k_plays"] if v["rate_source"] == "measured" else None)
-             for k, v in revenue.items()}
-
-    # 单曲实际收入（音乐人后台抓的，可能为空 —— 为空就如实说没有，不摊派）
-    track_rev = obs.track_revenue()
-
-    # 有成本或有收入的作品都要出现：只赚不花（历史作品）和只花不赚（还没发）
-    # 都是这门生意里真实存在的状态，漏掉哪一边看到的都是残缺的账。
-    all_ids = set(costs) | set(track_rev) | set(listings_by)
+    from core import pipeline as _pipe
+    tracks_map = {t["id"]: t for t in _pipe.list_tracks()}
     tracks = []
-    for tid in all_ids:
-        c = costs.get(tid) or {"total_cny": 0.0, "by_provider": {}}
-        rev = track_rev.get(tid) or {}
-        cost = round(c["total_cny"], 2)
-        earned = round(rev.get("earned_cny", 0.0), 2)
-        plats = listings_by.get(tid) or []
-        exclusive = release_plat.get(tid) or (plats[0]["platform"] if plats else "")
+    for tid, c in costs.items():
+        t = tracks_map.get(tid) or {}
         tracks.append({
             "track_id": tid,
-            "title": titles.get(tid, tid),
-            "stage": stages.get(tid, ""),
-            "release_title": release_title.get(tid, ""),
-            "release_platform": exclusive,
-            "platforms": plats,
-            "cost_cny": cost,
-            "by_provider": c["by_provider"],
-            # 有后台数据才给，没有就是 None —— 前端据此显示「暂无数据」
-            # 而不是显示一个 0（0 会被读成「一分没赚」，那是另一回事）。
-            "earned_cny": earned if rev else None,
-            "plays": rev.get("plays") if rev else None,
-            "roi": (round(earned / cost, 2) if rev and cost > 0 else None),
-            "net_cny": (round(earned - cost, 2) if rev else None),
-            "breakeven_plays": {
-                p: obs.breakeven_plays(cost, p, rate_override=rates.get(p))
-                for p in ("qishui", "netease", "tencent")
-            },
+            "title": t.get("title", tid),
+            "stage": t.get("stage", ""),
+            "cost_cny": round(c["total_cny"], 2),
+            "by_provider": c.get("by_provider", {}),
         })
-    # 有真实收入的排前面（那是最该看的），其次按成本从高到低
-    tracks.sort(key=lambda x: (x["earned_cny"] is None, -(x["earned_cny"] or 0), -x["cost_cny"]))
+    tracks.sort(key=lambda x: x["cost_cny"], reverse=True)
 
-    priced = [t for t in tracks if t["cost_cny"] > 0]
-
-    # ⚠️ **均价要按「打算发的」算，不能按全部算。**
-    #
-    # 生成 ≠ 要发：库里大部分是试验（试提示词、试风格），人根本没打算上架。
-    # 把它们混进分母，「每首成本」就被摊薄成一个谁也用不上的数 ——
-    # 既不代表一首作品真实花了多少，也不能拿来算回本播放量。
-    #
-    # 分界线是人点的那一下（generated → selected，见
-    # /api/tracks/{id}/stage）。所以这里分两栏：
-    #   · works —— 已选中/已发布的，这才是「作品成本」，回本要按它算
-    #   · trials —— 还停在 generated 的，是「试验成本」，该看总额不是均价
-    WORK_STAGES = ("selected", "publishing", "published")
-    works = [t for t in priced if t.get("stage") in WORK_STAGES]
-    trials = [t for t in priced if t.get("stage") not in WORK_STAGES]
-    avg = round(sum(t["cost_cny"] for t in works) / len(works), 2) if works else 0.0
-    avg_all = round(sum(t["cost_cny"] for t in priced) / len(priced), 2) if priced else 0.0
-
-    # 盈亏。**收入是累计的、成本只统计最近 N 天** —— 两个口径不同，
-    # 不能直接相减当成「这个月赚了多少」，所以字段名写清楚是 lifetime，
-    # 并且把两个口径一起返回，让界面能如实标注而不是含糊地放一个「净利润」。
-    earned = round(sum(v["earned_cny"] for v in revenue.values()), 2)
-    plays = sum(v["plays"] for v in revenue.values())
-    lifetime_cost = round(sum(t["cost_cny"] for t in tracks), 2)
     return {
+        "days": days,
         "summary": summary,
-        "revenue": revenue,
-        "pnl": {
-            "lifetime_earned_cny": earned,
-            "lifetime_cost_cny": lifetime_cost,
-            "net_cny": round(earned - lifetime_cost, 2),
-            "total_plays": plays,
-            # 单位经济学的那个数：每一次播放实际带来多少钱。
-            "cny_per_1k_plays_measured": round(earned / plays * 1000, 4) if plays else 0.0,
-        },
-        "avg_cost_per_track_cny": avg,          # 只算作品（已选中/已发布）
-        "cost_split": {
-            "works_n": len(works),
-            "works_cost_cny": round(sum(t["cost_cny"] for t in works), 2),
-            "trials_n": len(trials),
-            "trials_cost_cny": round(sum(t["cost_cny"] for t in trials), 2),
-            "avg_all_cny": avg_all,             # 混在一起的旧口径，仅供对照
-        },
-        "avg_breakeven_plays": obs.breakeven_plays(
-            avg, "netease", rate_override=rates.get("netease")),
-        "tracks": tracks[:100],
+        # 单价表 —— 前端要靠它把 provider key 显示成中文名，并说明钱是怎么算出来的。
+        # 这是本仓自有的配置（configs/pricing.json），与发行无关。
         "pricing": obs.pricing(),
+        "tracks": tracks,
         # 计过量的作品数 vs 台账总数 —— 差额就是「历史作品没有成本数据」，
         # 直接说出来，免得看到 0 元以为是免费做出来的。
-        "covered": len(costs), "total_tracks": len(titles),
-        # 有多少首拿到了单曲维度的收入数据。0 表示还没跑过
-        # scripts/ncm_track_stats.py（要登录音乐人后台）。
-        "revenue_covered": len(track_rev),
+        "covered": len(costs),
+        "total_tracks": len(tracks_map),
+        # 收益与回本在发行台：本仓只有成本，答不出「回本了吗」。
+        "revenue_moved_to": "suno-publisher 的 /api/economics",
     }
 
 
@@ -1874,130 +1771,10 @@ class ImportUrlRequest(BaseModel):
     with_cover: bool = False      # ⚠️ 出封面要花钱，默认关
 
 
-class PublishRunRequest(BaseModel):
-    track_id: str
-    platform: str = "qishui"
 
 
-def _probe_login_account(platform: str) -> str:
-    """当前浏览器登录的是哪个平台账号。读不到返回空串 —— 调用方按「验不了」处理。"""
-    import subprocess  # noqa: PLC0415
-
-    from core.paths import PROJECT_DIR as PD  # noqa: PLC0415
-
-    probe = PD / "scripts/check_login.py"
-    if not (_find_exe("browser-harness") and probe.exists()):
-        return ""
-    try:
-        with open(probe, encoding="utf-8") as f:
-            r = subprocess.run(["browser-harness"], stdin=f, timeout=120,
-                               env={**os.environ, "VF_BASE": str(PD), "VF_PLATFORM": platform},
-                               capture_output=True, text=True)
-        lines = [ln for ln in (r.stdout or "").splitlines() if ln.strip().startswith("{")]
-        return (json.loads(lines[-1]) if lines else {}).get("account", "")
-    except Exception:  # noqa: BLE001
-        return ""
 
 
-def _run_publish_task(task_id: str, params: dict, update_fn):
-    """跑平台填表脚本 —— 真的拉起浏览器，不是改个状态就完事。
-
-    ## 为什么此前是「假的」
-
-    看板上有「备料中 / 发行中 / 等待中」，但**没有任何东西推进它们** ——
-    点完确认发版只是把状态字段改了个值，浏览器不会动、表不会填。
-    人盯着「发布中」等，永远等不到变化，也不知道该干什么。
-
-    现在这一步真的执行 `scripts/publish_<platform>.py`：
-    附着到你日常那个浏览器（登录态直接可用），把整张表填完。
-
-    ## 为什么不替你点「提交」
-
-    提交进审核队列**不可逆**，撤回要走流程。而自动化省下的是填表那十分钟，
-    不是点提交那一秒。所以脚本填完就停，把最后一下留给人 ——
-    任务结束时会明确说「轮到你了」，不是含糊地标成完成。
-    """
-    import subprocess  # noqa: PLC0415
-
-    from core import pipeline  # noqa: PLC0415
-    from core.paths import PROJECT_DIR  # noqa: PLC0415
-
-    track_id, platform = params["track_id"], params["platform"]
-    script = PROJECT_DIR / f"scripts/publish_{platform}.py"
-    if not script.exists():
-        raise ValueError(f"{platform} 还没有自动填表脚本（scripts/publish_{platform}.py）")
-
-    r = pipeline.readiness(track_id, platform)
-    if not r.get("ok"):
-        raise ValueError("备料没齐，先补：" + "、".join(
-            i["名称"] for i in r["items"] if not i["就绪"]))
-
-    # ── 账号校验：登录的账号必须是这首歌负责人的账号 ──────────────
-    #
-    # 一个人可能有好几个平台账号（自己的、帮别人发的）。登错了照样能填完
-    # 整张表 —— 直到歌出现在**错误的艺人名下**才发现，那时候要撤回、
-    # 重发，还可能已经进了审核队列。
-    #
-    # 所以发之前必须比一次。**比不了就拦住**（比如没读到账号名），
-    # 不赌「大概是对的」—— 发错的代价远大于多问一句。
-    from core import notify  # noqa: PLC0415
-
-    info = (pipeline.get_track(track_id) or {}).get("platforms", {}).get(platform) or {}
-    who = info.get("publisher") or ""
-    cfg = (notify.account() or {}).get("assignees") or {}
-    people = {p["name"]: p for p in [cfg.get("owner") or {}, *(cfg.get("others") or [])] if p.get("name")}
-    want = ((people.get(who) or {}).get("platform_accounts") or {}).get(platform, "")
-    if who and want:
-        st = notify.account() and _probe_login_account(platform)
-        if st and st != want:
-            raise ValueError(
-                f"账号对不上：这首歌归「{who}」发（账号 {want}），"
-                f"但浏览器现在登录的是「{st}」。换账号登录后再发，别发错人名下。")
-
-    # 进入发布流程 → 推一张卡片。
-    #
-    # publish_started 早就写好了，但**从来没有任何地方调用它** ——
-    # 于是「谁要把哪首歌发到哪个平台」这条最该让人知道的进度，
-    # 群里一次都没出现过。旁路，失败不影响发布。
-    try:
-        t = pipeline.get_track(track_id) or {}
-        notify.publish_started(
-            title=t.get("title") or track_id,
-            release_title=info.get("platform_title") or "",
-            platform=platform, account=who,
-            duration_s=t.get("duration") or 0,
-            clip_id=t.get("clip_id") or "",
-            album=info.get("album_name") or "",
-        )
-    except Exception as e:  # noqa: BLE001
-        obs.log("publish_notify_failed", level="warn", error=str(e)[:160])
-
-    update_fn(task_id, progress=15, stage="拉起浏览器…")
-    env = {**os.environ, "VF_BASE": str(PROJECT_DIR), "VF_TRACK": track_id}
-    try:
-        with open(script, encoding="utf-8") as f:
-            proc = subprocess.run(["browser-harness"], stdin=f, env=env,
-                                  capture_output=True, text=True, timeout=600)
-    except FileNotFoundError as e:
-        raise ValueError("没装 browser-harness —— 自动填表跑不了") from e
-    except subprocess.TimeoutExpired as e:
-        raise ValueError("填表超时（10 分钟）—— 去浏览器看看卡在哪一步") from e
-
-    out = (proc.stdout or "") + (proc.stderr or "")
-    if proc.returncode != 0:
-        raise ValueError(f"填表脚本失败：{out[-600:]}")
-
-    pipeline.set_platform_status(track_id, platform, "uploaded")
-    update_fn(
-        task_id, status="done", progress=100,
-        # 说清楚「没做完」而不是「完成了」—— 含糊地标成完成，
-        # 人就不会去点那最后一下，歌永远卡在这儿。
-        stage="表已填好 · 轮到你去浏览器点「提交」",
-        result={"ok": True, "需要你操作": True,
-                "下一步": "浏览器里核对一遍，确认无误后点提交。提交后回来把状态改成「等待中」",
-                "控制台": (pipeline.PLATFORMS.get(platform) or {}).get("console", ""),
-                "日志": out[-1500:]},
-    )
 
 
 @app.post("/api/pipeline/import-url")
@@ -2055,12 +1832,12 @@ def pipeline_import_url(req: ImportUrlRequest):
     # 无脑 uuid4 新建的后果是同名两条 —— 一条有封面一条没有、
     # 一条在备料一条在发行，人看着一模一样的两行不知道该点哪个。
     #
-    # 认三样，任一命中就复用：音频路径、发行名、原始曲名。
+    # 认两样，任一命中就复用：音频路径、曲名。
     # 音频路径最硬（同一个文件不可能是两首歌），放第一位。
+    # 原来还认「发行名」—— 那列随发行拆分移走了（发行名在 suno-publisher）。
     track_id = ""
     for row in pipeline.list_tracks():
         if row.get("audio_file") == rel or \
-           (row.get("release_title") or "").strip() == name or \
            (row.get("title") or "").strip() == name:
             track_id = row["id"]
             break
@@ -2070,27 +1847,20 @@ def pipeline_import_url(req: ImportUrlRequest):
               "note": f"链接导入 {url[:120]}"}
     if req.album:
         fields["album_desc"] = req.album
-    # 复用时**不覆盖曲名**：库里那条的曲名可能是 Suno 的原始标题
-    # （一次出两首时两条同名），而这次传进来的是发行名 —— 覆盖过去
-    # 会把「原始曲名 / 发行歌名」这组对应关系搞丢。
-    if reused:
-        fields["release_title"] = name
-    else:
-        fields["title"] = name
-        fields["release_title"] = name
+    # 曲名一律写生成名（title）。
+    # 这里原来还会写 release_title（发行名）—— 那是发行侧锁定的身份，2026-10-10
+    # 随发行拆分移走了，本仓不再持有这一列。导入时传进来的名字就是这首歌的曲名。
+    fields["title"] = name
     pipeline.upsert(track_id, **fields)
 
-    prep = pipeline.prepare(track_id, req.platform, album=req.album,
-                            publisher=req.publisher, instrumental=req.instrumental)
-
+    # 「发行备料」（pipeline.prepare）也一并去掉：那是「准备发到某平台」的动作，
+    # 归 suno-publisher。导入只负责把音频收进曲库，不管发到哪。
     cover_result = None
     if req.with_cover:
         try:
             c = cover.generate(cover.build_prompt(name), track_id=track_id, ratio="1:1")
             pipeline.upsert(track_id, cover_file=c.get("path", ""))
             cover_result = {"ok": True, "credits": c.get("credits"), "url": c.get("url")}
-            prep = pipeline.prepare(track_id, req.platform, album=req.album,
-                                    publisher=req.publisher, instrumental=req.instrumental)
         except Exception as e:  # noqa: BLE001 —— 出图失败不该让整次导入白做
             cover_result = {"ok": False, "错误": str(e)[:200]}
 
@@ -2099,7 +1869,8 @@ def pipeline_import_url(req: ImportUrlRequest):
     return {"ok": True, "track_id": track_id, "title": name,
             "复用已有曲目": reused,
             "文件": dest.name, "大小KB": dest.stat().st_size // 1024,
-            "备料": prep, "封面": cover_result}
+            # 「备料」（发行前的物料检查）已随发行拆分移走 —— 导入只管收进曲库。
+            "封面": cover_result}
 
 
 @app.post("/api/pipeline/import")
@@ -2198,28 +1969,12 @@ def pipeline_upsert(req: PipelineTrackRequest):
     )}
 
 
-class PipelineReleaseRequest(BaseModel):
-    track_id: str
-    platform: str
-    release_title: str
 
 
-class PipelineRenameRequest(BaseModel):
-    track_id: str
-    release_title: str
 
 
-class PipelinePlatformRequest(BaseModel):
-    track_id: str
-    platform: str
-    status: str
-    url: str | None = None
-    note: str | None = None
 
 
-class PipelineLinkRequest(BaseModel):
-    listing_id: int
-    track_id: str
 
 
 @app.get("/api/capabilities")
@@ -3187,7 +2942,7 @@ def _run_cover_upscale_task(task_id: str, params: dict, update_fn):
     src = Path(t["cover_file"])
     if not src.is_absolute():
         src = DATA_DIR / src
-    title = t.get("release_title") or t.get("title") or tid
+    title = t.get("title") or tid
     dest = PUBLISH_DIR / "covers" / f"{title}_1440.jpg"
     result = cover.upscale_local(
         src, dest,
@@ -3560,6 +3315,21 @@ def catalog_tracks() -> list[dict[str, Any]]:
             "audio_mb": round(size_mb / 5 if audio.suffix.lower() == ".wav" else size_mb, 1),
         })
     return out
+
+
+@app.get("/api/catalog/costs")
+def catalog_costs() -> dict[str, Any]:
+    """每首作品的**生成成本**（按 provider 拆）。
+
+    成本是生成侧事实：花了多少 credits、按当时单价折多少钱，都记在本仓的
+    usage_events 里。但「这首歌回本了吗」需要配上**平台收益**才答得出来 ——
+    那半边在 suno-publisher（它才有上架记录的播放量和收益）。
+
+    所以这里只给成本，不给回本结论：发行侧拿这份成本配自己的收益算。
+    两个数各归各家，「回本」这个结论只在一个地方产生。
+    """
+    from core import obs
+    return {"costs": obs.track_costs()}
 
 
 @app.get("/api/catalog/{track_id}/asset/{kind}")

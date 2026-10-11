@@ -1,8 +1,8 @@
 """发行资产准备 —— 把曲库里的原始文件整成平台能收的样子。
 
 抽出来是因为两个调用方要用同一套规则：
-  · scripts/publish_qishui_ego.py（ego-browser 驱动的外部脚本）
-  · web/app.py 的 /api/release/*（浏览器插件 voxflow-publisher 拉资产）
+  · 发行侧（suno-publisher）的发布脚本 —— 见那个仓的 scripts/
+  · web/app.py 的 /api/catalog/{id}/asset/{kind}（发行侧来取音频）
 
 规则只有一条但很关键：**WAV 先转 320k MP3**。汽水解析大 WAV 极慢，会在解析到半截时
 同时报「音频无效」和「非纯音乐请填歌词」两条错——后一条尤其误导，看着像检测到人声，
