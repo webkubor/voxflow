@@ -1771,6 +1771,12 @@ class ImportUrlRequest(BaseModel):
     with_cover: bool = False      # ⚠️ 出封面要花钱，默认关
 
 
+class LyricsBackfillRequest(BaseModel):
+    """发行侧查到平台歌词后回填用。**只会写进 lyrics 为空的作品** ——
+    见 /api/catalog/{track_id}/lyrics 的两条硬约束。"""
+    lyrics: str
+
+
 
 
 
@@ -3326,6 +3332,36 @@ def catalog_costs() -> dict[str, Any]:
     """
     from core import obs
     return {"costs": obs.track_costs()}
+
+
+@app.post("/api/catalog/{track_id}/lyrics")
+def catalog_fill_lyrics(track_id: str, req: "LyricsBackfillRequest") -> dict[str, Any]:
+    """把歌词补进一首作品 —— **只填空的，绝不覆盖**。
+
+    为什么需要这个写入口：歌词是生成侧的数据（本仓的 `tracks.lyrics`），
+    但「去哪个平台查」要用上架记录里的 `song_id`，那个在 suno-publisher。
+    依赖方向是发行侧 → 生成侧，所以由那边查、往这里写，
+    **不反过来让本仓去读它的库**（那会把单向依赖变成环）。
+
+    两条硬约束：
+
+    1. **只填 `lyrics` 为空的**。已有歌词的一律不动 —— 本地的是生成时的原文
+       （Suno 返回的），平台那份可能是被编辑过或截断的版本。拿平台的覆盖本地的
+       等于把真源换成副本。
+    2. **不做模糊匹配**。调用方给的是 track_id，本仓不按歌名去猜是哪首 ——
+       同名歌会串行（Suno 一次出两首同名）。
+    """
+    from core import pipeline as _pipe
+    if not (req.lyrics or "").strip():
+        raise HTTPException(400, "lyrics 不能为空")
+    t = _pipe.get_track(track_id)
+    if not t:
+        raise HTTPException(404, f"没有这首作品: {track_id}")
+    if (t.get("lyrics") or "").strip():
+        # 不是错误，是「不用做」—— 返回 200 让调用方继续处理下一首
+        return {"ok": True, "skipped": "已有歌词，不覆盖"}
+    _pipe.upsert(track_id, lyrics=req.lyrics)
+    return {"ok": True, "track_id": track_id, "chars": len(req.lyrics)}
 
 
 @app.get("/api/catalog/{track_id}/asset/{kind}")
