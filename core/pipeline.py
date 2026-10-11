@@ -177,7 +177,11 @@ def upsert(track_id: str, **fields: Any) -> dict[str, Any]:
 
     cols = ("title", "stage", "lyrics", "tags", "prompt", "album_desc", "voice",
             "clip_id", "clip_ids", "audio_file", "cover_file", "note", "cloud_backup",
-            "release_title", "release_platform", "duration")
+            "duration")
+    # release_title / release_platform 不在允许写入的列里（2026-10-10 拆分）：
+    # 发行名是发行侧锁定的身份，写在 suno-publisher 的 releases 表。这两列还留在
+    # 老库的 tracks 表上（DROP 会让 SELECT * 顺序错位，见 core/db.py），但本仓
+    # 不再写它们 —— 留着写入口，迟早有人以为这里还是发行名的真源。
     given = {k: v for k, v in fields.items() if k in cols and v is not None}
 
     with db.connect() as c:
