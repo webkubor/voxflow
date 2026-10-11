@@ -109,6 +109,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
+import { api } from '../api';
 import Icon from '../components/Icon.vue';
 import PrepModal from '../components/PrepModal.vue';
 import IntakeTab from './IntakeTab.vue';
@@ -129,8 +130,7 @@ const shown = computed(() => cards.value.filter(
 const load = async () => {
   loading.value = true;
   try {
-    const r = await fetch('/api/gallery?limit=60');
-    const d = await r.json();
+    const d = await api.gallery(60);
     cards.value = d.cards || [];
   } finally {
     loading.value = false;
@@ -146,11 +146,8 @@ const toggleStage = async (c) => {
   const next = c.stage === 'generated' ? 'selected' : 'generated';
   staging[c.id] = true;
   try {
-    const r = await fetch(`/api/tracks/${c.id}/stage`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage: next }),
-    });
-    if (r.ok) c.stage = next;
+    await api.setTrackStage(c.id, next);
+    c.stage = next;
   } finally { staging[c.id] = false; }
 };
 

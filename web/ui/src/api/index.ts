@@ -34,7 +34,7 @@
 
 import ky, { HTTPError, TimeoutError } from 'ky';
 import { API_TIMEOUT_MS, API_RETRY_LIMIT } from '../config/constants';
-import type { Album, AttestDoc, CapabilitiesResponse, EconomicsResponse, HealthResponse, LogRecord, MetricsResponse, PersonasResponse, PipelineResponse, PlatformAccountsResponse, PlatformKey, Stage, Track } from '../types/api';
+import type { Album, AttestDoc, CapabilitiesResponse, EconomicsResponse, GalleryCard, HealthResponse, LogRecord, MetricsResponse, PersonasResponse, PipelineResponse, PlatformAccountsResponse, PlatformKey, Stage, Track } from '../types/api';
 import { CLIENT_VERSION, toError, toMessage, VoxError } from '../lib/errors';
 
 export { toError, toMessage };
@@ -169,6 +169,22 @@ export const api = {
   aiPolish: (p: { text: string; style?: string }) => post<{ text: string }>('llm/polish', p),
   aiLyrics: (p: { prompt: string; style?: string }) =>
     post<{ text: string; lyrics?: string }>('llm/lyrics', p),
+  aiTags: (p: { theme: string }) => post<{ text: string }>('llm/tags', p),
+
+  // ── 作品展厅 ──
+  gallery: (limit = 60) => get<{ cards: GalleryCard[] }>('gallery', { limit }),
+  /** 展厅里的「选它去发 / 已选中」切换。**只允许 generated ↔ selected** ——
+   *  已经 published 的是上架事实，不该被这里的一个按钮改掉。 */
+  setTrackStage: (id: string, stage: Stage) =>
+    post<{ ok: boolean }>(`tracks/${encodeURIComponent(id)}/stage`, { stage }),
+
+  // ── MUSE AV 授权（设备码流程）──
+  museavLoginStart: () => post<{
+    user_code: string; verification_uri: string; device_code: string; interval?: number;
+  }>('museav/login/start', {}),
+  /** 按后端给的 interval 轮询，**不要更快** —— 中台那边有频率限制。 */
+  museavLoginPoll: (device_code: string) =>
+    post<{ status: string }>('museav/login/poll', { device_code }),
 
   // ── 音频库 ──
   audioList: () => get<{ files: unknown[] }>('audio-list'),
@@ -244,8 +260,14 @@ export const api = {
     /** 各常用比例算出的实际出图尺寸，如 { "1:1": "1440x1440" } */
     sizes: Record<string, string>;
   }>('cover/status'),
+  // ⚠️ **这个端点后端不存在**（2026-10-11 查实：POST /api/cover/generate 返回 405，
+  // 因为路径被 GET /api/cover/{track_id} 匹配走了；基线 6ab5b27 里就没有该路由）。
+  // 也就是说「一键备料」里那个「生成封面」一直是坏的，报错是 405 而不是人话。
+  // 保留接口定义而不是删掉：本仓有 core/cover.generate() 和 cover 任务执行器
+  // （web/app.py 的 _run_cover_task），缺的只是一个提交路由。
+  // 补路由时要小心：**出图要花 museav 积分**，验证不能拿真出图当探测。
   generateCover: (p: {
-    track_id: string; title: string; tags?: string; prompt?: string;
+    track_id?: string; title: string; tags?: string; prompt?: string;
     /** 任意 W:H（1:1 / 3:4 / 1:2.1 …）。不限枚举 —— 中台支持任意尺寸，
      *  合法性由它判定；写错会在提交时 400 挡掉。 */
     ratio?: string;

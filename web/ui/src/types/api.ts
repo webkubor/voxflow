@@ -28,6 +28,28 @@ export type Stage = 'draft' | 'generated' | 'selected' | 'publishing' | 'publish
 export type PlatformKey = 'qishui' | 'netease' | 'tencent';
 
 /** 作品在某个平台上的一条上架记录。同一首原曲可以有多条（改名、拆分）。 */
+/** 作品展厅的一张卡片 —— 「提示词 + 成品」摆在一起，方便横着比风格。
+ *  字段跟着后端 `web/app.py` 的 gallery 响应；**没有 platforms**（线上地址
+ *  在 suno-publisher，本仓不再持有那张表）。 */
+export interface GalleryCard {
+  id: string
+  title: string
+  stage: Stage
+  tags: string
+  has_lyrics: boolean
+  instrumental: boolean
+  duration: number
+  /** 封面 / 音频的相对路径，前端拼 /api/media 用 */
+  cover: string
+  audio: string
+  /** 来源标记：AI 生成 / 自制 */
+  source: string
+  source_label: string
+  self: boolean
+  suno: boolean
+  suno_url: string
+}
+
 export interface TrackPlatform {
   id?: number | null;
   platform?: string;

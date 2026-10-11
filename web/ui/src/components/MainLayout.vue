@@ -224,6 +224,7 @@ import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, wat
 import { useRoute, useRouter } from 'vue-router';
 import { BOARD_POLL_MS } from '../config/constants';
 import { TAB_NAMES } from '../router';
+import { api } from '../api';
 import { storeToRefs } from 'pinia';
 /**
  * 异步组件：路由切到哪一屏才加载哪一屏，首屏不打包这几个 chunk。
@@ -568,20 +569,14 @@ const startMuseavLogin = async () => {
   museavErr.value = ''; museavDone.value = false;
   museavCode.value = '…'; museavModal.value = true;
   try {
-    const r = await fetch('/api/museav/login/start', { method: 'POST',
-      headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.detail || '发起授权失败');
+    const d = await api.museavLoginStart();
     museavCode.value = d.user_code;
     museavUri.value = d.verification_uri;
     stopMuseavPoll();
     // 按后端给的 interval 轮询，不要更快 —— 中台那边有频率限制
     museavTimer = setInterval(async () => {
       try {
-        const pr = await fetch('/api/museav/login/poll', { method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ device_code: d.device_code }) });
-        const pd = await pr.json();
+        const pd = await api.museavLoginPoll(d.device_code);
         if (pd.status === 'approved') {
           stopMuseavPoll(); museavDone.value = true;
           setTimeout(() => { museavModal.value = false; location.reload(); }, 1200);

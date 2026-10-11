@@ -277,6 +277,24 @@ for f in list((PROJECT / "web/ui/src").rglob("*.vue")) + list((PROJECT / "web/ui
         raw_fetch.append(f"{f.name}×{n}")
 check("没有绕过 api 层的裸 fetch", not raw_fetch, ", ".join(raw_fetch[:4]))
 
+# 用了 `api.` 却没 import —— **typecheck 和 build 都抓不到**。
+#
+# 2026-10-11 踩过：把 museav 的两处 fetch 换成 api.museavLoginStart() 时忘了加
+# import。`vue-tsc` 没报（SFC 里的自由变量它不查）、`vite build` 也没报
+# （打包器不解析全局名），产物照出，直到运行时点那个按钮才 ReferenceError。
+#
+# 自动导入只覆盖 vue 和 naive-ui 的 composable（见 vite.config.js 的
+# AutoImport），**不含 `api`** —— 所以这个名字必须显式 import。
+_missing_import = []
+for f in (PROJECT / "web/ui/src").rglob("*.vue"):
+    text = strip_comments(f.read_text(encoding="utf-8"))
+    if not re.search(r"\bapi\s*\.\s*\w", text):
+        continue
+    if not re.search(r"import\s*\{[^}]*\bapi\b[^}]*\}\s*from", text):
+        _missing_import.append(f.name)
+check("组件用了 api.* 就必须 import 它（build 不查自由变量）",
+      not _missing_import, ", ".join(_missing_import[:4]))
+
 # naive-ui 组件交给 unplugin-vue-components 自动解析，不再手工注册。
 # 这里只确认那套自动引入还接着 —— 它一旦掉了，所有组件会同时消失，
 # 比漏注册一个更严重。

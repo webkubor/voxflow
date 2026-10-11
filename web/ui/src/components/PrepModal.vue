@@ -70,6 +70,7 @@
 
 <script setup>
 import { reactive, ref } from 'vue';
+import { api } from '../api';
 import Icon from './Icon.vue';
 
 const show = defineModel('show', { type: Boolean, default: false });
@@ -81,19 +82,10 @@ const busy = reactive({ tags: false, lyrics: false, cover: false });
 const coverStage = ref('');
 const busyAll = ref(false);
 
-const post = async (url, body) => {
-  const r = await fetch(url, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  });
-  const d = await r.json();
-  if (!r.ok || d.ok === false) throw new Error(d.error || d.detail || '失败');
-  return d;
-};
-
 const genTags = async () => {
   if (!theme.value.trim()) return;
   busy.tags = true;
-  try { tags.value = (await post('/api/llm/tags', { theme: theme.value })).text; }
+  try { tags.value = (await api.aiTags({ theme: theme.value })).text; }
   catch (e) { tags.value = `（失败：${e.message}）`; }
   finally { busy.tags = false; }
 };
@@ -101,7 +93,7 @@ const genTags = async () => {
 const genLyrics = async () => {
   if (!theme.value.trim()) return;
   busy.lyrics = true;
-  try { lyrics.value = (await post('/api/llm/lyrics', { prompt: theme.value, style: tags.value })).text; }
+  try { lyrics.value = (await api.aiLyrics({ prompt: theme.value, style: tags.value })).text; }
   catch (e) { lyrics.value = `（失败：${e.message}）`; }
   finally { busy.lyrics = false; }
 };
@@ -116,11 +108,11 @@ const genCover = async () => {
   busy.cover = true;
   coverStage.value = '提交中…';
   try {
-    const d = await post('/api/cover/generate', { prompt: theme.value, title: theme.value.slice(0, 20) });
+    const d = await api.generateCover({ prompt: theme.value, title: theme.value.slice(0, 20) });
     if (!d.task_id) throw new Error('没拿到任务号');
     for (let i = 0; i < 100; i++) {
       await new Promise((r) => setTimeout(r, 3000));
-      const raw = await (await fetch('/api/tasks')).json();
+      const raw = await api.tasks();
       const list = Array.isArray(raw) ? raw : (raw.tasks || []);
       const t = list.find((x) => x.id === d.task_id);
       if (!t) continue;
