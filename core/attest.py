@@ -41,7 +41,16 @@ from core.paths import DATA_DIR
 
 # 留痕 JSON 的版本号。字段变了要升，否则同一首歌在不同版本下算出的哈希
 # 对不上，历史存证就没法复验。
-SCHEMA = "voxflow-attest/1"
+SCHEMA = "voxflow-attest/2"
+# v1 → v2（2026-10-10）：发行拆分。
+#   · 去掉 `release_title`（发行名归 suno-publisher 的 releases 表）
+#   · 去掉 `timeline`（原来取 voxflow 的 publish_events，那张表已随发行迁走）
+#
+# **改 schema 是有代价的**：`digest` 是整份文档的哈希，v1 导出的存证再导出
+# 会得到不同的 digest。所以版本号必须跟着变，让校验方知道拿哪版规则对。
+# 已发出的 v1 证书仍然有效 —— 用 v1 规则验，别用新代码去重算。
+# 发行历史要作为证据的话，去 suno-publisher 的 publish_events 取（那边才是
+# 发行状态的唯一真源），不要再往这份**创作**留痕里塞。
 
 
 def _sha256_file(path: Path, chunk: int = 1 << 20) -> str:
@@ -72,9 +81,6 @@ def provenance(track_id: str) -> dict[str, Any]:
         t = c.execute("SELECT * FROM tracks WHERE id=?", (track_id,)).fetchone()
         if not t:
             raise ValueError(f"没有这首作品: {track_id}")
-        events = c.execute(
-            "SELECT from_status, to_status, actor, note, ts FROM publish_events "
-            "WHERE track_id=? ORDER BY ts", (track_id,)).fetchall()
         usage = c.execute(
             "SELECT ts, provider, action, credits, meta FROM usage_events "
             "WHERE track_id=? ORDER BY ts", (track_id,)).fetchall()
@@ -92,7 +98,8 @@ def provenance(track_id: str) -> dict[str, Any]:
         "schema": SCHEMA,
         "track_id": track_id,
         "title": t["title"],
-        "release_title": t["release_title"] or "",
+        # release_title 已随发行拆分移走（v2）—— 发行名在 suno-publisher 的
+        # releases 表，那边锁定且唯一。这里是创作留痕，不掺发行身份。
         "created_at": t["created_at"],
         # —— 独创性投入的核心：提示词与风格设定 ——
         "design": {
@@ -116,10 +123,10 @@ def provenance(track_id: str) -> dict[str, Any]:
             "audio_bytes": audio_path.stat().st_size if audio_path.is_file() else 0,
             "cover_file": t["cover_file"] or "",
         },
-        # —— 时间线：什么时候做了什么 ——
-        "timeline": [
-            {"ts": e["ts"], "from": e["from_status"], "to": e["to_status"],
-             "actor": e["actor"], "note": e["note"]} for e in events],
+        # —— 时间线：生成侧做了什么 ——
+        # 原来这里还有一条 timeline（发行状态流转，取自 publish_events）。
+        # 那张表随发行迁去了 suno-publisher，本仓不再持有，故 v2 去掉。
+        # 发行历史要作证据就去那边取，别在两个仓各留一份。
         "tooling": [
             {"ts": u["ts"], "provider": u["provider"], "action": u["action"],
              "credits": u["credits"], "meta": json.loads(u["meta"] or "{}")} for u in usage],

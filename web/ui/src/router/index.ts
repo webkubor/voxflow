@@ -6,7 +6,6 @@
  *
  *     /#/suno      AI 音乐
  *     /#/works     我的作品（流水线看板）
- *     /#/publish   全网发行
  *     /#/library   资产库
  *     /#/ops       运营台（成本 + 健康 + 日志）
  *     ……
@@ -43,11 +42,7 @@ export const tabRoutes = [
   { path: '/design', name: 'design', component: TabPlaceholder },
   { path: '/dialogue', name: 'dialogue', component: TabPlaceholder },
   { path: '/suno', name: 'suno', component: TabPlaceholder },
-  { path: '/albums', name: 'albums', component: TabPlaceholder },
-  { path: '/promo', name: 'promo', component: TabPlaceholder },
   { path: '/attest', name: 'attest', component: TabPlaceholder },
-  { path: '/works', name: 'works', component: TabPlaceholder },
-  { path: '/publish', name: 'publish', component: TabPlaceholder },
   { path: '/library', name: 'library', component: TabPlaceholder },
   { path: '/intake', name: 'intake', component: TabPlaceholder },
   { path: '/gallery', name: 'gallery', component: TabPlaceholder },

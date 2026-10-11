@@ -17,7 +17,7 @@ import queue as queue_mod
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
@@ -1778,17 +1778,11 @@ def pipeline_list():
     return {
         "stages": pipeline.STAGES,
         "stage_labels": pipeline.STAGE_LABELS,
-        "platforms": pipeline.PLATFORMS,
+        # 不再有 platforms —— 发行拆分后本仓不认识平台（2026-10-10）。
+        # 前端要平台列表的屏已经随发行一起搬去 suno-publisher。
         "summary": pipeline.summary(),
         "tracks": pipeline.list_tracks(),
     }
-
-
-@app.get("/api/publish-board")
-def publish_board():
-    """发布账号、已发布曲目与云备份状态的同源看板数据。"""
-    from core import pipeline
-    return pipeline.publication_board()
 
 
 @app.get("/api/artist")
@@ -1868,23 +1862,6 @@ def notify_owner():
 
     owner = ((notify.account() or {}).get("assignees") or {}).get("owner") or {}
     return {"name": owner.get("name", ""), "open_id": owner.get("open_id", "")}
-
-
-@app.get("/api/pipeline/readiness")
-def pipeline_readiness(track_id: str, platform: str):
-    """这首歌发这个平台，备料齐了没有 —— 缺哪几项、每项怎么补。
-
-    「备料中」原本是个空状态：点了确认发版就写上它，然后什么都不发生，
-    也没有任何东西告诉你算不算完、下一步点哪儿。这个端点就是那一环。
-    """
-    from core import pipeline  # noqa: PLC0415 —— 与本文件其余 pipeline 端点一致，延迟导入
-
-    if not track_id or not platform:
-        raise HTTPException(400, "缺少 track_id 或 platform")
-    r = pipeline.readiness(track_id, platform)
-    if r.get("错误"):
-        raise HTTPException(404, r["错误"])
-    return r
 
 
 class ImportUrlRequest(BaseModel):
@@ -2021,238 +1998,6 @@ def _run_publish_task(task_id: str, params: dict, update_fn):
                 "控制台": (pipeline.PLATFORMS.get(platform) or {}).get("console", ""),
                 "日志": out[-1500:]},
     )
-
-
-@app.get("/api/publish/login-state")
-def publish_login_state(platform: str = "qishui"):
-    """上次核验的登录结果（毫秒级，读库）。
-
-    和 `login-check` 分开：那个要真开浏览器、几秒钟、还可能弹 Chrome 的
-    调试授权框，不能放在页面加载路径上。这个只读上次的结论 ——
-    页面先显示「3 分钟前验过：已登录」，人觉得不对再点「重新检查」。
-    """
-    from core import pipeline  # noqa: PLC0415
-
-    st = pipeline.login_state(platform)
-    st["控制台"] = (pipeline.PLATFORMS.get(platform) or {}).get("console", "")
-    return st
-
-
-@app.post("/api/publish/login-check")
-def publish_login_check(platform: str = "qishui"):
-    """实际探一次平台登录态。**由用户点按钮触发，不放在页面加载路径上。**
-
-    ## 逻辑说明（这一条被问过：普通用户从哪知道自己登没登）
-
-    1. 「导入音频」页最上面就是平台 + 登录状态，不是藏在深处
-    2. 状态未知时显示「检查登录」按钮 —— 点了才真跑，页面不会因此卡住
-    3. 没登录 → 红色 + 「去登录」按钮直接打开该平台后台
-    4. 登录了 → 绿色 + 显示后台页面标题（确认是对的那个账号，
-       而不是笼统的「已登录」—— 多账号的人最容易在这里搞错）
-
-    探测靠 browser-harness 附着用户日常那个浏览器。**没装它就诚实说验不了**，
-    不猜一个「大概登录了」——猜错的代价是人填完一整张表才发现要重来。
-    """
-    import subprocess  # noqa: PLC0415
-
-    from core import pipeline  # noqa: PLC0415
-    from core.paths import PROJECT_DIR as PD  # noqa: PLC0415
-
-
-    spec = pipeline.PLATFORMS.get(platform) or {}
-    if not _find_exe("browser-harness"):
-        return {"可验证": False, "已登录": None, "说明": "没装 browser-harness",
-                "控制台": spec.get("console", "")}
-    probe = PD / "scripts/check_login.py"
-    if not probe.exists():
-        return {"可验证": False, "已登录": None, "说明": "缺 scripts/check_login.py",
-                "控制台": spec.get("console", "")}
-    try:
-        with open(probe, encoding="utf-8") as f:
-            r = subprocess.run(["browser-harness"], stdin=f, timeout=120,
-                               env={**os.environ, "VF_BASE": str(PD), "VF_PLATFORM": platform},
-                               capture_output=True, text=True)
-        lines = [ln for ln in (r.stdout or "").splitlines() if ln.strip().startswith("{")]
-        d = json.loads(lines[-1]) if lines else {}
-    except Exception as e:  # noqa: BLE001
-        return {"可验证": False, "已登录": None,
-                "说明": f"探测失败：{str(e)[:120]}", "控制台": spec.get("console", "")}
-    ok = bool(d.get("logged_in"))
-    # 落库：下次进页面直接读「上次验的结果」，不用每次都开浏览器
-    pipeline.record_login(platform, ok,
-                          detail=(d.get("hint", "") + " · " + d.get("title", ""))[:200])
-    st = pipeline.login_state(platform)
-    return {"可验证": True, "已登录": ok,
-            "说明": d.get("hint", ""), "页面": d.get("title", ""),
-            "账号": st.get("account", ""), "验于": st.get("checked_at", ""),
-            "控制台": spec.get("console", "")}
-
-
-@app.get("/api/publish/sheet")
-def publish_sheet(track_id: str, platform: str = "qishui"):
-    """把平台表单要填的每一栏都算好，人直接照着抄。
-
-    ## 为什么必须有这个
-
-    自动填表依赖 `browser-harness` —— 那是个本机工具，**Windows 上不一定装得了**，
-    而且它要能连上浏览器（本机实测会超时）。把它当成唯一路径，
-    等于让一部分人根本用不了这个功能。
-
-    自动化是**加速**，不是前提。所以永远保留一条不依赖任何工具的路：
-    这个端点把每一栏的值都算好，复制粘贴十分钟能填完，
-    和自动填表的产出**完全一致**（同一份数据来源，不会两边不一样）。
-    """
-    from core import pipeline  # noqa: PLC0415
-    from core.paths import ARTIST_FILE  # noqa: PLC0415
-
-    t = pipeline.get_track(track_id)
-    if not t:
-        raise HTTPException(404, "曲目不存在")
-    spec = pipeline.PLATFORMS.get(platform) or {}
-    info = (t.get("platforms") or {}).get(platform) or {}
-    try:
-        artist = json.loads(ARTIST_FILE.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        artist = {}
-    roles = artist.get("roles") or {}
-    dur = int(t.get("duration") or info.get("duration") or 0)
-
-    fields = [
-        ("歌曲标题", t.get("release_title") or t.get("title", "")),
-        ("表演者", roles.get("performer") or artist.get("stage_name", "")),
-        ("词作者", roles.get("lyricist") or artist.get("stage_name", "")),
-        ("曲作者", roles.get("composer") or artist.get("stage_name", "")),
-        ("制作人", roles.get("producer") or artist.get("stage_name", "")),
-        ("专辑名称", info.get("album") or t.get("album_desc", "")),
-        ("专辑歌手", roles.get("album_artist") or artist.get("stage_name", "")),
-        ("歌词", t.get("lyrics") or "[Instrumental]"),
-        # 这一栏必须如实勾。漏了或填错是**合规问题**，不是格式问题 ——
-        # 平台事后核查发现瞒报，处理起来比当场多点一下严重得多。
-        ("AI 创作声明", "是（工具：Suno）"),
-        ("音乐类型", t.get("tags", "") or "纯音乐 BGM"),
-        ("时长", f"{dur // 60}:{dur % 60:02d}" if dur else ""),
-    ]
-    # 第二步的授权信息：真实姓名，不是艺名
-    step2 = [
-        ("词作者真实姓名", artist.get("real_name", "")),
-        ("曲作者真实姓名", artist.get("real_name", "")),
-        ("授权比例", "100%"),
-    ]
-    return {
-        "曲目": t.get("release_title") or t.get("title"),
-        "平台": spec.get("label", platform),
-        "控制台": spec.get("console", ""),
-        "第一步_上传作品": [{"字段": k, "值": v} for k, v in fields],
-        "第二步_授权作品": [{"字段": k, "值": v} for k, v in step2],
-        "音频": t.get("audio_url", ""),
-        "封面": t.get("cover_url", ""),
-        "提示": "真实姓名用于版权登记和收益结算，不能填艺名",
-    }
-
-
-@app.post("/api/publish/run")
-def publish_run(req: PublishRunRequest):
-    """开始自动填表。异步任务，前端轮询 /api/tasks 看进度。"""
-    from core import pipeline  # noqa: PLC0415
-
-    track = pipeline.get_track(req.track_id)
-    if not track:
-        raise HTTPException(404, "曲目不存在")
-    label = f"📤 填表: {track.get('release_title') or track.get('title')}"
-    task_id = _submit_task("publish", label,
-                           {"track_id": req.track_id, "platform": req.platform})
-    return {"task_id": task_id, "status": "queued"}
-
-
-@app.get("/api/publish/preflight")
-def publish_preflight(platform: str = "qishui"):
-    """导入音频页的**前置条件**：不是缺什么素材，是这台机器能不能发。
-
-    ## 为什么单独一项
-
-    备料检查回答的是「这首歌的物料齐没齐」（音频、封面、歌词）。
-    但物料齐了也可能发不出去 —— 没登录平台、museav 没积分、
-    browser-harness 没装。此前这些全没检查，人按着「✅ 备料齐了」
-    去跑发布命令，跑起来才发现登录过期，白填一遍表。
-
-    ## 能验的和不能验的，分开说
-
-    有些事服务端验不了 —— **平台登录态在你的浏览器里**，不在这个进程里。
-    与其猜一个「大概已登录」，不如老实说「验不了，点这个链接自己看一眼」。
-    假装检查过比不检查更危险：人会信它。
-    """
-    import shutil as _sh  # noqa: PLC0415
-    import subprocess  # noqa: PLC0415
-
-    from core import cover, notify, pipeline, r2  # noqa: PLC0415
-    from core.paths import ARTIST_FILE  # noqa: PLC0415
-
-    spec = pipeline.PLATFORMS.get(platform) or {}
-    items = []
-
-    def add(name, ok, detail, *, verifiable=True, link=""):
-        items.append({"项": name, "就绪": bool(ok), "说明": detail,
-                      "可自动验证": verifiable, "链接": link})
-
-    # 1) 出图能力：museav 装没装、登没登、有没有积分
-    cs = cover.status() if hasattr(cover, "status") else {}
-    if not cs:
-        try:
-            b = cover.balance()
-            cs = {"can_generate": b.get("available") and (b.get("unmetered") or b.get("credits", 0) > 0),
-                  "detail": b.get("detail", "")}
-        except Exception as e:  # noqa: BLE001
-            cs = {"can_generate": False, "detail": str(e)[:120]}
-    add("封面出图（museav）", cs.get("can_generate"),
-        cs.get("detail") or "museav 未就绪 —— 跑一次 `museav login`（登录一次，出图和文案一起通），或检查积分")
-
-    # 2) 自动填表要用的浏览器工具
-    harness = _find_exe("browser-harness")
-    add("browser-harness", bool(harness),
-        f"已装：{harness}" if harness else "没装 —— 自动填表跑不了，只能手工填")
-
-    # 3) 平台脚本
-    script = PROJECT_DIR / f"scripts/publish_{platform}.py" if "PROJECT_DIR" in dir() else None
-    from core.paths import PROJECT_DIR as PROJECT_DIR_  # noqa: PLC0415
-    script = PROJECT_DIR_ / f"scripts/publish_{platform}.py"
-    add(f"{spec.get('label', platform)} 填表脚本", script.exists(),
-        f"scripts/publish_{platform}.py" if script.exists()
-        else f"没有 publish_{platform}.py —— 这个平台还没做自动填表")
-
-    # 4) 艺人档案（版权登记和结算要）
-    ok_artist, detail = False, "artist.json 不存在"
-    try:
-        a = json.loads(ARTIST_FILE.read_text(encoding="utf-8"))
-        ok_artist = bool(a.get("stage_name") and a.get("real_name"))
-        detail = f"{a.get('stage_name','?')} / 法律姓名已填" if ok_artist else "缺艺名或法律姓名"
-    except (OSError, ValueError):
-        pass
-    add("艺人档案", ok_artist, detail)
-
-    # 5) R2（把音频发给别人下载要用）
-    add("R2 图床", r2.enabled(),
-        "已配置" if r2.enabled() else "没配 —— 音频传不上公网，别人拿不到")
-
-    # 6) 台账
-    acc = notify.account()
-    add("飞书台账", bool((acc.get("base") or {}).get("app_token")),
-        f"{acc.get('company','')} · {acc.get('chat_name','')}" if acc else "没配通知账户")
-
-    # 7) 平台登录 —— **这里不真探**。
-    #
-    # 探一次要跑 browser-harness、开页面，本机实测 5 秒、服务端更久。
-    # 放在页面加载的同步路径上，整页就得等它 —— 而前面六项都是毫秒级的。
-    # 所以这里只说「能不能探」，真探由用户点「检查登录」触发（见 login_check）。
-    console = spec.get("console") or ""
-    add(f"{spec.get('label', platform)} 登录",
-        None,
-        "点「检查登录」实际验一次" if harness
-        else "没装 browser-harness —— 只能自己点右边确认能进后台",
-        verifiable=False, link=console)
-
-    blocking = [i for i in items if i["可自动验证"] and not i["就绪"]]
-    return {"platform": platform, "items": items,
-            "可以发布": not blocking, "阻塞项": [i["项"] for i in blocking]}
 
 
 @app.post("/api/pipeline/import-url")
@@ -2459,32 +2204,9 @@ class PipelineReleaseRequest(BaseModel):
     release_title: str
 
 
-@app.post("/api/pipeline/release")
-def pipeline_release(req: PipelineReleaseRequest):
-    """确认发版：独家授权只能投一个平台，发行歌名必须唯一。"""
-    from core import pipeline
-    try:
-        track = pipeline.submit_release(req.track_id, req.platform, req.release_title)
-        pipeline.set_stage(req.track_id, "publishing")
-        return {"ok": True, "track": pipeline.get_track(req.track_id) or track}
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-
 class PipelineRenameRequest(BaseModel):
     track_id: str
     release_title: str
-
-
-@app.post("/api/pipeline/rename")
-def pipeline_rename(req: PipelineRenameRequest):
-    """发行前改发行歌名 —— 交到平台后台之前都能改，之后锁死。"""
-    from core import pipeline
-    try:
-        track = pipeline.rename_release(req.track_id, req.release_title)
-        return {"ok": True, "track": track}
-    except ValueError as e:
-        raise HTTPException(400, str(e))
 
 
 class PipelinePlatformRequest(BaseModel):
@@ -2495,41 +2217,9 @@ class PipelinePlatformRequest(BaseModel):
     note: str | None = None
 
 
-@app.post("/api/pipeline/platform")
-def pipeline_platform(req: PipelinePlatformRequest):
-    """
-    记录某平台的发布状态。每个平台单独记 —— 同一首歌可能汽水已上架、
-    网易云还在审核，只有一个全局状态表达不出这种情况。
-    """
-    from core import pipeline
-    try:
-        return {"ok": True, "track": pipeline.set_platform_status(
-            req.track_id, req.platform, req.status, url=req.url, note=req.note,
-        )}
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-
 class PipelineLinkRequest(BaseModel):
     listing_id: int
     track_id: str
-
-
-@app.post("/api/pipeline/link")
-def pipeline_link(req: PipelineLinkRequest):
-    """把一条平台上架记录挂到某首 Suno/本地原曲上。改名、拆分都走这里。"""
-    from core import pipeline
-    try:
-        return {"ok": True, "track": pipeline.link_listing(req.listing_id, req.track_id)}
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-
-@app.get("/api/pipeline/sources")
-def pipeline_sources():
-    """能当原曲被关联的作品（有 Suno clip 或本地音频）。"""
-    from core import pipeline
-    return {"tracks": pipeline.source_candidates()}
 
 
 @app.get("/api/capabilities")
@@ -3298,35 +2988,6 @@ class AlbumTracksRequest(BaseModel):
     track_ids: list[str] = []
 
 
-@app.post("/api/albums")
-def album_create(req: AlbumCreateRequest):
-    from core import pipeline
-    try:
-        return {"ok": True, "album": pipeline.create_album(
-            req.title, req.platform, req.track_ids,
-            description=req.description, publish_date=req.publish_date, tags=req.tags)}
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-
-@app.post("/api/albums/{album_id}/tracks")
-def album_add_tracks(album_id: str, req: AlbumTracksRequest):
-    from core import pipeline
-    try:
-        return {"ok": True, "album": pipeline.add_to_album(album_id, req.platform, req.track_ids)}
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-
-@app.delete("/api/albums/{album_id}/tracks/{track_id}")
-def album_remove_track(album_id: str, track_id: str, platform: str = "qishui"):
-    from core import pipeline
-    try:
-        return {"ok": True, "album": pipeline.remove_from_album(album_id, platform, track_id)}
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-
 class AlbumCoverRequest(BaseModel):
     platform: str = "qishui"
     prompt: str = ""
@@ -3334,137 +2995,11 @@ class AlbumCoverRequest(BaseModel):
     force: bool = False       # 已有封面时是否重出（重出要再花 1 积分）
 
 
-@app.post("/api/albums/{album_id}/cover")
-def album_cover_generate(album_id: str, req: AlbumCoverRequest):
-    """给整张专辑出一张封面（**花 1 积分**），整辑共用。
-
-    已经有封面就直接返回，不重复扣费 —— 要重出得显式 force=true。
-    """
-    from core import cover, pipeline
-    try:
-        album = pipeline.get_album(album_id, req.platform)
-    except ValueError as e:
-        raise HTTPException(404, str(e))
-    if album.get("cover_local") and not req.force:
-        return {"ok": True, "skipped": "已有封面，没有重复扣积分", "album": album}
-    if not cover.available():
-        raise HTTPException(400, "museav 未登录。跑一次 `museav login`。")
-
-    # 走 cover.build_prompt，**不要自己拼** —— 它里面写着「不得出现任何文字」的硬禁令。
-    # 2026-09-13 就是因为这里自拼 prompt 并把专辑简介（营销文案）喂了进去，
-    # 模型把「翻车现场 · 搞笑BGM / 短视频专用喜剧配乐」全画成了海报标题，
-    # 两首歌被汽水以「封面含有广告引流信息」驳回。
-    prompt = req.prompt.strip() or cover.build_prompt(
-        album["title"], album.get("tags") or pipeline.album_tags(album_id, req.platform))
-    label = f"🖼 专辑封面：{album['title']}"
-    params = {"title": album["title"], "prompt": prompt, "ratio": req.ratio,
-              "album_key": album["key"], "track_id": ""}
-    return {"task_id": _submit_task("cover", label, params), "status": "queued",
-            "cost": "1 积分"}
-
-
 class AlbumPublishRequest(BaseModel):
     platform: str = "qishui"
     auto_cover: bool = True     # 缺封面就自动出（1 积分/辑，已有则跳过）
     wait: bool = True           # 等封面出完再返回
     timeout_sec: int = 300
-
-
-@app.post("/api/albums/{album_id}/publish")
-def album_publish(album_id: str, req: AlbumPublishRequest):
-    """把一张专辑备到「可以去平台后台上传」的状态 —— 一次调用跑完全流程。
-
-    人工做这件事要点四五次（挨个确认音频、出封面、挨个定发行名、挨个提交），
-    每一步都可能漏；漏掉的那步往往到了平台后台才发现，得整个退回来重做。
-
-    做完这四件：
-      1. 查每首有没有可用音频（没有就直接拦下，别等到后台才发现）
-      2. 整张辑出一张封面（**1 积分**，已有则跳过、不重复扣）
-      3. 每首绑定平台 + 发行名（沿用已定的，没定就用曲名）
-      4. 汇报还差什么
-
-    **不会**替你把歌传到平台 —— 汽水没有上传 API，那一步只能你在后台点。
-    """
-    import time as _t                                            # noqa: PLC0415
-    from core import cover, pipeline                             # noqa: PLC0415
-
-    try:
-        album = pipeline.get_album(album_id, req.platform)
-    except ValueError as e:
-        raise HTTPException(404, str(e))
-    if not album["tracks"]:
-        raise HTTPException(400, "这张专辑还没有曲目")
-
-    steps: list[dict] = []
-
-    # 1. 音频体检 —— 缺音频是硬伤，先拦下
-    missing = []
-    for t in album["tracks"]:
-        tr = pipeline.get_track(t["id"]) or {}
-        if not tr.get("audio_file"):
-            missing.append(tr.get("title") or t["id"])
-    if missing:
-        raise HTTPException(400, f"这些还没有可用音频，先去 Suno 解锁下载：{'、'.join(missing)}")
-    steps.append({"step": "音频体检", "ok": True, "detail": f"{len(album['tracks'])} 首都有音频"})
-
-    # 2. 封面 —— 挂在专辑上，一辑一张
-    cover_task = ""
-    if album.get("cover_local"):
-        steps.append({"step": "封面", "ok": True, "detail": "已有，没重复扣积分"})
-    elif not req.auto_cover:
-        steps.append({"step": "封面", "ok": False, "detail": "没有封面（auto_cover=false）"})
-    elif not cover.available():
-        steps.append({"step": "封面", "ok": False, "detail": "museav 未登录，跑 `museav login`"})
-    else:
-        prompt = cover.build_prompt(
-            album["title"], album.get("tags") or pipeline.album_tags(album_id, req.platform))
-        cover_task = _submit_task("cover", f"🖼 专辑封面：{album['title']}",
-                                  {"title": album["title"], "prompt": prompt, "ratio": "1:1",
-                                   "album_key": album["key"], "track_id": ""})
-        if req.wait:
-            deadline = _t.time() + req.timeout_sec
-            while _t.time() < deadline:
-                _t.sleep(3)
-                task = _tasks.get(cover_task) or {}
-                if task.get("status") == "done":
-                    album = pipeline.get_album(album_id, req.platform)
-                    steps.append({"step": "封面", "ok": bool(album.get("cover_local")),
-                                  "detail": album.get("cover_local") or "出完了但没回填"})
-                    break
-                if task.get("status") == "error":
-                    steps.append({"step": "封面", "ok": False,
-                                  "detail": str(task.get("error"))[:160]})
-                    break
-            else:
-                steps.append({"step": "封面", "ok": False, "detail": "等超时了，去任务队列看"})
-        else:
-            steps.append({"step": "封面", "ok": True, "detail": f"已提交（task {cover_task}）"})
-
-    # 3. 挨个绑定平台与发行名
-    bound, failed = [], []
-    for t in album["tracks"]:
-        tr = pipeline.get_track(t["id"]) or {}
-        title = (tr.get("release_title") or "").strip() or (tr.get("title") or "").strip()
-        try:
-            pipeline.submit_release(t["id"], req.platform, title)
-            pipeline.set_stage(t["id"], "publishing")
-            bound.append(title)
-        except ValueError as e:
-            # 已经绑过同名同平台不算错，其它情况要如实报
-            if "已定为" in str(e) or "已发往" in str(e):
-                bound.append(title)
-            else:
-                failed.append(f"{title}：{e}")
-    steps.append({"step": "绑定发行名", "ok": not failed,
-                  "detail": "、".join(bound) + ("；失败：" + "；".join(failed) if failed else "")})
-
-    album = pipeline.get_album(album_id, req.platform)
-    ready = bool(album.get("cover_local")) and not failed
-    return {
-        "ok": ready, "album": album, "steps": steps, "cover_task": cover_task,
-        "next": ("备料齐了 —— 去汽水后台上传，记得勾 AI 生成标识"
-                 if ready else "还差东西，看 steps 里 ok=false 那几条"),
-    }
 
 
 # ── 原创存证 ──────────────────────────────────────────
@@ -3905,51 +3440,6 @@ def get_audio_subdir(subdir: str, filename: str):
     return FileResponse(str(path), media_type=media_type, filename=safe_name)
 
 
-@app.get("/api/platform-accounts")
-def platform_accounts():
-    """
-    各平台账号资产：我是谁、发了多少首、主页在哪。
-
-    数据来自 scripts/sync_*.py 从平台抓回来的真实状态，不是手填的 ——
-    手填的台账会随时间变假（今天发一首、明天下架一首，没人记得回来改）。
-
-    返回里带 local_online_count：平台自报的数与台账实际在线数对不对得上，
-    数字自己会说话，比在界面上写「同步成功」有用。
-    """
-    from core import pipeline
-    return pipeline.list_platform_accounts()
-
-
-@app.get("/api/albums")
-def albums_endpoint(platform: str = None):
-    """
-    专辑 + 每张专辑的曲目。
-
-    专辑是**独立实体**，不是歌的附属字段：有自己的封面、发行时间、简介、
-    曲目数，发别的平台时整张一起走。
-
-    曲目的 join 在 SQL 里做（core/pipeline.list_albums）—— 以前是在这里
-    手写双重循环把两份 JSON 读进内存自己配对，那不叫查询。
-    """
-    from core import pipeline
-    return {"albums": {a["key"]: a for a in pipeline.list_albums(platform)}}
-
-
-@app.get("/api/album-cover/{album_key}")
-def album_cover(album_key: str):
-    """专辑封面（同步时下到本地那份，不依赖平台图床 —— 图床 URL 会失效）。"""
-    from core import pipeline
-    from core.paths import DATA_DIR
-    a = next((x for x in pipeline.list_albums() if x["key"] == album_key), None)
-    if not a or not a.get("cover_local"):
-        raise HTTPException(404, "这张专辑没有本地封面")
-    path = DATA_DIR / a["cover_local"]
-    if not path.exists():
-        raise HTTPException(404, "封面文件不在了")
-    return FileResponse(str(path), media_type="image/jpeg",
-                        headers={"Cache-Control": "no-store"})
-
-
 @app.get("/api/cover/{track_id}")
 def get_cover(track_id: str):
     """
@@ -3981,54 +3471,6 @@ class PromoGenerateRequest(BaseModel):
     custom_caps: Optional[list[str]] = None
 
 
-@app.get("/api/promo/status")
-def promo_status():
-    """检查推歌环境就绪状态（reel CLI 与可用模板）。"""
-    from core import promo
-    return promo.check_promo_status()
-
-
-@app.get("/api/promo/videos")
-def promo_videos():
-    """获取所有已生成的宣推短视频列表。"""
-    from core import promo
-    return {"videos": promo.list_promo_videos()}
-
-
-@app.post("/api/promo/generate")
-def promo_generate(req: PromoGenerateRequest):
-    """为指定曲目一键合成 1080x1920 宣推短视频。"""
-    from core import promo
-    try:
-        res = promo.generate_promo_video(
-            track_id=req.track_id,
-            template=req.template,
-            per_shot=req.per_shot,
-            accent1=req.accent1,
-            accent2=req.accent2,
-            footer=req.footer,
-            custom_caps=req.custom_caps,
-        )
-        return {"ok": True, "result": res}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/promo/video/{filename}")
-def promo_video_download(filename: str):
-    """推歌短视频流式播放与下载。"""
-    from core.paths import PROMO_DIR
-    p = (PROMO_DIR / filename).resolve()
-    if not p.is_relative_to(PROMO_DIR) or not p.is_file():
-        raise HTTPException(404, "视频文件不存在")
-    return FileResponse(
-        str(p),
-        media_type="video/mp4",
-        filename=p.name,
-        headers={"Accept-Ranges": "bytes"}
-    )
-
-
 # ── 启动入口 ──────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
@@ -4039,78 +3481,93 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8866)
 
 
-# ── 发行资产 API（给发行工具用）────────────────────────────
+# ── 曲库资产 API（生成侧，给发行工具用）─────────────────────
+#
+# 只管「生成了什么」，**不管「发到哪了」** —— 不出现 platform / release_title /
+# already_released 这类发行概念。发行怎么判断待发、怎么排除已上架的，由
+# suno-publisher 自己拿它的台账算（那边才是发行状态的唯一真源）。
 #
 # 消费方在音乐平台的发布页里跑，要两样东西：元数据（填表）和文件（上传）。
 # 两者都只在 127.0.0.1 上流转，不出本机 —— 延续 VoxFlow「音频不出本机」的口径。
 # 消费方仓库：https://github.com/webkubor/suno-publisher
 #
-# 响应里的 clip_id / audio_sha256 是**关联键**，别当噪音删：发行台账拆去了
-# suno-publisher 的独立 sqlite，跨库没有外键，只能靠这两个字段认领作品。
+# 响应里的 clip_id / audio_sha256 是**关联键**，别当噪音删：发行台账在
+# suno-publisher 的独立 sqlite 里，跨库没有外键，只能靠这两个字段认领作品。
+# 也**绝不能用标题当键** —— Suno 一次出两首同名歌，按标题匹配必然串行。
 
-@app.get("/api/release/pending")
-def release_pending(platform: str = "qishui"):
-    """某平台待发行的曲目 + 填表要的全部元数据。
+# 发行表单上那几项「其实不用人想」的字段 —— 答案完全由这首歌怎么来的决定，
+# 属于生成侧的事实（Suno 生成的就是原创、没歌词就是纯音乐、生成通道就是 AI 工具）。
+# 「是否已发行」不在其中：那要看别的平台有没有上线记录，是发行侧的事。
+def _catalog_derive(t: dict[str, Any]) -> dict[str, Any]:
+    note = (t.get("note") or "") + " " + (t.get("tags") or "")
+    if "Remix" in note or "remix" in note:
+        mtype = "Remix"
+    elif "翻唱" in note or "cover" in note.lower():
+        mtype = "翻唱"
+    else:
+        mtype = "原创"
+    return {
+        "music_type": mtype,
+        "instrumental": not (t.get("lyrics") or "").strip(),
+        "ai_tool": "Suno" if t.get("clip_id") else "",
+    }
 
-    判据是「有音频、且这个平台还没有上架/已提交记录」。
-    is_instrumental / music_type 这些不在这里重推 —— 用 pipeline.publish_fields，
-    那是同一份推导规则的真源（备料阶段就定死，发布时纯搬运）。
+
+@app.get("/api/catalog/tracks")
+def catalog_tracks() -> list[dict[str, Any]]:
+    """有音频的作品 + 生成元数据。纯生成侧，不认识任何平台。
+
+    调用方（suno-publisher）拿这份列表减去自己台账里已上架的，得到「待发行」。
+    这么分工之后，voxflow 不需要知道平台的存在，发行状态只有一个真源。
     """
     from core import pipeline as _pipe
     from core.attest import _sha256_file
 
-    done = ("online", "published", "submitted")
     out = []
     for t in _pipe.list_tracks():
         if not (t.get("audio_file") or "").strip():
             continue
-        if ((t.get("platforms") or {}).get(platform) or {}).get("status") in done:
+        rel = t["audio_file"]
+        audio = Path(rel) if Path(rel).is_absolute() else BASE_DIR / rel
+        if not audio.is_file():
+            # 台账里有、磁盘上没有：跳过而不是给空哈希 —— 给了会让调用方
+            # 把它当成一首可发的歌，填表填到上传才发现文件不存在。
             continue
-        f = _pipe.publish_fields(t["id"])
-        audio = BASE_DIR / t["audio_file"] if not Path(t["audio_file"]).is_absolute() else Path(t["audio_file"])
-        # 关联键，供 suno-publisher 那边的新台账认领作品。
-        #
-        # 为什么必须给：发行台账拆去了独立仓（不共用 sqlite），跨库没有外键，
-        # 只能靠内容键关联。**绝不能用标题** —— Suno 一次出两首同名歌，
-        # 按标题匹配必然串行（见 scripts/sync_suno.py 顶部注释）。
-        # clip_id 覆盖 Suno 生成的歌，audio_sha256 覆盖本地 TTS 合成的（没有 clip_id）。
-        #
-        # 哈希只算音频、不算封面：发行身份锚在音频内容上，改封面不该让记录失联。
-        # 代价是每次请求都要读一遍音频文件 —— 曲库规模（几百首、每首几 MB）下
-        # 可接受；真到慢了再在下面加一层 LRU 缓存，别一上来就加。
+        d = _catalog_derive(t)
         try:
-            audio_hash = _sha256_file(audio) if audio.is_file() else ""
+            audio_hash = _sha256_file(audio)
         except OSError:
             audio_hash = ""
+        size_mb = audio.stat().st_size / 1048576
         out.append({
             "id": t["id"],
             "clip_id": t.get("clip_id") or "",
             "audio_sha256": audio_hash,
-            # 发出去的歌名必须唯一，所以优先 release_title
-            "title": (t.get("release_title") or t.get("title") or "").strip(),
+            # 生成用的歌名。**发行名不在这里** —— 那是发行侧锁定的身份，
+            # 存在 suno-publisher 的 releases 表，voxflow 不再持有。
+            "title": (t.get("title") or "").strip(),
             "lyrics": t.get("lyrics") or "",
-            "instrumental": f["is_instrumental"],
-            "music_type": f["music_type"],
-            "ai_tool": f["ai_tool"],
-            "already_released": f["already_released"],
+            "instrumental": d["instrumental"],
+            "music_type": d["music_type"],
+            "ai_tool": d["ai_tool"],
             "tags": t.get("tags") or "",
             "album_desc": t.get("album_desc") or "",
             "duration": t.get("duration") or 0,
-            "audio_name": Path(t["audio_file"]).name,
+            "audio_name": audio.name,
             "cover_name": Path(t.get("cover_file") or "").name,
+            "cover_file": t.get("cover_file") or "",
             # 插件按体积决定等平台解析多久；给的是转码后的估算，wav 按 1/5 算
-            "audio_mb": round((audio.stat().st_size / 1048576 / 5) if audio.is_file()
-                              and audio.suffix.lower() == ".wav" else
-                              (audio.stat().st_size / 1048576 if audio.is_file() else 6), 1),
+            "audio_mb": round(size_mb / 5 if audio.suffix.lower() == ".wav" else size_mb, 1),
         })
     return out
 
 
-@app.get("/api/release/{track_id}/asset/{kind}")
-def release_asset(track_id: str, kind: str):
+@app.get("/api/catalog/{track_id}/asset/{kind}")
+def catalog_asset(track_id: str, kind: str):
     """音频或封面的字节流。kind: audio | cover
 
-    音频一律先转 320k MP3（见 core/release.py 里那条规则的由来）。
+    音频一律先转 320k MP3（见 core/release.py 里那条规则的由来：汽水解析大 WAV
+    极慢，会同时报「音频无效」和「非纯音乐请填歌词」两条错，后一条尤其误导）。
     """
     from core import pipeline as _pipe
     from core.release import to_mp3
@@ -4139,3 +3596,13 @@ def release_asset(track_id: str, kind: str):
 
     # filename 要带出去 —— 插件靠文件名判断平台有没有真的收下（不能读 input.files）
     return FileResponse(str(path), media_type=media, filename=path.name)
+
+
+# ── 发行资产 API（给发行工具用）────────────────────────────
+#
+# 消费方在音乐平台的发布页里跑，要两样东西：元数据（填表）和文件（上传）。
+# 两者都只在 127.0.0.1 上流转，不出本机 —— 延续 VoxFlow「音频不出本机」的口径。
+# 消费方仓库：https://github.com/webkubor/suno-publisher
+#
+# 响应里的 clip_id / audio_sha256 是**关联键**，别当噪音删：发行台账拆去了
+# suno-publisher 的独立 sqlite，跨库没有外键，只能靠这两个字段认领作品。

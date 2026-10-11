@@ -35,7 +35,6 @@ export const usePipelineStore = defineStore('pipeline', () => {
   // 曾经跟 tracks 共用一个 ref —— 两个接口写同一个字段、结构还不一样，
   // 谁后加载谁把对方覆盖掉，表现为「看板刷新一下内容就变了」。
   const backupTracks = ref<Track[]>([]);
-  const publishAccounts = ref<PlatformAccount[]>([]);
   const artist = ref<Record<string, unknown> | null>(null);
   const error = ref('');
 
@@ -51,15 +50,8 @@ export const usePipelineStore = defineStore('pipeline', () => {
 
   const setStage = (trackId: string, stage: Stage) => guard(() => api.setStage(trackId, stage), error);
   const upsertTrack = (track: Partial<Track> & { track_id: string }) => guard(() => api.upsertTrack(track), error);
-  const setPlatformStatus = (p: { track_id: string; platform: PlatformKey; status: string }) => guard(() => api.setPlatformStatus(p), error);
-  const submitRelease = (p: { track_id: string; platform: PlatformKey; release_title: string }) =>
-    guard(() => api.submitRelease(p), error);
-  const loadPublishBoard = async () => {
-    const data = await guard(() => api.publishBoard(), error);
-    publishAccounts.value = (data.accounts || []) as PlatformAccount[];
-    backupTracks.value = data.tracks || [];
-    return data;
-  };
+  // 发行动作（setPlatformStatus / submitRelease / loadPublishBoard）已于
+  // 2026-10-10 随发行拆分删除 —— 那些端点不再存在于本仓。
 
   const saveArtist = async (updatedArtist: Record<string, unknown>) => {
     const data = await guard(() => api.saveArtist(updatedArtist), error);
@@ -68,7 +60,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
   };
 
   return {
-    stages, stageLabels, platforms, summary, tracks, backupTracks, publishAccounts, artist, error,
-    loadPipeline, loadPublishBoard, setStage, upsertTrack, setPlatformStatus, submitRelease, saveArtist,
+    stages, stageLabels, platforms, summary, tracks, backupTracks, artist, error,
+    loadPipeline, setStage, upsertTrack, saveArtist,
   };
 });

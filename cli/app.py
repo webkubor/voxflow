@@ -1,25 +1,21 @@
 import typer
 from cli.commands.voice import app as voice_app
-from cli.commands.release import app as release_app
 from cli.commands.tts import tts_clone, tts_design, tts_dialogue
 from cli.commands.job import app as job_app
 from cli.commands.preset import app as preset_app
 from cli.commands.doctor import doctor
 from cli.commands.ai import ai_script, ai_polish
 from cli.commands.stats import stats, logs, backfill
-from cli.commands.promo import app as promo_app
 from cli.commands.museav import app as museav_app
 
 app = typer.Typer(
     name="voice",
-    help="[bold cyan]VoxFlow 声流[/bold cyan] — 面向人类、AI 与 agent 的本地语音工作台",
+    help="[bold cyan]VoxFlow 声流[/bold cyan] — 本地 AI 音频生成工作台（语音克隆 / 音色设计 / 播客 / BGM / Suno 出歌）",
     add_completion=False,
 )
 app.add_typer(voice_app, name="voice")
-app.add_typer(release_app, name="release")
 app.add_typer(job_app, name="job")
 app.add_typer(preset_app, name="preset")
-app.add_typer(promo_app, name="promo")
 app.add_typer(museav_app, name="museav")
 app.command("clone")(tts_clone)
 app.command("design")(tts_design)
@@ -121,7 +117,8 @@ def main(ctx: typer.Context):
 
     子命令组：
       voice      音色素材管理（list / add / preview / show / rm / import）
-      release    发行流程（prep 备料 / submitted 提交留痕 / status 查进度）
+
+    发行（release / promo）已于 2026-10-10 迁往独立仓 suno-publisher —— 本仓只管生成。
       clone      从已有音色克隆合成
       design     从文字描述设计新音色
       dialogue   根据剧本批量合成多角色对话

@@ -146,10 +146,6 @@
             <n-tab-pane name="dialogue" tab="剧本演播"><DialogueTab /></n-tab-pane>
             <n-tab-pane name="suno" tab="AI 出歌"><SunoTab /></n-tab-pane>
             <n-tab-pane name="gallery" tab="作品展厅"><GalleryTab /></n-tab-pane>
-            <n-tab-pane name="albums" tab="专辑制作"><AlbumsTab /></n-tab-pane>
-            <n-tab-pane name="promo" tab="宣推短视频"><PromoTab /></n-tab-pane>
-            <n-tab-pane name="works" tab="发歌看板"><PipelineBoard /></n-tab-pane>
-            <n-tab-pane name="publish" tab="全网发行"><PublishTab /></n-tab-pane>
             <n-tab-pane name="attest" tab="原创存证"><AttestTab /></n-tab-pane>
             <n-tab-pane name="ops" tab="收益运营"><OpsTab /></n-tab-pane>
             <n-tab-pane name="library" tab="媒体资产"><LibraryTab /></n-tab-pane>
@@ -266,15 +262,11 @@ const lazyTab = (loader, label) => defineAsyncComponent({
   },
 });
 
-const AlbumsTab = lazyTab(() => import('../tabs/AlbumsTab.vue'), '专辑制作');
-const PromoTab = lazyTab(() => import('../tabs/PromoTab.vue'), '宣推短视频');
 const AttestTab = lazyTab(() => import('../tabs/AttestTab.vue'), '原创存证');
 const CloneTab = lazyTab(() => import('../tabs/CloneTab.vue'), '文本配音');
 const DesignTab = lazyTab(() => import('../tabs/DesignTab.vue'), '音色设计');
 const DialogueTab = lazyTab(() => import('../tabs/DialogueTab.vue'), '剧本演播');
 const SunoTab = lazyTab(() => import('../tabs/SunoTab.vue'), 'AI 出歌');
-const PipelineBoard = lazyTab(() => import('./PipelineBoard.vue'), '发歌看板');
-const PublishTab = lazyTab(() => import('../tabs/PublishTab.vue'), '全网发行');
 const LibraryTab = lazyTab(() => import('../tabs/LibraryTab.vue'), '媒体资产');
 const IntakeTab = lazyTab(() => import('../tabs/IntakeTab.vue'), '导入音频');
 const GalleryTab = lazyTab(() => import('../tabs/GalleryTab.vue'), '作品展厅');
@@ -373,18 +365,17 @@ const TAB_GROUPS = [
     tabs: [
       { name: 'suno', label: 'AI 出歌', icon: 'suno', hint: '生成新歌 / 场景 BGM / 热歌翻唱（双榜灵感）' },
       { name: 'gallery', label: '作品展厅', icon: 'library', hint: '卡片网格浏览所有已成作品、试听、对比提示词' },
-      { name: 'albums', label: '专辑制作', icon: 'board', hint: '把挑好的歌打包成专辑：定辑名、排曲序、出专辑封面' },
     ],
   },
   {
-    key: 'release', title: '发行与经营', icon: 'publish',
+    // 2026-10-10 拆分：原来这里还有个「发行与经营」组（宣推短视频 / 全网发行 /
+    // 专辑制作 / 收益运营）。发行那半截整体搬去了独立仓 suno-publisher，
+    // 本仓只留生成与创作留痕。
+    key: 'works', title: '创作与资产', icon: 'board',
     tabs: [
-      { name: 'promo', label: '宣推短视频', icon: 'suno', hint: '竖屏卡片 MV、短视频引流带货与模板发布' },
-      { name: 'works', label: '发歌看板', icon: 'board', hint: '从草稿到精选、发布的一站式流转看板' },
-      { name: 'publish', label: '全网发行', icon: 'publish', hint: '汽水音乐 / QQ / 网易云发行表单与账号同步' },
-      { name: 'attest', label: '原创存证', icon: 'publish', hint: '区块链存证证书导出与上链留痕' },
-      { name: 'ops', label: '收益运营', icon: 'pulse', hint: '单曲成本、千播收益率、回本测算与财务分析' },
+      { name: 'attest', label: '原创存证', icon: 'publish', hint: '创作留痕导出与区块链存证（证明独创性智力投入）' },
       { name: 'library', label: '媒体资产', icon: 'library', hint: '物理音频文件管理、在线试听与批量下载' },
+      { name: 'ops', label: '成本与健康', icon: 'pulse', hint: '生成成本、用量、服务健康与运行日志' },
     ],
   },
 ];

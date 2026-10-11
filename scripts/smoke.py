@@ -36,6 +36,7 @@ import json
 import re
 import subprocess
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -66,7 +67,7 @@ def get(path: str):
 print("── 后端端点 ──")
 try:
     for path in ("/api/status", "/api/personas", "/api/pipeline",
-                 "/api/albums", "/api/platform-accounts", "/api/capabilities",
+                 "/api/catalog/tracks", "/api/capabilities",
                  # 可观测性四件套。它们坏了不会有人立刻发现 —— 没人会每天
                  # 主动打开成本看板，等到想看的时候才发现三个月没数据了。
                  "/api/health", "/api/metrics", "/api/logs", "/api/economics"):
@@ -76,6 +77,20 @@ except Exception as e:
     check("后端可达", False, str(e)[:60])
     print("\n服务没起？先跑 ./run.sh web")
     raise SystemExit(1)
+
+# 发行端点**必须已经不在**了（2026-10-10 拆分到 suno-publisher）。
+# 这条卡的是「拆完又长回来」：残留的发行端点会让两个仓各自写一份台账，
+# 而症状是「发行记录莫名其妙对不上」，查起来极贵。
+print("\n── 发行端点已迁走（不该再存在）──")
+for path in ("/api/release/pending", "/api/publish-board", "/api/platform-accounts",
+             "/api/albums", "/api/promo/status"):
+    try:
+        code, _ = get(path)
+        check(f"{path} 已移除", code == 404, f"HTTP {code} —— 还在？发行不该留在本仓")
+    except urllib.error.HTTPError as e:
+        check(f"{path} 已移除", e.code == 404, f"HTTP {e.code}")
+    except Exception as e:
+        check(f"{path} 已移除", False, str(e)[:60])
 
 print("\n── 数据自洽 ──")
 # 健康端点返回 200 只说明它自己没崩，真正要看的是它判断出来的结论。
@@ -161,43 +176,16 @@ check("没有收入数据的作品用 null 而不是 0 表示",
       "有作品 earned_cny 是 null 但 plays/roi 给了 0，含义会被读错")
 
 _, pipe = get("/api/pipeline")
-_, albums = get("/api/albums")
-_, accounts = get("/api/platform-accounts")
 
 tracks = pipe["tracks"]
 check("作品台账非空", len(tracks) > 0, f"{len(tracks)} 首")
 
-for pk, acc in accounts["accounts"].items():
-    reported = acc.get("song_count", 0)
-    local = acc.get("local_online_count", 0)
-    label = acc.get("label") or pk
-    # ⚠️ **「没同步过」不是「平台说 0」。**
-    #
-    # 汽水没有同步脚本（netease / qq 都有 sync_*.py），platform_accounts
-    # 里压根没有它那一行，song_count 就是默认值 0。而这里原本直接拿 0 去
-    # 比对，报出来是「平台自报 0 vs 台账在线 1」—— 读起来像汽水在反驳我们，
-    # 人会跑去后台查「为什么歌没了」，其实歌好好的，是我们从没问过它。
-    #
-    # 没同步过就说没同步过，不要拿缺失当数据。
-    if not acc.get("synced_at"):
-        check(f"{label}：平台数据", True,
-              f"没同步过（台账记 {local} 首在线）—— 缺 scripts/sync_{pk}.py，无法核对")
-        continue
-    check(f"{label}：平台自报 vs 台账在线",
-          reported == local, f"{reported} vs {local}")
-
-alb = albums["albums"]
-if alb:
-    declared = sum(a["track_count"] for a in alb.values())
-    joined = sum(len(a["tracks"]) for a in alb.values())
-    check("专辑曲目数 vs join 出来的曲目数", declared == joined, f"{declared} vs {joined}")
+# 平台账号 / 专辑一致性核对已随发行拆分移走（2026-10-10）—— 那些数据在
+# suno-publisher 的库里，voxflow 这边不再有可核对的源，硬留会变成
+# 「拿空气比对空气」的假绿灯。
 
 print("\n── 资产文件 ──")
 from core.paths import DATA_DIR      # noqa: E402
-
-missing_cover = [a["title"] for a in alb.values()
-                 if a.get("cover_local") and not (DATA_DIR / a["cover_local"]).exists()]
-check("专辑封面文件都在", not missing_cover, str(missing_cover[:3]))
 
 _, personas = get("/api/personas")
 bad_ref = [k for k, v in personas["personas"].items()

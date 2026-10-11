@@ -118,61 +118,15 @@ export const api = {
     url: string; title?: string; album?: string; platform?: string;
     publisher?: string; instrumental?: boolean; with_cover?: boolean;
   }) => post<any>('pipeline/import-url', p),
-  /** 真的开始填表（异步任务） */
-  publishRun: (p: { track_id: string; platform: string }) =>
-    post<{ task_id: string }>('publish/run', p),
-  /** 发布前置条件：登录了没、museav 有没有积分、harness 装没装 */
-  preflight: (platform: string) => get<{
-    可以发布: boolean; 阻塞项: string[];
-    items: { 项: string; 就绪: boolean | null; 说明: string; 可自动验证: boolean; 链接: string }[];
-  }>('publish/preflight', { platform }),
-  /** 实际探一次平台登录（跑 browser-harness，慢，由按钮触发） */
-  loginCheck: (platform: string) => post<{
-    可验证: boolean; 已登录: boolean | null; 说明: string; 页面?: string; 控制台: string;
-  }>(`publish/login-check?platform=${encodeURIComponent(platform)}`),
-  /** 上次核验的登录结果（读库，毫秒级） */
-  loginState: (platform: string) => get<{
-    status: string; label: string; detail?: string; checked_at: string;
-    account: string; 控制台: string;
-  }>('publish/login-state', { platform }),
   setStage: (track_id: string, stage: Stage) => post('pipeline/stage', { track_id, stage }),
-  /** 这首歌发这个平台还缺什么 —— 「备料中」到底算不算完，全靠它回答 */
-  readiness: (track_id: string, platform: string) => get<{
-    ok: boolean;
-    items: { 名称: string; 就绪: boolean; 说明: string }[];
-    缺口数: number; 平台: string; 控制台: string; 发布命令: string;
-  }>('pipeline/readiness', { track_id, platform }),
   upsertTrack: (track: Partial<Track> & { track_id: string }) => post('pipeline/track', track),
-  setPlatformStatus: (p: { track_id: string; platform: PlatformKey; status: string }) =>
-    post('pipeline/platform', p),
-  submitRelease: (p: { track_id: string; platform: PlatformKey; release_title: string }) =>
-    post<{ ok: boolean; track: Track }>('pipeline/release', p),
-  linkListing: (p: { listing_id: number; track_id: string }) =>
-    post<{ ok: boolean; track: Track }>('pipeline/link', p),
-  sourceCandidates: () => get<{ tracks: Array<{
-    id: string; title: string; clip_id: string; stage: string; suno: boolean;
-  }> }>('pipeline/sources'),
 
   // ── 艺人档案 ──
-  // 注意：后端会把真实姓名这类字段脱敏后再返回（core/pipeline._redact），
+  // 注意：后端会把真实姓名这类字段脱敏后再返回（见 web/app.py 的 get_artist），
   // 界面拿到的是打码版。要原值只能读 ~/.voxflow/configs/artist.json。
   artist: () => get<Record<string, unknown>>('artist'),
   saveArtist: (body: unknown) => post<{ ok: boolean; artist: Record<string, unknown> }>('artist', body),
 
-  // ── 专辑与平台 ──
-  albums: (platform?: string) =>
-    get<{ albums: Record<string, Album> }>('albums', platform ? { platform } : undefined),
-  createAlbum: (body: { title: string; platform: string; track_ids?: string[]; description?: string }) =>
-    post<{ ok: boolean; album: Album }>('albums', body),
-  albumAddTracks: (albumId: string, body: { platform: string; track_ids: string[] }) =>
-    post<{ ok: boolean; album: Album }>(`albums/${albumId}/tracks`, body),
-  albumRemoveTrack: (albumId: string, trackId: string, platform: string) =>
-    del<{ ok: boolean; album: Album }>(`albums/${albumId}/tracks/${trackId}?platform=${platform}`),
-  albumCover: (albumId: string, body: { platform: string; prompt?: string; force?: boolean }) =>
-    post<{ task_id?: string; skipped?: string; album?: Album }>(`albums/${albumId}/cover`, body),
-  albumPublish: (albumId: string, body: { platform: string; auto_cover?: boolean; wait?: boolean }) =>
-    post<{ ok: boolean; album: Album; steps: Array<{ step: string; ok: boolean; detail: string }>; next: string }>(
-      `albums/${albumId}/publish`, body),
   // ── 原创存证 ──
   attestOne: (trackId: string) => get<{ ok: boolean; doc: AttestDoc }>(`attest/${trackId}`),
   attestBatch: (body: { track_ids: string[]; note?: string }) =>
@@ -181,8 +135,6 @@ export const api = {
            items: Array<{ track_id: string; title: string; digest: string }> }>('attest/batch', body),
   attestBatches: () => get<{ batches: Array<{ file: string; built_at: string; count: number;
                                               merkle_root: string; titles: string[] }> }>('attest/batches/list'),
-  platformAccounts: () => get<PlatformAccountsResponse>('platform-accounts'),
-  publishBoard: () => get<{ accounts: unknown[]; tracks: Track[] }>('publish-board'),
 
   // ── 音色 ──
   personas: () => get<PersonasResponse>('personas'),
@@ -317,46 +269,6 @@ export const api = {
   inbox: () => get<{ files: unknown[]; downloads_dir: string }>('inbox'),
   inboxImport: (paths: string[]) => post<{ ok: boolean; count: number }>('inbox/import', { paths }),
 
-  // ── 宣推短视频 (reel-kit 集成) ──
-  promoStatus: () => get<{
-    available: boolean;
-    binary: string | null;
-    templates: string[];
-    has_music_card: boolean;
-    error?: string;
-  }>('promo/status'),
-  promoVideos: () => get<{
-    videos: Array<{
-      filename: string;
-      path: string;
-      size: number;
-      mtime: number;
-      size_mb: number;
-    }>;
-  }>('promo/videos'),
-  generatePromo: (p: {
-    track_id: string;
-    template?: string;
-    per_shot?: number;
-    accent1?: string;
-    accent2?: string;
-    footer?: string;
-    custom_caps?: string[];
-  }) => post<{
-    ok: boolean;
-    result: {
-      track_id: string;
-      title: string;
-      video_path: string;
-      filename: string;
-      duration: number;
-      shots_count: number;
-      file_size: number;
-      template: string;
-      caps: string[];
-      created_at: number;
-    };
-  }>('promo/generate', p),
 };
 
 export type Api = typeof api;
