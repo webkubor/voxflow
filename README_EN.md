@@ -3,11 +3,11 @@
 A local-first Chinese TTS workstation for creators, AI, and agents. It combines voice cloning, text-guided voice design, multi-speaker dialogue synthesis, Suno music workflows, and release-material packaging in one workspace.
 
 <p align="center">
-  <img src="assets/branding/logo-icon.png" width="160" alt="VoxFlow logo"/>
+  <img src="https://cdn.jsdelivr.net/gh/webkubor/free-imgbed@main/voxflow/logo-icon.webp" width="160" alt="VoxFlow logo"/>
 </p>
 
 <p align="center">
-  <img src="assets/branding/social-banner.png" width="100%" alt="VoxFlow — AI Voice and Music Workflow"/>
+  <img src="https://cdn.jsdelivr.net/gh/webkubor/free-imgbed@main/voxflow/social-banner.png" width="100%" alt="VoxFlow — AI Voice and Music Workflow"/>
 </p>
 
 ## Quick start

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/branding/logo-icon.png" width="120" alt="VoxFlow 声流" />
+  <img src="https://cdn.jsdelivr.net/gh/webkubor/free-imgbed@main/voxflow/logo-icon.webp" width="120" alt="VoxFlow 声流" />
 </p>
 
 <h1 align="center">VoxFlow 声流</h1>
@@ -30,7 +30,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/branding/social-banner.png" width="100%" alt="VoxFlow 声流 — 本地中文语音克隆 · 音色设计 · 播客 · BGM · Suno 音乐生成" />
+  <img src="https://cdn.jsdelivr.net/gh/webkubor/free-imgbed@main/voxflow/social-banner.png" width="100%" alt="VoxFlow 声流 — 本地中文语音克隆 · 音色设计 · 播客 · BGM · Suno 音乐生成" />
 </p>
 
 ---
@@ -227,7 +227,7 @@ VoiceDesign。复现脚本：[`tools/verify_instruct_effect.py`](tools/verify_in
 VoxFlow 内置高对比、纯净深色的现代音频创作界面：
 
 <p align="center">
-  <img src="assets/screenshots/web-ui-clone-workflow.png" width="100%" alt="VoxFlow 声音克隆与工作台"/>
+  <img src="https://cdn.jsdelivr.net/gh/webkubor/free-imgbed@main/voxflow/web-ui-clone-workflow.png" width="100%" alt="VoxFlow 声音克隆与工作台"/>
 </p>
 
 - **音色工坊**：左侧统一管理所有已装载的音色艺人，支持快捷试听波形律动与样音状态。

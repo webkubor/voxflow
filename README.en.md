@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/branding/logo-icon.png" width="120" alt="VoxFlow" />
+  <img src="https://cdn.jsdelivr.net/gh/webkubor/free-imgbed@main/voxflow/logo-icon.webp" width="120" alt="VoxFlow" />
 </p>
 
 <h1 align="center">VoxFlow 声流</h1>
@@ -24,7 +24,7 @@
 [中文](./README.md) · [Quick start](#-quick-start) · [Core commands](#-core-capabilities--commands) · [TTS backend](#-local-tts-backend-apple-mlx-8-bit) · [Web workbench](#-web-ui-workbench) · [Distribution](#-full-net-music-distribution) · [Agent calls](#-agent--ai-automation)
 
 <p align="center">
-  <img src="assets/branding/social-banner.png" width="100%" alt="VoxFlow — Local Chinese voice cloning · voice design · full-net music distribution" />
+  <img src="https://cdn.jsdelivr.net/gh/webkubor/free-imgbed@main/voxflow/social-banner.png" width="100%" alt="VoxFlow — Local Chinese voice cloning · voice design · full-net music distribution" />
 </p>
 
 ---
@@ -198,7 +198,7 @@ Decision process, capability matrix, complete change list and rollback method: [
 VoxFlow includes a high-contrast, clean dark modern audio creation interface:
 
 <p align="center">
-  <img src="assets/screenshots/web-ui-clone-workflow.png" width="100%" alt="VoxFlow voice cloning workbench"/>
+  <img src="https://cdn.jsdelivr.net/gh/webkubor/free-imgbed@main/voxflow/web-ui-clone-workflow.png" width="100%" alt="VoxFlow voice cloning workbench"/>
 </p>
 
 - **Voice Workshop** — left-side unified management of all loaded voice artists, with quick waveform preview and sample status
