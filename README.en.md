@@ -318,6 +318,16 @@ voxflow/
 
 ---
 
+## Star History
+
+<a href="https://www.star-history.com/#webkubor/voxflow&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=webkubor/voxflow&amp;type=Date&amp;theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=webkubor/voxflow&amp;type=Date" />
+    <img alt="Star History Chart for webkubor/voxflow" src="https://api.star-history.com/svg?repos=webkubor/voxflow&amp;type=Date" width="100%" />
+  </picture>
+</a>
+
 ## 📄 License
 
 This project is open-sourced under **Apache-2.0**.
