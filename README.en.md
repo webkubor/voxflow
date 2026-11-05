@@ -48,7 +48,7 @@
 ### 1. Install dependencies (~2 min)
 
 ```bash
-git clone https://github.com/webkubor/voxflow.git
+git clone git@github.com:webkubor/voxflow.git
 cd voxflow
 
 # --skip-models: don't download the 5.8 GB model yet; you can start immediately

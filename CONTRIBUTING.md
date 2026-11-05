@@ -13,7 +13,7 @@ Thanks for your interest in contributing!
 ## Development Setup
 
 ```bash
-git clone https://github.com/webkubor/voxflow.git
+git clone git@github.com:webkubor/voxflow.git
 cd voxflow
 # Follow the Quick Start in README
 ```

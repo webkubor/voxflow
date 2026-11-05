@@ -13,7 +13,7 @@ A local-first Chinese TTS workstation for creators, AI, and agents. It combines 
 ## Quick start
 
 ```bash
-git clone https://github.com/webkubor/voxflow.git
+git clone git@github.com:webkubor/voxflow.git
 cd voxflow
 chmod +x install.sh && ./install.sh
 source .venv/bin/activate

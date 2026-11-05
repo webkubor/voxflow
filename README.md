@@ -54,7 +54,7 @@
 ### 1. 装依赖（约 2 分钟）
 
 ```bash
-git clone https://github.com/webkubor/voxflow.git
+git clone git@github.com:webkubor/voxflow.git
 cd voxflow
 
 # --skip-models：先不下 5.8 GB 模型，装完就能开工
