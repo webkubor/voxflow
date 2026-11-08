@@ -21,6 +21,23 @@ class AudioProcessor:
         audio.export(temp_path, format="wav")
         return temp_path
 
+    def prepare_clone_reference(self, audio_path, ref_text):
+        """Keep the entire utterance paired with its transcript; never crop speech."""
+        from uuid import uuid4
+        if not isinstance(ref_text, str) or not 1 <= len(ref_text.strip()) <= 1000:
+            raise ValueError("请填写与参考音频逐字对应的原文（1–1000 字）")
+        with open(audio_path, "rb") as source:
+            audio = AudioSegment.from_file(source)
+        if not 500 <= len(audio) <= 30000:
+            raise ValueError("参考音频须为 0.5–30 秒，请上传一段完整短句")
+        if audio.rms == 0:
+            raise ValueError("参考音频没有可用声音，请重新录制")
+        os.makedirs(self.temp_dir, exist_ok=True)
+        target = os.path.join(self.temp_dir, f"reference_{uuid4().hex}.wav")
+        with open(target, "wb") as dest:
+            audio.set_channels(1).set_frame_rate(24000).export(dest, format="wav")
+        return target
+
     def _trim_silence(self, audio, threshold=-50.0, chunk_size=5):
         def detect(sound):
             it = 0

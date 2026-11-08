@@ -2,7 +2,7 @@
   <n-modal 
     :show="show" 
     preset="card" 
-    style="width: 500px;" 
+    style="width: min(500px, calc(100vw - 32px));"
     title="注册新音色"
     :bordered="false"
     @update:show="closeModal"
@@ -24,6 +24,9 @@
         />
       </n-form-item>
 
+      <n-form-item label="录音原文">
+        <n-input v-model:value="addForm.refText" type="textarea" :maxlength="1000" placeholder="逐字填写音频里实际说的话；录音时也可以先写好再照读。" />
+      </n-form-item>
       <n-form-item label="参考音频">
         <!-- ⚠️ n-form-item 的内容区是横向 flex：直接放两个兄弟节点，
              它们会各自成为并排的 flex 子项、被挤成竖排。必须包一层。
@@ -123,6 +126,7 @@ const addForm = reactive({
   key: '',
   name: '',
   instruction: '',
+  refText: '',
   audioFile: null
 });
 
@@ -151,6 +155,7 @@ let recTimer = null;
 const startRecord = async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (!props.show) { stream.getTracks().forEach(t => t.stop()); return; }
     const chunks = [];
     mediaRecorder = new MediaRecorder(stream);
     mediaRecorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
@@ -158,9 +163,8 @@ const startRecord = async () => {
       // 停掉轨道，否则浏览器标签页会一直挂着录音指示灯
       stream.getTracks().forEach((t) => t.stop());
       const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
-      // 后端按扩展名判类型，webm 不在白名单里会被当 wav 存 —— 给个它认识的名字
-      const ext = (mediaRecorder.mimeType || '').includes('ogg') ? 'ogg' : 'm4a';
-      addForm.audioFile = new File([blob], `录音_${Date.now()}.${ext}`, { type: blob.type });
+      const ext = blob.type.includes('webm') ? 'webm' : blob.type.includes('ogg') ? 'ogg' : 'm4a';
+      if (props.show) addForm.audioFile = new File([blob], `录音_${Date.now()}.${ext}`, { type: blob.type });
     };
     mediaRecorder.start();
     recording.value = true;
@@ -181,7 +185,7 @@ const stopRecord = () => {
 // 表单校验 —— Key 已自动生成，不再是用户要填的东西
 const isFormValid = computed(() => {
   return (
-    addForm.name.trim() &&
+    addForm.name.trim() && addForm.refText.trim() && !recording.value &&
     addForm.audioFile
   );
 });
@@ -193,6 +197,7 @@ const closeModal = () => {
   addForm.key = '';
   addForm.name = '';
   addForm.instruction = '';
+  addForm.refText = '';
   addForm.audioFile = null;
   dragOver.value = false;
   emit('update:show', false);
@@ -238,6 +243,7 @@ const submitAdd = async () => {
   formData.append('key', keyVal);
   formData.append('name', nameVal);
   formData.append('instruction', instVal);
+  formData.append('ref_text', addForm.refText.trim());
   formData.append('audio', addForm.audioFile);
 
   showLoading('正在上传参考音频并注册音色...');

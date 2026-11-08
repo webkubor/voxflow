@@ -184,9 +184,7 @@ def _run_single_preset(cfg: dict, config_ref: str, dry_run: bool = False):
 
         if cfg.get("commit_to_temp"):
             voice_key = resolve_design_voice_key(cfg)
-            temp_seed_path = processor.extract_voice_seed(
-                final_path, voice_name, max_sec=10, skip_start_ms=0
-            )
+            temp_seed_path = processor.prepare_clone_reference(final_path, text)
             ref_rel = str(Path(temp_seed_path).relative_to(BASE_DIR)).replace("\\", "/")
             design_rel = f"voice_designs/{voice_name}.json"
             persona_file = upsert_persona_mapping(
@@ -194,6 +192,7 @@ def _run_single_preset(cfg: dict, config_ref: str, dry_run: bool = False):
                 persona_key=voice_key,
                 persona_name=voice_name,
                 ref_rel=ref_rel,
+                ref_text=text,
                 design_rel=design_rel,
                 instruction=instruct,
             )

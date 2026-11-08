@@ -126,10 +126,14 @@ voice dialogue configs/dialogue.json
 
 ```bash
 voice voice list                        # list all locally registered voices
-voice voice add my_voice sample.wav     # register a new voice from a reference
+voice voice add my_voice sample.wav --ref-text "The exact words spoken in the recording"
 voice voice preview narrator            # preview a preset voice's sample
 voice voice rm old_voice                # remove a voice
 ```
+
+When recording or importing a voice, provide the exact transcript of the reference audio. Recommended length: 3–15 seconds; accepted range: 0.5–30 seconds, up to 20 MB. The entire utterance is preserved locally, without cropping its beginning. Designed voices retain their generation text automatically. Existing voices are not migrated or overwritten.
+
+API: `POST /api/personas/add` accepts multipart `key`, `name`, `audio`, required `ref_text`, and optional `instruction`. Duplicate keys return 409. `GET /api/personas` advertises `capabilities.reference_text_registration=true`. Existing clients must supply the reference transcript, not the text they want the cloned voice to generate.
 
 ### 📊 5. Cost & Runtime Status
 

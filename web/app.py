@@ -77,6 +77,7 @@ obs.log("server_start", version=VERSION)
 
 # ── 引擎单例（懒加载） ────────────────────────────────────
 _engine_lock = threading.Lock()
+_persona_registration_lock = threading.Lock()
 _base_engine = None
 _design_engine = None
 _processor = None
@@ -500,6 +501,10 @@ def _run_design_task(task_id: str, params: dict, update_fn):
     out_path = OUT_DIR / out_filename
     sf.write(str(out_path), wavs[0], sr)
     processor.apply_design_cleanup(str(out_path))
+    # Retain the exact utterance for a later, post-audition commit (also after restart).
+    out_path.with_suffix(".json").write_text(
+        json.dumps({"ref_text": req.text}, ensure_ascii=False), encoding="utf-8"
+    )
 
     result = {
         "ok": True,
@@ -510,9 +515,7 @@ def _run_design_task(task_id: str, params: dict, update_fn):
 
     if req.commit:
         voice_key = resolve_design_voice_key({"voice_name": req.voice_name})
-        temp_seed_path = processor.extract_voice_seed(
-            str(out_path), req.voice_name, max_sec=10, skip_start_ms=0
-        )
+        temp_seed_path = processor.prepare_clone_reference(str(out_path), req.text)
         ref_rel = os.path.relpath(str(temp_seed_path), str(BASE_DIR)).replace("\\", "/")
         design_rel = f"voice_designs/{safe_name}.json"
         upsert_persona_mapping(
@@ -520,6 +523,7 @@ def _run_design_task(task_id: str, params: dict, update_fn):
             persona_key=voice_key,
             persona_name=req.voice_name,
             ref_rel=ref_rel,
+            ref_text=req.text,
             design_rel=design_rel,
             instruction=instruct,
         )
@@ -1191,13 +1195,15 @@ def list_personas():
     # 设计预设
     presets = _scan_design_presets()
 
-    return {"personas": registered, "presets": presets, "total": len(registered)}
+    return {"personas": registered, "presets": presets, "total": len(registered),
+            "version": VERSION, "capabilities": {"reference_text_registration": True}}
 
 
 class DesignCommitRequest(BaseModel):
     filename: str                 # 设计任务产出的 [设计]xxx.wav
     voice_name: str
     instruction: str = ""
+    ref_text: str = ""  # Required for historical samples without a saved transcript.
 
 
 @app.post("/api/design/commit")
@@ -1229,12 +1235,19 @@ def design_commit(req: DesignCommitRequest):
 
     voice_key = resolve_design_voice_key({"voice_name": name})
     safe_name = sanitize_path_component(name, fallback="未命名音色")
-    seed = _get_processor().extract_voice_seed(str(src), name, max_sec=10, skip_start_ms=0)
+    ref_text = req.ref_text.strip()
+    if not ref_text and src.with_suffix(".json").is_file():
+        ref_text = json.loads(src.with_suffix(".json").read_text(encoding="utf-8")).get("ref_text", "")
+    try:
+        seed = _get_processor().prepare_clone_reference(str(src), ref_text)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     upsert_persona_mapping(
         str(BASE_DIR),
         persona_key=voice_key,
         persona_name=name,
         ref_rel=os.path.relpath(str(seed), str(BASE_DIR)).replace("\\", "/"),
+        ref_text=ref_text,
         design_rel=f"voice_designs/{safe_name}.json",
         instruction=req.instruction or "",
     )
@@ -1244,47 +1257,49 @@ def design_commit(req: DesignCommitRequest):
 
 
 @app.post("/api/personas/add")
-async def add_persona(
+def add_persona(
     key: str = Form(...),
+    ref_text: str = Form(...),
     name: str = Form(None),
     instruction: str = Form(""),
     audio: UploadFile = File(...),
 ):
-    """上传参考音频并注册新音色"""
+    """Register a full, local reference utterance together with its transcript."""
     from core.utils import upsert_persona_mapping, sanitize_path_component
+    from tempfile import TemporaryDirectory
 
-    display_name = name or key
+    display_name = (name or key).strip()
     safe_key = sanitize_path_component(key, fallback="unknown")
-    safe_name = sanitize_path_component(display_name, fallback="未命名角色")
-
-    # 保存上传的音频
-    ext = os.path.splitext(audio.filename or "audio.wav")[1].lower()
-    if ext not in (".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac"):
-        ext = ".wav"
-
-    ref_filename = f"{safe_name}_参考{ext}"
-    ref_path = REF_DIR / ref_filename
-    with open(ref_path, "wb") as f:
-        content = await audio.read()
-        f.write(content)
-
-    # 提取标准样音
-    processor = _get_processor()
-    temp_path = processor.extract_voice_seed(
-        str(ref_path), display_name, max_sec=10, skip_start_ms=1500
-    )
-
-    ref_rel = os.path.relpath(str(temp_path), str(BASE_DIR)).replace("\\", "/")
-    upsert_persona_mapping(
-        str(BASE_DIR),
-        persona_key=safe_key,
-        persona_name=display_name,
-        ref_rel=ref_rel,
-        design_rel="",
-        instruction=instruction or "",
-    )
-
-    return {"ok": True, "key": safe_key, "name": display_name, "ref": ref_rel}
+    if not display_name or not 1 <= len(ref_text.strip()) <= 1000:
+        raise HTTPException(400, "请填写音色名称与对应录音原文（1–1000 字）")
+    # New registrations never overwrite an existing voice or its sample.
+    # This lock also serializes the read / register pair in this server.
+    with _persona_registration_lock:
+        if PERSONAS_FILE.exists() and safe_key in json.loads(PERSONAS_FILE.read_text(encoding="utf-8")):
+            raise HTTPException(409, "音色标识已存在，请使用新标识")
+        content = audio.file.read(20 * 1024 * 1024 + 1)
+        if not content or len(content) > 20 * 1024 * 1024:
+            raise HTTPException(413, "参考音频须为 1 字节至 20 MB")
+        ext = Path(audio.filename or "audio.wav").suffix.lower()
+        if ext not in (".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".webm", ".mp4"):
+            raise HTTPException(400, "不支持的音频格式")
+        with TemporaryDirectory(prefix="voxflow-reference-") as tmp:
+            source = Path(tmp) / ("reference" + ext)
+            source.write_bytes(content)
+            try:
+                sample = _get_processor().prepare_clone_reference(str(source), ref_text)
+            except Exception as exc:
+                raise HTTPException(400, "参考音频无法注册：" + str(exc)[:200]) from exc
+        ref_rel = os.path.relpath(sample, BASE_DIR).replace("\\", "/")
+        try:
+            upsert_persona_mapping(
+                str(BASE_DIR), persona_key=safe_key, persona_name=display_name,
+                ref_rel=ref_rel, ref_text=ref_text, instruction=instruction or "",
+            )
+        except Exception:
+            Path(sample).unlink(missing_ok=True)
+            raise
+    return {"ok": True, "key": safe_key, "name": display_name, "ref": ref_rel, "ref_text": ref_text.strip()}
 
 
 @app.patch("/api/personas/{key}")

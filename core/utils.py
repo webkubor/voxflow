@@ -462,6 +462,7 @@ def upsert_persona_mapping(
     persona_key: str,
     persona_name: str,
     ref_rel: str,
+    ref_text: str,
     design_rel: str = "",
     instruction: str = "",
 ) -> str:
@@ -470,32 +471,43 @@ def upsert_persona_mapping(
     设计模式完成后调用该函数，把角色映射直接指向 temp 标准样音，
     确保后续单人生成/对话统一走 temp 参考链路。
     """
+    if not isinstance(ref_text, str) or not 1 <= len(ref_text.strip()) <= 1000:
+        raise ValueError("参考音频必须附带对应原文（ref_text，1–1000 字）")
     key = sanitize_path_component(persona_key, fallback="unknown_persona")
     name = sanitize_path_component(persona_name, fallback="未命名角色")
 
+    from tempfile import NamedTemporaryFile
+    from fcntl import flock, LOCK_EX, LOCK_UN
+    os.makedirs(os.path.join(base_dir, "configs"), exist_ok=True)
     persona_file = os.path.join(base_dir, "configs", "personas.json")
-    data: Dict[str, Any] = {}
-    if os.path.exists(persona_file):
+    with open(persona_file + ".lock", "a") as lock:
+        flock(lock.fileno(), LOCK_EX)
         try:
-            with open(persona_file, "r", encoding="utf-8") as f:
-                loaded = json.load(f)
-                if isinstance(loaded, dict):
-                    data = loaded
-        except Exception:
             data = {}
-
-    current = data.get(key, {})
-    if not isinstance(current, dict):
-        current = {}
-
-    current["name"] = name
-    current["ref"] = _normalize_ref_path(ref_rel)
-    if design_rel:
-        current["design"] = _normalize_ref_path(design_rel)
-    if instruction.strip():
-        current["instruction"] = instruction.strip()
-
-    data[key] = current
-    with open(persona_file, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+            if os.path.exists(persona_file):
+                with open(persona_file, encoding="utf-8") as source:
+                    data = json.load(source)
+                if not isinstance(data, dict):
+                    raise ValueError("personas.json 格式错误；保留原文件，请先修复")
+            current = data.get(key, {})
+            if not isinstance(current, dict):
+                current = {}
+            current.update(name=name, ref=_normalize_ref_path(ref_rel), ref_text=ref_text.strip())
+            if design_rel:
+                current["design"] = _normalize_ref_path(design_rel)
+            if instruction.strip():
+                current["instruction"] = instruction.strip()
+            data[key] = current
+            with NamedTemporaryFile(mode="w", encoding="utf-8", dir=os.path.dirname(persona_file), delete=False) as temp:
+                temp_name = temp.name
+                json.dump(data, temp, ensure_ascii=False, indent=2)
+                temp.flush()
+                os.fsync(temp.fileno())
+            try:
+                os.replace(temp_name, persona_file)
+            finally:
+                if os.path.exists(temp_name):
+                    os.unlink(temp_name)
+        finally:
+            flock(lock.fileno(), LOCK_UN)
     return persona_file

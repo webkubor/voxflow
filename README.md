@@ -137,10 +137,14 @@ voice dialogue configs/dialogue.json
 
 ```bash
 voice voice list                        # 查看本地所有已注册音色
-voice voice add my_voice sample.wav     # 从参考音频注册新音色
+voice voice add my_voice sample.wav --ref-text "录音里实际说的完整短句"  # 注册完整参考音频与原文
 voice voice preview narrator            # 试听音色预设样音
 voice voice rm old_voice                # 删除指定音色
 ```
+
+录音或导入参考音频时，填写与声音逐字对应的「录音原文」。建议 3–15 秒，接受 0.5–30 秒、最大 20 MB；整句保留，不截掉开头。音频与原文仅保存在本机。设计音色入库会自动保存生成时的文本。已有音色不被迁移或覆盖。
+
+API：`POST /api/personas/add` 的 multipart 字段为 `key`、`name`、`audio`、必填 `ref_text`，可选 `instruction`；重复 key 返回 409。`GET /api/personas` 返回 `capabilities.reference_text_registration=true`。旧调用方需补传录音原文，不能把目标配音文本当成参考原文。
 
 ### 📊 5. 成本与运行状况 (Stats & Logs)
 

@@ -118,6 +118,7 @@ def voice_add(
     name: Optional[str] = typer.Option(
         None, "--name", "-n", help="音色显示名，默认等于 key"
     ),
+    ref_text: str = typer.Option(..., "--ref-text", help="参考音频中逐字对应的原文"),
     instruction: Optional[str] = typer.Option(
         None, "--instruction", "-i", help="音色基础指令/描述"
     ),
@@ -126,10 +127,10 @@ def voice_add(
     audio_path = _resolve_audio(audio)
     display_name = name or key
 
+    if key in _load_personas():
+        raise typer.BadParameter("音色标识已存在，请使用新标识")
     processor = AudioProcessor(str(BASE_DIR))
-    temp_path = processor.extract_voice_seed(
-        str(audio_path), display_name, max_sec=10, skip_start_ms=1500
-    )
+    temp_path = processor.prepare_clone_reference(str(audio_path), ref_text)
 
     ref_rel = os.path.relpath(temp_path, BASE_DIR).replace("\\", "/")
     upsert_persona_mapping(
@@ -137,6 +138,7 @@ def voice_add(
         persona_key=key,
         persona_name=display_name,
         ref_rel=ref_rel,
+        ref_text=ref_text,
         design_rel="",
         instruction=instruction or "",
     )

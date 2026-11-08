@@ -88,9 +88,9 @@
           </div>
         </div>
 
-        <button class="new-persona-btn" @click="goToDesign">
+        <button class="new-persona-btn" @click="$emit('add-persona')">
           <Icon name="plus" size="sm" />
-          <span>✨ 捏造/录制新声线</span>
+          <span>录制 / 导入我的声音</span>
         </button>
       </aside>
 
@@ -235,6 +235,7 @@
 </template>
 
 <script setup>
+defineEmits(['add-persona']);
 import { reactive, onMounted, ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';

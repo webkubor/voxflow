@@ -142,7 +142,7 @@
             <!-- 顺序与 tab 名跟上面的 TABS 保持一致。导航条被 .hidden-tabs
                  藏起来了、这些 tab 文案看不见，但留着旧名会误导下一个人。 -->
             <n-tab-pane name="design" tab="音色设计"><DesignTab /></n-tab-pane>
-            <n-tab-pane name="clone" tab="文本配音"><CloneTab /></n-tab-pane>
+            <n-tab-pane name="clone" tab="文本配音"><CloneTab @add-persona="showAddPersona = true" /></n-tab-pane>
             <n-tab-pane name="dialogue" tab="剧本演播"><DialogueTab /></n-tab-pane>
             <n-tab-pane name="suno" tab="AI 出歌"><SunoTab /></n-tab-pane>
             <n-tab-pane name="gallery" tab="作品展厅"><GalleryTab /></n-tab-pane>
