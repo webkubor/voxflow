@@ -1,0 +1,11 @@
+{
+  "name": "VoxFlow 声流",
+  "slug": "voxflow",
+  "identifier": "com.webkubor.voxflow",
+  "version": "1.0.0",
+  "publisher": "webkubor",
+  "license": "MIT",
+  "icon": "resources/icon.png",
+  "out": "build",
+  "frontendDist": "web"
+}

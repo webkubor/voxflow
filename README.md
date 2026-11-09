@@ -226,6 +226,17 @@ VoiceDesign。复现脚本：[`tools/verify_instruct_effect.py`](tools/verify_in
 
 ---
 
+## 🖥 macOS 桌面 App
+
+除命令行和浏览器界面外，VoxFlow 也提供基于 **MyGo + WKWebView** 的原生 macOS 窗口，复用同一套本地前端和 Python/MLX 后端。音色、模型、数据库和输出仍保存在 `~/.voxflow/`，CLI 与 App 共用；App 不会另建一份资源库。
+
+```bash
+# 在项目根目录构建并安装到 ~/Applications
+./desktop/build.sh
+```
+
+首次使用前先按 CLI 安装说明配置 Python 环境和 MLX 模型。桌面 App 启动时会复用已运行的本地服务，或尝试从构建时记录的项目路径启动 `run.sh`；项目目录移动后，重新运行构建脚本。App 提供原生「工作区」菜单和打开数据/输出目录的快捷入口。
+
 ## 🖥 Web UI 工作台
 
 VoxFlow 内置高对比、纯净深色的现代音频创作界面：

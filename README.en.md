@@ -197,6 +197,17 @@ Decision process, capability matrix, complete change list and rollback method: [
 
 ---
 
+## 🖥 macOS Desktop App
+
+Alongside the CLI and browser UI, VoxFlow offers a native macOS window built with **MyGo + WKWebView**, reusing the same local frontend and Python/MLX backend. Voices, models, database, and generated files stay in `~/.voxflow/` and are shared with the CLI; the app does not create a second asset library.
+
+```bash
+# Build and install to ~/Applications from the repository root
+./desktop/build.sh
+```
+
+Set up the Python environment and MLX models using the CLI installation instructions before first launch. The desktop app reuses an already running local service, or tries to start `run.sh` from the project path recorded at build time. Rebuild the app if you move the project. Native menus link to workspaces and the data/output folders.
+
 ## 🖥 Web UI Workbench
 
 VoxFlow includes a high-contrast, clean dark modern audio creation interface:
