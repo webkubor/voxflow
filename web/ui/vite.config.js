@@ -55,7 +55,15 @@ export default defineConfig({
     // store 方法名拼错、字段名对不上、复选框 value 是 undefined。
     // 这些在浏览器控制台里转瞬即逝，我只能靠反复截图猜。
     // 有了落盘日志，可以直接读「刚才那次请求返回了什么、哪一行报了错」。
-    agentEyes(),
+    // 0.17 修复浏览器注入；显式关闭 0.14 没有的新增默认能力，
+    // 避免升级时自动截图、写入 agent 文档或注入额外版本信息。
+    agentEyes({
+      telemetry: { screenshots: false },
+      agentDocs: false,
+      version: false,
+      banner: false,
+      visual: false,
+    }),
   ],
   base: '/static/',
   build: {
