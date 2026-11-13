@@ -77,6 +77,23 @@
             <n-button v-if="c.suno_url" size="small" tag="a" :href="c.suno_url" target="_blank" rel="noopener">
               Suno 原版
             </n-button>
+            <!--
+              去发行：带着 clip_id 跳到发行台，那边会自动定位到这一首。
+              为什么要有这个：曲库和发行台是两个进程两个页面，光给个首页链接，
+              人到了那边还得自己在三个平台的待发行列表里翻一遍找这首歌。
+              带上 clip_id 过去，那边会切到对应平台并把这一行标出来。
+              没有 clip_id 的（只靠音频哈希关联、非 Suno 生成的）只能给普通链接。
+            -->
+            <n-button
+              v-if="c.clip_id"
+              size="small"
+              tag="a"
+              :href="`http://127.0.0.1:8867/?clip=${encodeURIComponent(c.clip_id)}`"
+              target="_blank"
+              rel="noopener"
+            >
+              去发行 →
+            </n-button>
             <!-- 选不选由人点。程序不替人挑歌，见 /api/tracks/{id}/stage 的注释 -->
             <n-button
               size="small" :type="c.stage === 'generated' ? 'default' : 'primary'"
@@ -91,7 +108,7 @@
               这里留一行指路的，而不是让它无声消失 —— 不然用惯了的人只会发现
               「按钮不见了」，不知道是搬走了还是坏了。
             -->
-            <n-button size="small" tag="a" href="http://127.0.0.1:8867"
+            <n-button v-if="!c.clip_id" size="small" tag="a" href="http://127.0.0.1:8867"
                       target="_blank" rel="noopener" quaternary>
               发到哪了 → 发行台
             </n-button>
