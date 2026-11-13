@@ -247,7 +247,7 @@ export interface Capability {
   unmetered?: boolean;
 }
 
-export type CapabilitiesResponse = Record<'tts' | 'suno' | 'studio' | 'llm', Capability>;
+export type CapabilitiesResponse = Record<'tts' | 'studio' | 'llm', Capability>;
 
 // ── 可观测性与成本 ─────────────────────────────────────────
 // 后端契约见 web/app.py 的 /api/health · /api/metrics · /api/logs · /api/economics。

@@ -1,5 +1,5 @@
 /**
- * 模型、Suno、中台与 LLM 能力状态。
+ * 模型、中台与 LLM 能力状态。
  * API：GET /api/capabilities、GET /api/status、GET /api/llm/status、POST /api/llm/*
  */
 import { computed, reactive, ref } from 'vue';
@@ -49,16 +49,10 @@ interface CapBadge {
   ready?: boolean;
   detail?: string;
   num?: number;
-  // Suno 专项字段：套餐 + 月度总额 + 下次重置日
-  // 后端没返回时为 undefined —— UI 优雅降级，不显示对应行
-  plan?: string;
-  creditsRemaining?: number;
-  creditsTotal?: number;
-  renewDate?: string;
 }
 
-/** /api/capabilities 实际还会返回 museav，契约里只有 tts/suno/studio/llm，这里补上。 */
-type CapsState = Partial<Record<'tts' | 'suno' | 'studio' | 'llm' | 'museav', Capability>>;
+/** /api/capabilities 实际还会返回 museav，契约里没有，这里补上。 */
+type CapsState = Partial<Record<'tts' | 'studio' | 'llm' | 'museav', Capability>>;
 
 export const useCapabilitiesStore = defineStore('capabilities', () => {
   const caps = ref<CapsState>({});

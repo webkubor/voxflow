@@ -155,8 +155,7 @@ def _audio_seconds_of(task: dict) -> float:
 def _notify_music_task(task_id: str):
     """音乐任务结束 → 推群卡片 + 写台账。
 
-    挂在 worker 的 finally 里，和计量同一个收口：六种任务都从这过，
-    挂一处覆盖全部。**只推音乐**（suno / suno_cover）——
+    挂在 worker 的 finally 里，和计量同一个收口。**只推音乐**（suno / suno_cover）——
     本地 TTS 一天几十次，全推进去等于把群和台账都刷废。
 
     整段包在 try 里：通知是旁路，**它挂了不能把生成搞挂**。
@@ -167,6 +166,9 @@ def _notify_music_task(task_id: str):
 
         with _tasks_lock:
             task = dict(_tasks.get(task_id) or {})
+        # 2026-11-13：音乐生成已移出本仓（到 suno-publisher），这里不会再有
+        # suno 任务。保留这个空判断是为了以后加新任务类型时不用改结构 ——
+        # 但它现在什么都推不出去，符合「纯声音项目」的口径。
         if task.get("type") not in ("suno", "suno_cover"):
             return
         params = task.get("params") or {}
@@ -302,8 +304,6 @@ def _task_worker():
 
         # 计量埋在 worker 这一层，不埋在每个 _run_*_task 里：四种任务都从这里过，
         # 埋一处覆盖全部，将来加第五种任务也自动被计上。
-        # 例外是 suno —— 它要记 credits，只有它自己知道扣了多少，所以由
-        # _run_suno_task 自己记，这里跳过，免得记两遍。
         _t0 = time.perf_counter()
         _err = ""
         try:
@@ -311,16 +311,12 @@ def _task_worker():
                 _run_clone_task(task_id, task["params"], _update_task)
             elif task["type"] == "design":
                 _run_design_task(task_id, task["params"], _update_task)
-            elif task["type"] == "suno":
-                _run_suno_task(task_id, task["params"], _update_task)
             elif task["type"] == "dialogue":
                 _run_dialogue_task(task_id, task["params"], _update_task)
             elif task["type"] == "cover":
                 _run_cover_task(task_id, task["params"], _update_task)
             elif task["type"] == "cover_upscale":
                 _run_cover_upscale_task(task_id, task["params"], _update_task)
-            elif task["type"] == "suno_cover":
-                _run_suno_cover_task(task_id, task["params"], _update_task)
         except Exception as e:
             _err = str(e)
             _update_task(task_id, status="error", error=_err,
@@ -329,7 +325,7 @@ def _task_worker():
                     task_id=task_id, label=task.get("label", ""), error=_err[:2000])   # 别再截到 300：真正的错因常在后半段
         finally:
             _notify_music_task(task_id)
-            if task["type"] not in ("suno", "suno_cover", "cover", "cover_upscale"):
+            if task["type"] not in ("cover", "cover_upscale"):
                 # 本地 TTS 单价是 0，但**量**要记 —— 「本月本地合成了多少秒」
                 # 乘上对标商业 API 的单价，就是本地方案实际省下的钱。
                 # 不记量的话，这个工具最大的价值恰好是唯一看不见的那个。
@@ -1533,7 +1529,7 @@ def audio_list():
                     "created": datetime.fromtimestamp(stat.st_mtime).strftime(
                         "%Y-%m-%d %H:%M:%S"
                     ),
-                    "kind": "suno" if "[Suno]" in f.name else "tts",
+                    "kind": "tts",
                 })
     return {"files": files}
 
@@ -1589,21 +1585,15 @@ def llm_status():
 @app.get("/api/inbox")
 def inbox_scan():
     """
-    扫下载目录里等着入库的音乐文件。
+    扫下载目录里等着入库的音频文件。
 
     ## 为什么还需要这一步
 
-    ⚠️ 2026-09-12 更正：这段原本写着「CDN 直链 403，硬绕反爬性价比极低」，
-    **那个结论是错的**。API 返回的 `audio_url` 确实写死了 `api/forbidden`，
-    但网页播放器真正拉的是 CloudFront 上的
-    `/1/clip/<clip_id>.m4a` —— 无签名、无 Referer 校验，直接 GET 就有 200。
-    抓一次浏览器网络请求就能看到，谈不上「硬绕」。现在
-    `core/suno_api.download()` 走的就是它，生成完自动入库，不需要人点。
+    音频可能不是「在这个仓里生成的」—— 从别处下载的、手动放进来的、
+    别的机器传过来的。它们不会自动进曲库，得有个入口把它们收进来。
 
-    这个端点因此从「必经之路」降级为**兜底**：CDN 哪天真关了、或者歌是从
-    别处拿到的（别人发的链接、手动下的文件），仍然要有个入口把本地音频收进来。
-
-    列出下载目录里最近的音频，让人挑哪些入库。
+    这个端点列出来让人挑哪些入库，不自动入库 —— 目录里可能有半截文件、
+    试听片段、废弃的草稿，自动入库只会让曲库变脏。
     """
     import time
     from pathlib import Path as _P
@@ -2031,18 +2021,6 @@ async def capabilities():
         except Exception as e:
             return {"ready": False, "detail": str(e)[:60]}
 
-    def _probe_suno():
-        # 积分是硬约束 —— 没了就出不了歌，得让人提前看见
-        try:
-            from core import suno_api                          # noqa: PLC0415
-            c = suno_api.credits()
-            left, plan = c["left"] or 0, c["plan"]
-            return {"ready": left is not None, "credits": left,
-                    "plan": plan, "model": "Suno v6",
-                    "detail": f"Suno v6 · {plan} · 剩 {left} 积分"}
-        except Exception as e:
-            return {"ready": False, "credits": 0, "detail": f"未登录：{str(e)[:40]}"}
-
     def _probe_museav():
         from core import cover as _cover                       # noqa: PLC0415
         if not _cover.available():
@@ -2077,8 +2055,10 @@ async def capabilities():
         except Exception as e:
             return {"ready": False, "model": "", "detail": str(e)[:60]}
 
-    names = ["tts", "suno", "museav", "llm"]
-    probes = [_probe_tts, _probe_suno, _probe_museav, _probe_llm]
+    # 2026-11-13：音乐生成移出本仓（到 suno-publisher），能力探测里不再有 suno。
+    # 本仓只探声音侧的能力：TTS、本地模型、封面出图、LLM。
+    names = ["tts", "museav", "llm"]
+    probes = [_probe_tts, _probe_museav, _probe_llm]
     results = await asyncio.gather(*[asyncio.to_thread(f) for f in probes],
                                    return_exceptions=True)
     # key 用 museav 而不是泛称 studio —— 这是「museav 中台」这个具体的服务，
@@ -2166,27 +2146,16 @@ def trending():
         return {"ok": False, "error": str(e)}
 
 
-# ── Suno AI 音乐（voxsuno 集成）────────────────────────────
+# ── 声音工具的公共路径 ───────────────────────────────────
 #
-# 声音一条龙工作台的最后一环：用 VoxFlow 复刻的声音（或任何已建 persona）
-# 在 Suno 生成音乐，产物落回 out/ 由音频库统一管理。
-# persona 在 suno.com 网页端创建（无公开 API），本模块负责登录态/生成/入库。
+# 2026-11-13：Suno AI 音乐生成整块移出本仓（到 suno-publisher，那边是
+# 「音乐生成 → 自动化发布」一条龙）。本仓收敛成纯声音项目：TTS、音色设计、
+# 语音克隆、剧本演播、封面出图。
+#
+# persona（Suno 网页端创建的角色）曾放 ~/.voxsuno/personas.json —— 那也是
+# 音乐侧的东西，已随生成一起搬走。
 
-
-
-SUNO_STATE = os.path.expanduser("~/.voxsuno/personas.json")
 MUSIC_SUBDIR = "music"  # Suno 音乐单独放 out/music，跟 TTS wav 分开
-
-
-class SunoGenerateRequest(BaseModel):
-    title: str = "Untitled"
-    tags: str = ""
-    lyrics: str = ""
-    lyrics_file: Optional[str] = None
-    persona: Optional[str] = None  # persona 名（查 ~/.voxsuno/personas.json）
-    model: str = "v6"
-    wait: bool = False
-    download: bool = True  # 生成后拉回本地入库
 
 
 # ── 账户连接（界面版）────────────────────────────────────
@@ -2398,127 +2367,6 @@ def gallery(limit: int = 60, only_with_prompt: bool = False):
     return {"ok": True, "total": len(cards), "cards": cards}
 
 
-@app.get("/api/suno/status")
-def suno_status():
-    """Suno 登录态 + 余额 + 已保存 persona"""
-    from core import suno_api                                  # noqa: PLC0415
-    try:
-        c = suno_api.credits()
-        cred = {"total_credits_left": c["left"], "credits": c["left"],
-                "plan": {"name": c["plan"]}}
-        authenticated = c["left"] is not None
-    except Exception:
-        authenticated, cred = False, {}
-    personas = {}
-    if os.path.exists(SUNO_STATE):
-        try:
-            personas = json.load(open(SUNO_STATE))
-        except Exception:
-            personas = {}
-    return {
-        "ok": True,
-        "authenticated": authenticated,
-        "credits": cred.get("credits", 0),
-        "total_credits_left": cred.get("total_credits_left", 0),
-        "plan": (cred.get("plan") or {}).get("name", "") if isinstance(cred.get("plan"), dict) else "",
-        "personas": personas,
-        "backend": "direct-api",   # 不再经过 suno CLI
-    }
-
-
-@app.post("/api/suno/generate")
-def suno_generate(req: SunoGenerateRequest):
-    """提交 Suno 音乐生成任务（异步，走现有任务队列）"""
-    task_id = _submit_task("suno", f"🎵 {req.title or 'Suno 音乐'}", req.model_dump())
-    return {"task_id": task_id, "status": "queued"}
-
-
-class SunoBatchItem(BaseModel):
-    title: str = "Untitled"
-    tags: str = ""
-    lyrics: str = ""
-    persona: Optional[str] = None
-    model: str = "v6"
-
-
-class SunoBatchRequest(BaseModel):
-    items: list[SunoBatchItem]
-    wait: bool = False           # 是否等全部完成再返回
-    poll_interval_sec: float = 5
-    timeout_sec: int = 600       # 单首最久等 10 分钟
-
-
-@app.post("/api/suno/batch")
-async def suno_batch(req: SunoBatchRequest):
-    """
-    批量提交 Suno 生成任务。
-
-    前端批量面板、自动化脚本（scripts/batch_bgm.py）都调这个。
-    每个 item 走现有 _submit_task，跟单首的 /api/suno/generate 同一条任务队列，
-    不需要 suno CLI 直接调用。
-
-    wait=True 时同步等到全部完成才返回（最久的那个完成才返回），
-    适合脚本"一行命令跑完"的场景；wait=False 时立刻返回 task_ids，
-    调用方自己轮询 /api/tasks。
-    """
-    import asyncio
-
-    if not req.items:
-        raise HTTPException(400, "items 不能为空")
-
-    if len(req.items) > 20:
-        # 一次最多 20 —— 避免单次请求堆太多任务把队列塞爆
-        raise HTTPException(400, f"一次最多 20 首，实际 {len(req.items)}")
-
-    # 顺序提交，避免瞬时 burst 触发 Suno 速率限制
-    task_ids = []
-    for i, item in enumerate(req.items):
-        # 自动追加 instrumental（如果是空的 lyrics 字段，UI 标记为 BGM）
-        item_dict = item.model_dump()
-        if not item_dict.get("lyrics"):
-            tags = item_dict.get("tags", "")
-            if "instrumental" not in tags.lower():
-                item_dict["tags"] = (tags.rstrip(", ") + ", instrumental").strip(", ")
-        task_id = _submit_task("suno", f"🎵 {item.title or 'Suno 音乐'}", item_dict)
-        task_ids.append({"title": item.title, "task_id": task_id})
-        # 提交之间间隔 2 秒（前端面板是 3 秒，脚本是 2 秒避免太慢）
-        if i < len(req.items) - 1:
-            await asyncio.sleep(2)
-
-    if not req.wait:
-        return {"task_ids": task_ids, "queued": len(task_ids)}
-
-    # 同步等：轮询所有 task_id 直到全部 done / error / 超时
-    import time
-    start = time.time()
-    while time.time() - start < req.timeout_sec:
-        await asyncio.sleep(req.poll_interval_sec)
-        all_done = True
-        statuses = []
-        for entry in task_ids:
-            t = _tasks.get(entry["task_id"])
-            if not t:
-                statuses.append({"title": entry["title"], "status": "unknown"})
-                continue
-            statuses.append({"title": entry["title"], "status": t.get("status", "running")})
-            if t.get("status") in ("queued", "running"):
-                all_done = False
-        if all_done:
-            break
-
-    # 最终状态
-    results = []
-    for entry in task_ids:
-        t = _tasks.get(entry["task_id"], {})
-        results.append({
-            "title": entry["title"],
-            "task_id": entry["task_id"],
-            "status": t.get("status", "unknown"),
-            "files": (t.get("result") or {}).get("files", []) if isinstance(t.get("result"), dict) else [],
-        })
-    return {"results": results, "elapsed_sec": round(time.time() - start, 1)}
-
-
 # 网易云歌词开头那一坨制作人员名单（作词/作曲/编曲/混音/统筹/推广…）。
 # 它们和歌词混在同一个字段里，直接喂给 Suno 会被**当歌词唱出来**。
 #
@@ -2606,109 +2454,6 @@ def lyrics_get(song_id: str):
     # 否则人会以为接口坏了然后反复重试。
     return {"song_id": song_id, "lyrics": plain, "has_lyrics": bool(plain),
             "note": "" if plain else "这首没有歌词（多半是纯音乐/器乐作品）"}
-
-
-class SunoCoverRequest(BaseModel):
-    """
-    翻唱：把 Suno 库里**已有的一首 clip** 换个风格重做。
-
-    ⚠️ 注意它接的是 `clip_id`，**不是上传音频** —— `suno cover` 只认库里的
-    clip（`suno cover <CLIP_ID>`，没有上传参数）。想翻唱外部歌曲，得先在
-    Suno 网页端 Upload Audio 把它变成一个 clip，再拿那个 id 过来。
-    这一步绕不开，CLI 没有对应能力。
-    """
-    clip_id: str
-    tags: str = ""                       # 新风格；留空则沿用原 clip 的风格
-    model: str = "v6"
-    # 原曲对结果的影响强度 0-100。留 None 用 Suno 默认 ——
-    # 传一个我们自己拍的数不如让上游决定。
-    audio_influence: Optional[int] = None
-    title: str = ""                      # 只用于任务标签和产物文件名
-
-
-@app.get("/api/suno/clips")
-def suno_clips(limit: int = 40):
-    """
-    列出 Suno 库里的作品，给翻唱选源用。
-
-    直接透传 CLI 的结果，不在这里重新组织字段 —— 那边加了字段这边自动就有。
-    只挑界面要用的几个，免得把 audio_url 这类一次性签名地址塞进前端缓存。
-    """
-    from core import suno_api                                  # noqa: PLC0415
-
-    try:
-        clips = suno_api.list_clips(limit=50)["clips"]
-    except Exception as e:
-        obs.log("suno_list_failed", level="error", error=str(e)[:200])
-        raise HTTPException(502, f"读 Suno 库失败：{type(e).__name__} {str(e)[:80]}")
-    return {"clips": [{
-        "id": c.get("id", ""),
-        "title": c.get("title") or "(未命名)",
-        "tags": c.get("metadata", {}).get("tags", "") if isinstance(c.get("metadata"), dict) else "",
-        "model": c.get("model_name", ""),
-        "image_url": c.get("image_url", ""),
-        "created_at": c.get("created_at", ""),
-        "status": c.get("status", ""),
-    } for c in clips[:limit]]}
-
-
-@app.post("/api/suno/cover")
-def suno_cover(req: SunoCoverRequest):
-    """提交翻唱任务（异步）。走和生成同一条队列。"""
-    if not req.clip_id.strip():
-        raise HTTPException(400, "要翻唱哪一首？缺 clip_id")
-    label = f"🎤 翻唱：{req.title or req.clip_id[:8]}"
-    return {"task_id": _submit_task("suno_cover", label, req.model_dump()),
-            "status": "queued"}
-
-
-def _run_suno_cover_task(task_id: str, params: dict, update_fn):
-    """
-    执行翻唱：直连 Suno API（cover_clip_id）→ 产物拷回 out/music。
-    与 _run_suno_task 同形状，区别只在命令和标签。
-    """
-    import shutil  # noqa: PLC0415
-
-    from core import net, suno_api                             # noqa: PLC0415
-
-    req = SunoCoverRequest(**params)
-    music_dir = OUT_DIR / MUSIC_SUBDIR
-    music_dir.mkdir(parents=True, exist_ok=True)
-    update_fn(task_id, progress=25, stage="Suno 翻唱中（约 1-3 分钟）...")
-    _t0 = time.perf_counter()
-    _cr = float((obs.pricing().get("providers", {}).get("suno") or {}).get("credits_per_call", 10))
-    try:
-        clips = suno_api.cover(req.clip_id, tags=req.tags.strip(), model=req.model,
-                               audio_influence=req.audio_influence)
-        done_clips = suno_api.poll([c["id"] for c in clips], timeout_s=600, interval_s=10)
-    except Exception as e:
-        obs.meter("suno", "cover", credits=_cr, track_id=req.title[:40],
-                  duration_ms=int((time.perf_counter() - _t0) * 1000), ok=False,
-                  model=req.model, source_clip=req.clip_id[:12], error=str(e)[-120:])
-        raise ValueError(f"翻唱失败: {e}") from e
-
-    obs.meter("suno", "cover", credits=_cr, track_id=req.title[:40],
-              duration_ms=int((time.perf_counter() - _t0) * 1000), ok=True,
-              model=req.model, source_clip=req.clip_id[:12], tags=req.tags[:60])
-
-    update_fn(task_id, progress=85, stage="入库音频库...")
-    copied = []
-    for c in done_clips:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe = re.sub(r"[^\w\u4e00-\u9fff-]", "_", req.title or "cover")[:30]
-        dest = music_dir / f"[翻唱]{safe}_{c['id'][:8]}_{ts}.m4a"
-        try:
-            suno_api.download(c["id"], dest)   # 同上：CDN 直链，不是 audio_url
-            copied.append(str(dest))
-        except Exception:
-            continue
-    if not copied:
-        raise ValueError("翻唱已生成但音频取不回（Suno 直链问题，去网页端下载）")
-
-    update_fn(task_id, status="done", progress=100, stage="完成",
-              result={"ok": True, "files": copied,
-                      "urls": [f"/api/audio/{MUSIC_SUBDIR}/{os.path.basename(c)}" for c in copied]},
-              completed_at=datetime.now().strftime("%H:%M:%S"))
 
 
 class CoverRequest(BaseModel):
@@ -2973,221 +2718,6 @@ def _run_cover_upscale_task(task_id: str, params: dict, update_fn):
     update_fn(task_id, status="done", progress=100, stage="完成",
               result={"ok": True, "path": rel},
               completed_at=datetime.now().strftime("%H:%M:%S"))
-
-
-def _recent_clips_titled(title: str, since_ts) -> list[dict]:
-    """去 Suno 问：这个标题、这个时间点之后，有没有新出的 clip。
-
-    用来在提交报错时判断「到底生成没生成」。列库是免费调用，
-    问一次不花钱，而问错的代价是：积分照扣、歌明明在、人以为白花了。
-
-    按**标题 + 时间**匹配，不按标题单独匹配 —— 同名歌很常见
-    （Suno 一次就出两首同名的），只看标题会把上次的旧歌错认成这次的。
-    """
-    from core import suno_api                                  # noqa: PLC0415
-
-    try:
-        clips = suno_api.list_clips(limit=50)["clips"]
-    except Exception:
-        return []
-    out = []
-    for c in clips:
-        if (c.get("title") or "").strip() != (title or "").strip():
-            continue
-        try:
-            made = datetime.fromisoformat((c.get("created_at") or "").replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        if made >= since_ts:
-            out.append({"id": c.get("id"), "title": c.get("title"),
-                        "status": c.get("status"), "created_at": c.get("created_at")})
-    return out
-
-
-def _save_generated(clips: list, req, files: list) -> None:
-    """把刚生成的歌写进作品库。
-
-    ## 为什么必须在这里写
-
-    此前生成完只更新任务状态，**不写 tracks 表** —— 歌在 Suno 云端有、
-    本地磁盘有 mp3，唯独作品库里没有。后果是卡片墙、运营台、发行流程
-    全都看不见今天做的东西，要等人想起来手动跑 scripts/sync_suno.py。
-
-    2026-09-12 实测：当天生成的 10 首，一首都不在库里。
-
-    写库失败不能影响任务结果 —— 歌已经生成、积分已经扣了，这里只是记账。
-    """
-    from core import db as _db                                 # noqa: PLC0415
-
-    try:
-        _db.init()
-        by_clip = {}
-        for i, c in enumerate(clips):
-            by_clip[c["id"]] = files[i] if i < len(files) else ""
-        with _db.connect() as conn:
-            have = {r["clip_id"] for r in conn.execute(
-                "SELECT clip_id FROM tracks WHERE clip_id IS NOT NULL AND clip_id != ''")}
-            for c in clips:
-                if c["id"] in have:
-                    continue
-                rel = ""
-                f = by_clip.get(c["id"]) or ""
-                if f:
-                    try:
-                        rel = str(Path(f).relative_to(OUT_DIR.parent))
-                    except ValueError:
-                        rel = ""
-                md = c.get("metadata") or {}
-                conn.execute(
-                    """INSERT INTO tracks (title, stage, tags, lyrics, clip_id, audio_file,
-                                           duration, created_at, updated_at)
-                       VALUES (?, 'generated', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))""",
-                    (c.get("title") or req.title or "未命名",
-                     (md.get("tags") or req.tags or "").strip(),
-                     (md.get("prompt") or req.lyrics or "").strip(),
-                     c["id"], rel, md.get("duration")),
-                )
-            conn.commit()
-    except Exception as e:  # noqa: BLE001
-        obs.log("track_save_failed", level="warn", error=str(e)[:200])
-
-
-def _run_suno_task(task_id: str, params: dict, update_fn):
-    """执行 Suno 音乐生成：直连 Suno API → 产物拷回 out/music。
-
-    2026-09-12 从 suno CLI 换成 `core/suno_api.py`。换掉不是嫌它慢：
-    Suno 强推 v6 之后老模型一律 403 `paid_upsell`，而 CLI 的 `--model`
-    枚举最高只到 v5.5、上游 2026-07-20 起没更新 —— 继续依赖它，
-    这个功能就永久坏着。
-
-    下面每一段注释都是 CLI 时代踩出来的，换了通道照样成立，别删。
-    """
-    import shutil
-
-    from core import net, suno_api
-
-    req = SunoGenerateRequest(**params)
-    music_dir = OUT_DIR / MUSIC_SUBDIR
-    music_dir.mkdir(parents=True, exist_ok=True)
-
-    persona_id = None
-    if req.persona:
-        try:
-            personas = json.load(open(SUNO_STATE))
-            persona_id = (personas.get(req.persona) or {}).get("id")
-        except Exception:
-            persona_id = None
-        if not persona_id and req.persona.startswith("{"):
-            persona_id = req.persona  # 直接传 ID
-
-    # ⚠️ **提交和等待必须分开。**
-    #
-    # 生成本身是异步的：提交之后 Suno 那边排队、渲染，两三分钟出结果。
-    # 把它跑成同步（CLI 时代的 `--wait`）的后果是：超时/中途出错
-    # 就被当成「生成失败」。2026-09-06 连栽两次 —— 歌在 Suno 上好好的、
-    # 积分也扣了，voxflow 却报失败、群里推失败卡片。
-    #
-    # 现在：提交立刻拿 clip id → 自己轮询到 complete。中间断了不影响 Suno。
-    update_fn(task_id, progress=10, stage="提交到 Suno...")
-    _t0 = time.perf_counter()
-    _started_at = datetime.now(timezone.utc)
-    # 每次调用扣的 credits 从 pricing.json 读，不写死在这里 ——
-    # 换模型/套餐时改配置，不用改代码。
-    _cr = float((obs.pricing().get("providers", {}).get("suno") or {}).get("credits_per_call", 10))
-
-    lyrics = req.lyrics or ""
-    if not lyrics and req.lyrics_file and os.path.exists(req.lyrics_file):
-        lyrics = open(req.lyrics_file, encoding="utf-8").read()
-    # BGM 的判定沿用界面口径：tags 里带 instrumental 就是纯音乐。
-    # 不能用「lyrics 为空」判断 —— 那也可能是让 Suno 自己写词的灵感模式。
-    instrumental = "instrumental" in (req.tags or "").lower()
-
-    try:
-        extra = {"persona_id": persona_id} if persona_id else None
-        clips = suno_api.generate(req.title, req.tags or "", lyrics=lyrics,
-                                  instrumental=instrumental, model=req.model,
-                                  _extra=extra)
-    except Exception as e:
-        _ms = int((time.perf_counter() - _t0) * 1000)
-        err = str(e)[-500:]
-        # ⚠️ **提交报错不等于「没生成出来」。**
-        #
-        # 2026-09-06：三首 BGM 全部报错（challenge-expired / 下载 403），
-        # voxflow 标成失败、任务从队列消失。可去 Suno 一看，歌**好好地在那儿**
-        # ——积分照扣，人以为白花了。所以报错之后必须**去问一次 Suno**，
-        # 有对得上的新 clip 就按成功记，只是音频要另外拿。
-        found = _recent_clips_titled(req.title, since_ts=_started_at)
-        if found:
-            obs.meter("suno", "generate", credits=_cr, track_id=req.title[:40],
-                      duration_ms=_ms, ok=True, model=req.model,
-                      note="提交报错但 Suno 已生成")
-            update_fn(task_id, status="done", progress=100,
-                      stage=f"已生成 {len(found)} 首（音频需手动下载）",
-                      result={"ok": True, "files": [], "clips": found,
-                              "warning": "取回失败，歌在 Suno 上，音频要去网页端下载"})
-            obs.log("suno_submit_failed_but_generated", level="warn",
-                    title=req.title[:40], clips=len(found), error=err[-200:])
-            return
-        # 失败也计量：Suno 生成失败照样扣积分，只记成功的话账对不上，
-        # 而「失败率 × 单价」正是最该被看见的那笔浪费。
-        obs.meter("suno", "generate", credits=_cr, track_id=req.title[:40],
-                  duration_ms=_ms, ok=False, model=req.model, error=err[-120:])
-        raise ValueError(f"Suno 生成失败: {err}")
-
-    _ms = int((time.perf_counter() - _t0) * 1000)
-    obs.meter("suno", "generate", credits=_cr, track_id=req.title[:40],
-              duration_ms=_ms, ok=True, model=req.model, tags=(req.tags or "")[:60])
-
-    ids = [c["id"] for c in clips]
-    update_fn(task_id, progress=30, stage=f"Suno 渲染中（{len(ids)} 首）...")
-    try:
-        done_clips = suno_api.poll(ids, timeout_s=900, interval_s=10)
-    except Exception as e:
-        # 超时不代表失败 —— 同上，歌可能还在渲染。交给人去网页看。
-        update_fn(task_id, status="done", progress=100,
-                  stage=f"已提交 {len(ids)} 首 · 渲染未在 15 分钟内完成",
-                  result={"ok": True, "files": [], "clips": clips,
-                          "warning": f"轮询超时（{e}），去 suno.com 看渲染结果"})
-        obs.log("suno_poll_timeout", level="warn", title=req.title[:40], clips=len(ids))
-        return
-
-    if any(c.get("status") == "error" for c in done_clips):
-        bad = [c.get("id", "")[:8] for c in done_clips if c.get("status") == "error"]
-        raise ValueError(f"Suno 报告生成错误：{bad}")
-
-    update_fn(task_id, progress=85, stage="入库音频库...")
-    copied = []
-    for c in done_clips:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_title = re.sub(r"[^\w\u4e00-\u9fff-]", "_", req.title or c.get("title") or "untitled")[:30]
-        dest = music_dir / f"[Suno]{safe_title}_{c['id'][:8]}_{ts}.m4a"
-        try:
-            # 走 suno_api.download（CloudFront），**不是 clip 里的 audio_url** ——
-            # 那个字段现在返回 .../api/forbidden，Suno 把 API 侧直链关了。
-            suno_api.download(c["id"], dest)
-            copied.append(str(dest))
-        except Exception:
-            # 取回失败不改变「已生成」这个事实，下面统一走手动下载分支。
-            continue
-
-    if not copied:
-        # **没拿到音频 ≠ 生成失败。** 歌已经在 Suno 上了、积分也扣了，
-        # 只是取回那一段坏了。报成失败会让人以为白花钱，
-        # 还会往群里推一张失败卡片。
-        update_fn(task_id, status="done", progress=100,
-                  stage=f"已生成 {len(done_clips)} 首 · 音频需在 suno.com 下载",
-                  result={"ok": True, "files": [], "clips": done_clips,
-                          "warning": "音频 CDN 取回失败，可去网页端下载"})
-        obs.log("suno_audio_not_pulled", level="warn",
-                title=req.title[:40], clips=len(done_clips))
-        return
-
-    _save_generated(done_clips, req, copied)
-    update_fn(
-        task_id, status="done", progress=100, stage="完成",
-        result={"ok": True, "files": copied,
-                "urls": [f"/api/audio/{MUSIC_SUBDIR}/{os.path.basename(c)}" for c in copied]},
-    )
 
 
 @app.post("/api/dialogue")

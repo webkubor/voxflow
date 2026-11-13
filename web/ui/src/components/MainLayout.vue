@@ -47,28 +47,6 @@
                   <span class="cap-pop-k">使用</span>
                   <span class="cap-pop-v">{{ c.what }}</span>
                 </div>
-                <!-- Suno 专项：套餐 / credits / 重置日 -->
-                <template v-if="c.key === 'suno'">
-                  <div v-if="c.plan" class="cap-pop-row">
-                    <span class="cap-pop-k">套餐</span>
-                    <span class="cap-pop-v">{{ c.plan }}</span>
-                  </div>
-                  <div v-if="c.creditsRemaining !== undefined" class="cap-pop-row">
-                    <span class="cap-pop-k">剩余</span>
-                    <span class="cap-pop-v">
-                      {{ c.creditsRemaining }} credits
-                      <span v-if="c.creditsTotal" class="cap-pop-sub">/ {{ c.creditsTotal }}</span>
-                    </span>
-                  </div>
-                  <div v-if="c.creditsTotal !== undefined && c.creditsRemaining !== undefined" class="cap-pop-row">
-                    <span class="cap-pop-k">已用</span>
-                    <span class="cap-pop-v">{{ c.creditsTotal - c.creditsRemaining }} credits</span>
-                  </div>
-                  <div v-if="c.renewDate" class="cap-pop-row">
-                    <span class="cap-pop-k">续费</span>
-                    <span class="cap-pop-v">{{ formatRenewDate(c.renewDate) }}</span>
-                  </div>
-                </template>
                 <div v-if="c.detail" class="cap-pop-row">
                   <span class="cap-pop-k">说明</span>
                   <span class="cap-pop-v">{{ c.detail }}</span>
@@ -144,8 +122,6 @@
             <n-tab-pane name="design" tab="音色设计"><DesignTab /></n-tab-pane>
             <n-tab-pane name="clone" tab="文本配音"><CloneTab @add-persona="showAddPersona = true" /></n-tab-pane>
             <n-tab-pane name="dialogue" tab="剧本演播"><DialogueTab /></n-tab-pane>
-            <n-tab-pane name="suno" tab="AI 出歌"><SunoTab /></n-tab-pane>
-            <n-tab-pane name="gallery" tab="作品展厅"><GalleryTab /></n-tab-pane>
             <n-tab-pane name="attest" tab="原创存证"><AttestTab /></n-tab-pane>
             <n-tab-pane name="ops" tab="收益运营"><OpsTab /></n-tab-pane>
             <n-tab-pane name="library" tab="媒体资产"><LibraryTab /></n-tab-pane>
@@ -267,10 +243,8 @@ const AttestTab = lazyTab(() => import('../tabs/AttestTab.vue'), '原创存证')
 const CloneTab = lazyTab(() => import('../tabs/CloneTab.vue'), '文本配音');
 const DesignTab = lazyTab(() => import('../tabs/DesignTab.vue'), '音色设计');
 const DialogueTab = lazyTab(() => import('../tabs/DialogueTab.vue'), '剧本演播');
-const SunoTab = lazyTab(() => import('../tabs/SunoTab.vue'), 'AI 出歌');
 const LibraryTab = lazyTab(() => import('../tabs/LibraryTab.vue'), '媒体资产');
 const IntakeTab = lazyTab(() => import('../tabs/IntakeTab.vue'), '导入音频');
-const GalleryTab = lazyTab(() => import('../tabs/GalleryTab.vue'), '作品展厅');
 const OpsTab = lazyTab(() => import('../tabs/OpsTab.vue'), '收益运营');
 import GlobalPlayer from './GlobalPlayer.vue';
 import TaskPanel from './TaskPanel.vue';
@@ -289,7 +263,6 @@ import { useCapabilitiesStore } from '../stores/capabilities';
 import { useErrorLogStore } from '../stores/errorLog';
 import { useLibraryStore } from '../stores/library';
 import { usePipelineStore } from '../stores/pipeline';
-import { useSunoStore } from '../stores/suno';
 import { useSynthStore } from '../stores/synth';
 import { useTasksStore } from '../stores/tasks';
 import { useVoicesStore } from '../stores/voices';
@@ -297,7 +270,6 @@ import { useVoicesStore } from '../stores/voices';
 const capabilitiesStore = useCapabilitiesStore();
 const libraryStore = useLibraryStore();
 const pipelineStore = usePipelineStore();
-const sunoStore = useSunoStore();
 const synthStore = useSynthStore();
 const tasksStore = useTasksStore();
 const voicesStore = useVoicesStore();
@@ -314,7 +286,7 @@ const route = useRoute();
 const router = useRouter();
 
 const currentTab = computed({
-  get: () => (TAB_NAMES.has(route.name) ? route.name : (modelStatus.value?.design?.ready ? 'design' : 'suno')),
+  get: () => (TAB_NAMES.has(route.name) ? route.name : 'design'),
   set: (tab) => {
     if (route.name !== tab) router.push({ name: tab });
   },
@@ -362,16 +334,14 @@ const TAB_GROUPS = [
     ],
   },
   {
-    key: 'music', title: '音乐制作', icon: 'suno',
-    tabs: [
-      { name: 'suno', label: 'AI 出歌', icon: 'suno', hint: '生成新歌 / 场景 BGM / 热歌翻唱（双榜灵感）' },
-      { name: 'gallery', label: '作品展厅', icon: 'library', hint: '卡片网格浏览所有已成作品、试听、对比提示词' },
-    ],
-  },
-  {
     // 2026-10-10 拆分：原来这里还有个「发行与经营」组（宣推短视频 / 全网发行 /
     // 专辑制作 / 收益运营）。发行那半截整体搬去了独立仓 suno-publisher，
     // 本仓只留生成与创作留痕。
+    //
+    // 2026-11-13：「音乐制作」组（AI 出歌 / 作品展厅）也整体搬去了
+    // suno-publisher —— 那边是「音乐生成 → 自动化发布」一条龙。本仓收敛成
+    // **纯声音项目**：音色设计、文本配音、剧本演播、原创存证、媒体资产、
+    // 成本与健康。
     key: 'works', title: '创作与资产', icon: 'board',
     tabs: [
       { name: 'attest', label: '原创存证', icon: 'publish', hint: '创作留痕导出与区块链存证（证明独创性智力投入）' },
@@ -515,7 +485,7 @@ onBeforeUnmount(() => {
   audioBus.unregister('persona-preview');
 });
 
-// 给 SunoTab 这种需要刷新状态的子组件用的 expose 触发器
+// 给需要刷新状态的子组件用的 expose 触发器
 defineExpose({});
 
 // 全局快捷键
@@ -540,15 +510,6 @@ useShortcuts({
   onShowHelp: () => { helpOpen.value = true; },
 });
 
-/** 把 Suno 后端返回的 ISO 日期格式化成「9/30/2026」 */
-const formatRenewDate = (iso) => {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  const m = d.getMonth() + 1;
-  const day = d.getDate();
-  const year = d.getFullYear();
-  return `${m}/${day}/${year}`;
-};
 // ── 连接 MUSE AV（设备码流程）──────────────────────────
 //
 // 界面版的登录。原来只有 `voice museav login` 一条路，而界面上到处提示

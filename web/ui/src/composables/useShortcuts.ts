@@ -25,7 +25,7 @@
 import { onBeforeUnmount, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
-const TAB_ORDER = ['clone', 'design', 'dialogue', 'suno', 'works', 'publish', 'library'];
+const TAB_ORDER = ['clone', 'design', 'dialogue', 'attest', 'library', 'intake', 'ops'];
 
 /** 输入框判定：这些元素里所有快捷键都失效，避免打断输入 */
 const isEditableTarget = (target: EventTarget | null): boolean => {
