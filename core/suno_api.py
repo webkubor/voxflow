@@ -363,22 +363,22 @@ def get_clips(clip_ids: list[str]) -> list[dict]:
 
 # 音频 CDN。**不要用 clip 里的 audio_url** —— 那个字段现在返回
 # "https://studio-api.prod.suno.com/api/forbidden"，Suno 把 API 侧的直链关了。
-# 网页播放器实际拉的是这个 CloudFront 地址，无签名、无 Referer 校验，
-# 拿 clip id 拼出来就能下（2026-09-12 抓浏览器网络请求得到）。
-# 它要是哪天也关了，重新抓一次：playwright 打开歌曲页，看 .m4a 那条请求。
+# 网页播放器实际拉的是这个 CloudFront 地址，clip id 拼出来就能下。
+#
+# 但 2026-11-13 起这条直链返回的是**密文**（HTTP 200、3.4MB、无文件魔数，
+# ffprobe 报 moov atom not found），Suno 改成加密分发了。解密流程见
+# core/suno_media.py（模块头有完整逆向说明）。
 _AUDIO_CDN = "https://d2lwuy8qc234o3.cloudfront.net/1/clip/{clip_id}.m4a"
 
 
 def download(clip_id: str, dest: "pathlib.Path | str") -> int:
-    """把一首歌的音频下到本地，返回字节数。只读 CDN，不花积分。"""
-    import shutil
+    """把一首歌的音频下到本地，返回字节数。只读 CDN，不花积分。
 
-    dest = pathlib.Path(dest)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    req = urllib.request.Request(_AUDIO_CDN.format(clip_id=clip_id), headers={"User-Agent": _UA})
-    with opener().open(req, timeout=300) as r, open(dest, "wb") as f:
-        shutil.copyfileobj(r, f)
-    return dest.stat().st_size
+    走 core.suno_media —— 直链现在是密文，要先换密钥再解密。
+    """
+    from core import suno_media
+
+    return suno_media.download(clip_id, dest)
 
 
 def poll(clip_ids: list[str], timeout_s: int = 600, interval_s: int = 8) -> list[dict]:
