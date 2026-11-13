@@ -2378,6 +2378,9 @@ def gallery(limit: int = 60, only_with_prompt: bool = False):
             # 所以这里给的是「去听听看」的入口，不是「去发布」。
             "suno_url": f"https://suno.com/song/{r['clip_id']}" if is_ai else "",
             "source_label": "AI 生成" if is_ai else "自制",
+            # clip_id 本身也给出去：发行台要靠它认领「这一首」，
+            # 前端的「去发行」按钮靠它拼深链（?clip=<id>），发行台收到就定位到那一行。
+            "clip_id": (r["clip_id"] or "") if is_ai else "",
             "tags": tags,                         # ← 卡片的主角：风格提示词
             "has_lyrics": bool(lyr),
             "lyrics_preview": lyr[:120],

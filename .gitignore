@@ -169,3 +169,7 @@ web/ui/log/instances.json
 
 # agent 工作树（agent 本地运行时产物，不入库）
 .claude/worktrees/
+
+# run-publish.sh 的运行时日志与 PID 文件（每次拉起服务都会重写，不入库）
+.publish-stack.log
+.publish-stack.pid
