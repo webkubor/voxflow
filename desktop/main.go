@@ -68,7 +68,7 @@ const (
 	// 所以给得比一般服务宽裕；超时后仍然打开窗口，让界面自己报告失败。
 	backendStartTimeout = 180 * time.Second
 	// appVersion 是 App 版本号，和 mygo.json 保持一致。
-	appVersion = "1.0.0"
+	appVersion = "0.11.0"
 )
 
 // backendURL 返回本地后端地址。只允许回环地址 —— 这个端口上有用户的

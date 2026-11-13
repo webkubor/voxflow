@@ -201,6 +201,10 @@ Decision process, capability matrix, complete change list and rollback method: [
 
 Alongside the CLI and browser UI, VoxFlow offers a native macOS window built with **MyGo + WKWebView**, reusing the same local frontend and Python/MLX backend. Voices, models, database, and generated files stay in `~/.voxflow/` and are shared with the CLI; the app does not create a second asset library.
 
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/webkubor/free-imgbed@main/voxflow/desktop-app.png" width="100%" alt="VoxFlow — macOS desktop app, voice design & text-to-speech"/>
+</p>
+
 ```bash
 # Build and install to ~/Applications from the repository root
 ./desktop/build.sh
