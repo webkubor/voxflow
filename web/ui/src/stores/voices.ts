@@ -71,10 +71,10 @@ export const useVoicesStore = defineStore('voices', () => {
     previewProgress.value = 0;
   };
 
-  const deletePersona = async (key: string): Promise<{ ok: boolean }> => {
+  const deletePersona = async (key: string, confirm = false): Promise<{ ok: boolean }> => {
     error.value = '';
     try {
-      const data = await api.deletePersona(key);
+      const data = await api.deletePersona(key, confirm);
       if (selectedPersona.value === key) selectedPersona.value = null;
       await loadPersonas();
       return data;

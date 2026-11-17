@@ -4,7 +4,7 @@
       <div class="sider-header">
         <div class="sider-title-row">
           <Icon name="voice" size="sm" />
-          <h3>收藏音色库</h3>
+          <h3>我的声音</h3>
           <span class="count">{{ personasArr.filter(p => p.favorite !== false).length }}</span>
         </div>
         <button class="add-btn" @click="$emit('addPersona')" title="登记新声音角色">

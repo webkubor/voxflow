@@ -71,10 +71,10 @@ def library_rm(
     yes: bool = typer.Option(False, "--yes", "-y", help="跳过确认"),
     as_json: bool = JSON_OPTION,
 ):
-    """删除生成文件（关联音色已收藏时拒绝）"""
+    """删除生成文件（--yes 即确认影响；关联音色已收藏时也一样）"""
     confirm_or_fail(f"删除生成文件 {filename}？", yes, as_json)
     try:
-        removed = vlib.delete_generated(filename)
+        removed = vlib.delete_generated(filename, confirm=True)
     except vlib.VoiceLibraryError as exc:
         fail_from(exc, as_json)
     emit({"removed": removed}, as_json, lambda: console.print(f"[green]✓[/green] 已删除：{removed['filename']}"))

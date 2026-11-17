@@ -141,7 +141,8 @@ export const api = {
   addPersona: (form: FormData) => postForm<{ ok: boolean; key: string }>('personas/add', form),
   updatePersona: (key: string, form: FormData) =>
     patchForm<{ ok: boolean; name: string; desc: string }>(`personas/${encodeURIComponent(key)}`, form),
-  deletePersona: (key: string) => del<{ ok: boolean }>(`personas/${encodeURIComponent(key)}`),
+  deletePersona: (key: string, confirm = false) =>
+    del<{ ok: boolean }>(`personas/${encodeURIComponent(key)}${confirm ? '?confirm=true' : ''}`),
 
   // ── 能力与状态 ──
   status: () => get<Record<string, unknown>>('status'),
@@ -183,7 +184,8 @@ export const api = {
 
   // ── 音频库 ──
   audioList: () => get<{ files: unknown[] }>('audio-list'),
-  deleteAudio: (filename: string) => del<{ ok: boolean }>(`audio/${encodeURIComponent(filename)}`),
+  deleteAudio: (filename: string, confirm = false) =>
+    del<{ ok: boolean }>(`audio/${encodeURIComponent(filename)}${confirm ? '?confirm=true' : ''}`),
 
   // ── 模型下载（首次运行）──
   modelDownloadStatus: () => get<{

@@ -10,15 +10,18 @@
         <div class="banner-text-group">
           <span class="banner-title">声音工坊 · 音色设计：凭空塑造独一无二的 AI 专属声线</span>
           <span class="banner-desc">
-            从模板选择声线并生成样音，在生成库试听后收藏；收藏的音色可用于文本配音。
+            从模板选择声线并生成样音；生成后默认直接加入「我的声音」，即可用于文本配音。
           </span>
         </div>
       </div>
       <div class="banner-right">
-        <button class="goto-assets-btn" @click="router.push({ name: 'library' })">查看生成库</button>
+        <button class="goto-assets-btn primary" @click="$emit('add-persona')">
+          <Icon name="voice" size="sm" /> 录制 / 导入我的声音
+        </button>
+        <button class="goto-assets-btn" @click="router.push({ name: 'library' })">生成库</button>
         <button class="goto-assets-btn" @click="goToAssets">
           <Icon name="voice" size="sm" />
-          <span>收藏音色库 ({{ personasCount }})</span>
+          <span>我的声音 ({{ personasCount }})</span>
           <Icon name="arrow-right" size="sm" />
         </button>
       </div>
@@ -128,8 +131,8 @@
           <div class="form-footer">
             <label class="commit-row">
               <n-switch v-model:value="designForm.commit" />
-              <span>生成后直接收藏</span>
-              <span class="commit-tip">关闭时结果只进入生成库，试听满意后再收藏到音色库</span>
+              <span>生成后直接加入「我的声音」</span>
+              <span class="commit-tip">关闭时结果只进入生成库，试听满意后再收藏进「我的声音」</span>
             </label>
             <n-button type="primary" class="glow"
               :disabled="!designForm.name.trim() || !designForm.text.trim() || !modelStatus.design.ready || selectedPresetGenerated"
@@ -157,6 +160,7 @@ import ModelSetupCard from '../components/ModelSetupCard.vue';
 import Icon from '../components/Icon.vue';
 
 const router = useRouter();
+defineEmits(['add-persona']);
 const synthStore = useSynthStore();
 const { designPresets } = storeToRefs(synthStore);
 const { designForm, doDesign } = synthStore;

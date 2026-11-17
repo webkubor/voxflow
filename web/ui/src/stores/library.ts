@@ -47,10 +47,10 @@ export const useLibraryStore = defineStore('library', () => {
     Object.assign(player, { url: '', filename: '', visible: false });
   };
 
-  const deleteAudio = async (filename: string): Promise<{ ok: boolean }> => {
+  const deleteAudio = async (filename: string, confirm = false): Promise<{ ok: boolean }> => {
     error.value = '';
     try {
-      const data = await api.deleteAudio(filename);
+      const data = await api.deleteAudio(filename, confirm);
       await loadAudioList();
       return data;
     } catch (cause) {

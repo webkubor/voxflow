@@ -42,13 +42,11 @@ class CliAgentContract(unittest.TestCase):
         self.assertEqual((code, out["voice"]["favorite"]), (0, True))
         self.assertEqual(self.cli("voice", "add", "me", str(sample), "--ref-text", "再来")[0], 4)
         self.assertEqual(self.cli("voice", "rename", "me", "新名字")[1]["voice"]["name"], "新名字")
-        self.assertEqual(self.cli("voice", "rm", "me", "--yes")[0], 4)       # 收藏中不可删
-        self.assertEqual(self.cli("voice", "unfavorite", "me")[0], 0)
         self.assertEqual(self.cli("voice", "rm", "me")[0], 1)               # 非交互必须 --yes
         code, out = self.cli("voice", "rm", "me", "--yes")
         self.assertEqual(code, 0)
-        self.assertTrue((HOME / out["removed"]["ref"]).is_file())           # 参考音频保留
         self.assertEqual(self.cli("voice", "show", "me")[0], 3)
+        self.assertTrue(sample.is_file())                                   # 用户原始录音保留
 
     def test_generated_library(self):
         f = OUT_DIR / "[设计]库测试_20261117_120000.wav"
@@ -58,11 +56,11 @@ class CliAgentContract(unittest.TestCase):
         self.assertIn(f.name, [x["filename"] for x in out["files"]])
         self.assertEqual(self.cli("library", "save", f.name, "库测试音色")[0], 0)
         self.assertEqual(self.cli("library", "save", f.name, "另一个")[0], 4)
-        self.assertEqual(self.cli("library", "rm", f.name, "--yes")[0], 4)
+        self.assertEqual(self.cli("library", "rm", f.name)[0], 1)           # 非交互必须 --yes
         self.assertTrue(f.exists())
-        self.assertEqual(self.cli("voice", "unfavorite", "库测试音色")[0], 0)
-        self.assertEqual(self.cli("library", "rm", f.name, "--yes")[0], 0)
+        self.assertEqual(self.cli("library", "rm", f.name, "--yes")[0], 0)  # --yes 即确认影响
         self.assertFalse(f.exists())
+        self.assertEqual(self.cli("voice", "unfavorite", "库测试音色")[0], 0)
 
     def test_preset_generated_once(self):
         code, out = self.cli("preset", "list", "--pending")

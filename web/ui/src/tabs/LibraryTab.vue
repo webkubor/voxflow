@@ -136,14 +136,18 @@ const saveVoice = async () => {
     await api.saveDesignedVoice({ filename: saveFile.value, voice_name: saveName.value.trim(), ref_text: saveText.value.trim() });
     await Promise.all([loadAudioList(), useVoicesStore().loadPersonas()]);
     saveDialog.value = false;
-    tasksStore.showToast('已收藏到音色库', 'success');
+    tasksStore.showToast('已加入「我的声音」，可直接用于文本配音', 'success');
   } catch (error) {
     tasksStore.showToast(await toMessage(error), 'error');
   } finally { saving.value = false; }
 };
 const removeAudio = async (filename) => {
-  if (!window.confirm(`删除生成文件「${filename}」？`)) return;
-  try { await deleteAudio(filename); }
+  const voice = audioFiles.value.find((f) => f.filename === filename)?.voice;
+  const msg = voice?.favorite
+    ? `删除生成文件「${filename}」？它关联的音色「${voice.name}」会失去这份样音（音色本身保留）。`
+    : `删除生成文件「${filename}」？`;
+  if (!window.confirm(msg)) return;
+  try { await deleteAudio(filename, true); }
   catch (error) { tasksStore.showToast(await toMessage(error), 'error'); }
 };
 

@@ -258,14 +258,19 @@ def update_voice(key: str, name: Optional[str] = None, desc: Optional[str] = Non
     return describe_voice(key, entry)
 
 
-def delete_voice(key: str, personas_file: Optional[Path] = None) -> dict:
-    """删除未收藏音色的映射；参考音频保留。"""
+def delete_voice(key: str, personas_file: Optional[Path] = None, confirm: bool = False) -> dict:
+    """删除音色映射；参考音频保留。
+
+    confirm=False（默认）是程序化调用的安全网：已收藏的音色拒绝删除。
+    人在界面上看过「将同时从收藏音色库移除、参考音频保留」之后，
+    调用方带 confirm=True 再删 —— 不能因为用户收藏了就永远删不掉。
+    """
     with personas_lock(personas_file) as pf:
         data = load_personas(pf)
         if key not in data:
             raise NotFound(f"音色 {key} 不存在")
-        if is_favorite(data[key]):
-            raise Conflict("已收藏的音色不能删除，请先取消收藏")
+        if is_favorite(data[key]) and not confirm:
+            raise Conflict("已收藏的音色不能直接删除；确认影响后请带确认标记重试")
         removed = describe_voice(key, data.pop(key))
         write_personas_atomic(data, pf)
     return removed
@@ -383,16 +388,19 @@ def list_generated(out_dir: Optional[Path] = None, personas_file: Optional[Path]
 
 
 def delete_generated(filename: str, out_dir: Optional[Path] = None,
-                     personas_file: Optional[Path] = None) -> dict:
-    """删除生成库文件；关联音色已收藏时拒绝。"""
+                     personas_file: Optional[Path] = None, confirm: bool = False) -> dict:
+    """删除生成库文件；关联音色已收藏时拒绝（除非调用方确认）。
+
+    音色映射不动 —— 这里删的只是生成的音频文件，语义和 delete_voice 不同。
+    """
     safe = os.path.basename(filename)
     path = _out_dir(out_dir) / safe
     with personas_lock(personas_file) as pf:
         if not path.is_file():
             raise NotFound(f"音频文件不存在: {safe}")
         voice = voice_for_audio(safe, load_personas(pf))
-        if voice and voice["favorite"]:
-            raise Conflict("已收藏的音色不能删除，请先取消收藏")
+        if voice and voice["favorite"] and not confirm:
+            raise Conflict("该生成文件关联的音色已收藏；确认影响后请带确认标记重试")
         path.unlink()
     return {"filename": safe, "voice": voice}
 

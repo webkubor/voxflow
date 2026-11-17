@@ -44,6 +44,7 @@ export interface TaskItem {
     urls?: string[];
     files?: string[];
     committed?: boolean;
+    voice_name?: string;
   };
 }
 
@@ -151,6 +152,16 @@ export const useTasksStore = defineStore('tasks', () => {
     if (task.type === 'design' || task.result?.committed) await voices.loadPersonas().catch((cause) => {
       error.value = cause instanceof Error ? cause.message : String(cause);
     });
+    // 生成完要给下一步，不然用户盯着「完成」不知道去哪用。
+    if (task.type === 'design') {
+      if (task.result?.committed) {
+        showToast(`「${task.result.voice_name || '新音色'}」已加入我的声音，去文本配音即可使用`, 'success');
+      } else {
+        showToast('样音已生成到生成库；试听满意后可收藏进我的声音', 'success');
+      }
+    } else if (task.type === 'clone') {
+      showToast('配音完成，已自动播放；文件在生成库', 'success');
+    }
   };
 
   const pollTasks = async (): Promise<void> => {

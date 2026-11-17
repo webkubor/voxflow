@@ -27,7 +27,7 @@
         <div class="sidebar-header">
           <div class="section-title">
             <Icon name="voice" size="sm" />
-            <span>收藏音色库</span>
+            <span>我的声音</span>
           </div>
           <span class="persona-badge">{{ personasArr.filter(p => p.favorite !== false).length }} 位</span>
         </div>
@@ -88,7 +88,7 @@
             <div class="voice-actions" @click.stop>
               <button @click="toggleFavorite(p)">{{ p.favorite === false ? '☆ 收藏' : '★ 取消收藏' }}</button>
               <button @click="startRename(p)">重命名</button>
-              <button v-if="p.favorite === false" @click="removeVoice(p)">删除</button>
+              <button @click="removeVoice(p)">删除</button>
             </div>
           </div>
           <div v-if="filteredPersonas.length === 0" class="persona-empty">
@@ -288,8 +288,12 @@ const saveRename = async () => {
   } catch (error) { tasksStore.showToast(`重命名失败：${error.message || error}`, 'error'); }
 };
 const removeVoice = async (p) => {
-  if (!window.confirm(`删除未收藏的音色「${p.name || p.key}」？参考音频文件会保留。`)) return;
-  try { await voicesStore.deletePersona(p.key); }
+  const name = p.name || p.key;
+  const msg = p.favorite === false
+    ? `删除音色「${name}」？参考音频文件会保留。`
+    : `删除音色「${name}」？它会同时从收藏音色库移除；参考音频文件会保留。`;
+  if (!window.confirm(msg)) return;
+  try { await voicesStore.deletePersona(p.key, true); }
   catch (error) { tasksStore.showToast(`删除失败：${error.message || error}`, 'error'); }
 };
 

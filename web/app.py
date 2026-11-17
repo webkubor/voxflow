@@ -1096,14 +1096,18 @@ def update_persona(key: str, name: str = Form(None), desc: str = Form(None), fav
 
 
 @app.delete("/api/personas/{key}")
-def delete_persona(key: str):
-    """删除音色注册（不删除音频文件）；已收藏的音色拒绝删除。"""
+def delete_persona(key: str, confirm: bool = False):
+    """删除音色注册（不删除音频文件）。
+
+    已收藏的音色只有调用方确认过影响（confirm=true）才删 —— 界面弹窗
+    已告知「同时从收藏音色库移除、参考音频保留」。
+    """
     with _persona_registration_lock:
         try:
-            vlib.delete_voice(key, personas_file=PERSONAS_FILE)
+            removed = vlib.delete_voice(key, personas_file=PERSONAS_FILE, confirm=confirm)
         except vlib.VoiceLibraryError as exc:
             raise HTTPException(exc.status, str(exc)) from exc
-    return {"ok": True}
+    return {"ok": True, "removed": removed}
 
 
 @app.post("/api/clone")
@@ -1317,14 +1321,15 @@ def get_audio(filename: str):
 
 
 @app.delete("/api/audio/{filename}")
-def delete_audio(filename: str):
-    """删除音频文件"""
+def delete_audio(filename: str, confirm: bool = False):
+    """删除生成库音频文件；关联音色已收藏时需确认影响后才删。"""
     with _persona_registration_lock:
         try:
-            vlib.delete_generated(filename, out_dir=OUT_DIR, personas_file=PERSONAS_FILE)
+            removed = vlib.delete_generated(filename, out_dir=OUT_DIR,
+                                            personas_file=PERSONAS_FILE, confirm=confirm)
         except vlib.VoiceLibraryError as exc:
             raise HTTPException(exc.status, str(exc)) from exc
-    return {"ok": True}
+    return {"ok": True, "removed": removed}
 
 
 # ── LLM (FreeLLMAPI) ────────────────────────────────────────

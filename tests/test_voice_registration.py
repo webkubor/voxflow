@@ -82,9 +82,9 @@ class RegistrationTests(unittest.TestCase):
         self.assertTrue(entry["voice"]["favorite"])
         key = response.json()["persona_key"]
         self.assertEqual(self.client.patch(f"/api/personas/{key}", data={"name": "改名后"}).status_code, 200)
-        self.assertEqual(self.client.patch(f"/api/personas/{key}", data={"favorite": "false"}).status_code, 200)
-        self.assertEqual(self.client.delete(f"/api/audio/{sample.name}").status_code, 200)
-        self.assertEqual(self.client.delete(f"/api/personas/{key}").status_code, 200)
+        self.assertEqual(self.client.delete(f"/api/audio/{sample.name}", params={"confirm": "true"}).status_code, 200)
+        self.assertFalse(sample.exists())
+        self.assertEqual(self.client.delete(f"/api/personas/{key}", params={"confirm": "true"}).status_code, 200)
         self.assertEqual((BASE_DIR / saved["ref"]).read_bytes(), original_ref)
 
     def test_corrupt_mapping_is_never_overwritten(self):
@@ -125,6 +125,7 @@ class RegistrationTests(unittest.TestCase):
         self.assertIsNone(files[similar.name])
         self.assertEqual(self.client.delete(f"/api/audio/{legacy.name}").status_code, 409)
         self.assertTrue(legacy.exists())
+        self.assertEqual(self.client.delete(f"/api/audio/{legacy.name}", params={"confirm": "true"}).status_code, 200)
         self.assertEqual(self.client.delete(f"/api/audio/{similar.name}").status_code, 200)
 
     def test_generated_and_running_presets_cannot_be_submitted_twice(self):
@@ -140,11 +141,14 @@ class RegistrationTests(unittest.TestCase):
         with patch.object(service, "_scan_design_presets", return_value=[preset]), patch.object(service, "_submit_task", return_value="test"):
             self.assertEqual(self.client.post("/api/design", json=body).status_code, 200)
 
-    def test_favorite_voice_is_protected_until_unfavorited(self):
+    def test_favorite_voice_needs_confirmation_to_delete(self):
         self.assertEqual(self.register("protected").status_code, 200)
         self.assertEqual(self.client.delete("/api/personas/protected").status_code, 409)
-        self.assertEqual(self.client.patch("/api/personas/protected", data={"favorite": "false"}).status_code, 200)
-        self.assertEqual(self.client.delete("/api/personas/protected").status_code, 200)
+        # 界面确认影响后可以删，不必先取消收藏。
+        self.assertEqual(self.client.delete("/api/personas/protected", params={"confirm": "true"}).status_code, 200)
+        self.register("also_protected")
+        self.assertEqual(self.client.patch("/api/personas/also_protected", data={"favorite": "false"}).status_code, 200)
+        self.assertEqual(self.client.delete("/api/personas/also_protected").status_code, 200)
 
     def test_capability_and_empty_text_guard(self):
         response = self.client.get("/api/personas")

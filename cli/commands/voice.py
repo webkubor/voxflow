@@ -183,11 +183,14 @@ def voice_rm(
 ):
     """删除未收藏的音色（只移除映射，参考音频保留）"""
     v = _get(key, as_json)
-    if v["favorite"]:
-        fail("已收藏的音色不能删除，请先 voice voice unfavorite", as_json, 409)
-    confirm_or_fail(f"删除音色 {v['name']}（{key}）？", yes, as_json)
+    # 先问「人确认了没有」，再问业务规则 —— 非交互环境一律要显式 --yes，
+    # 不该被「已收藏」抢在前面变成另一种退出码。
+    confirm_or_fail(
+        (f"删除音色 {v['name']}（{key}）？它会同时从收藏移除；参考音频保留。" if v["favorite"]
+         else f"删除音色 {v['name']}（{key}）？参考音频保留。"),
+        yes, as_json)
     try:
-        removed = vlib.delete_voice(key)
+        removed = vlib.delete_voice(key, confirm=True)
     except vlib.VoiceLibraryError as exc:
         fail_from(exc, as_json)
     emit({"removed": removed}, as_json, lambda: console.print(
