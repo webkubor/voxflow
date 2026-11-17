@@ -3,39 +3,28 @@
     <!-- 模型未就绪卡片 -->
     <ModelSetupCard v-if="!modelStatus.design.ready" model="VoiceDesign" />
 
-    <!-- 顶层流程指引 -->
-    <div class="design-flow-banner">
-      <div class="banner-left">
-        <Icon name="sparkles" size="sm" />
-        <div class="banner-text-group">
-          <span class="banner-title">声音工坊 · 音色设计：凭空塑造独一无二的 AI 专属声线</span>
-          <span class="banner-desc">
-            从模板选择声线并生成样音；生成后默认直接加入「我的声音」，即可用于文本配音。
-          </span>
-        </div>
+    <header class="page-head">
+      <div>
+        <h2 class="page-title">音色设计</h2>
+        <p class="page-sub">用文字描述一个声音，本机生成样音。模板只生成一次，生成后加入「我的声音」即可配音。</p>
       </div>
-      <div class="banner-right">
-        <button class="goto-assets-btn primary" @click="$emit('add-persona')">
-          <Icon name="voice" size="sm" /> 录制 / 导入我的声音
-        </button>
-        <button class="goto-assets-btn" @click="router.push({ name: 'library' })">生成库</button>
-        <button class="goto-assets-btn" @click="goToAssets">
-          <Icon name="voice" size="sm" />
-          <span>我的声音 ({{ personasCount }})</span>
-          <Icon name="arrow-right" size="sm" />
-        </button>
+      <div class="page-actions">
+        <button class="ghost-btn" @click="router.push({ name: 'library' })">生成库</button>
+        <button class="ghost-btn" @click="goToAssets">我的声音 · {{ personasCount }}</button>
       </div>
-    </div>
+    </header>
 
     <div class="design-workbench">
       <!-- 左侧：官方灵感预设库（Prompt 模板，点击即自动填入右侧表单） -->
       <aside v-if="designPresets.length > 0" class="presets-sidebar">
         <div class="sidebar-header">
           <div class="section-title">
-            <Icon name="sparkles" size="sm" />
-            <span>✨ 官方灵感预设</span>
+            <span>设计模板</span>
           </div>
-          <span class="preset-badge">{{ filteredPresets.length }} 款模板</span>
+          <div class="preset-filter" role="tablist">
+            <button :aria-pressed="presetView === 'pending'" @click="presetView = 'pending'">待生成 {{ pendingCount }}</button>
+            <button :aria-pressed="presetView === 'all'" @click="presetView = 'all'">全部 {{ designPresets.length }}</button>
+          </div>
         </div>
 
         <div class="preset-search-box">
@@ -68,10 +57,14 @@
             </div>
             <div class="preset-tone">{{ p.tone }}</div>
             <div class="preset-text" :title="p.text">{{ p.text }}</div>
-            <audio v-if="p.audio_url" class="preset-audio" controls preload="none" :src="p.audio_url" @click.stop />
+            <button v-if="p.audio_url" class="preset-play" :aria-label="`试听 ${p.voice_name}`"
+              @click.stop="library.playAudio(p.audio_url, p.voice_name)">
+              <Icon name="play" size="xs" /> 试听样音
+            </button>
           </div>
           <div v-if="filteredPresets.length === 0" class="preset-empty">
-            没有匹配「{{ presetSearch }}」的灵感模板
+            <template v-if="presetSearch">没有匹配「{{ presetSearch }}」的模板</template>
+            <template v-else-if="presetView === 'pending'">模板都生成过了，切到「全部」可以试听</template>
           </div>
         </div>
       </aside>
@@ -82,7 +75,7 @@
           <div class="form-card-head">
             <div class="pane-title">
               <Icon name="design" size="sm" />
-              <span>凭空捏造新声线</span>
+              <span>描述一个新声音</span>
             </div>
             <div v-if="selectedPresetName" class="using-preset-tag">
               <span>已套用预设: {{ selectedPresetName }}</span>
@@ -132,7 +125,7 @@
             <label class="commit-row">
               <n-switch v-model:value="designForm.commit" />
               <span>生成后直接加入「我的声音」</span>
-              <span class="commit-tip">关闭时结果只进入生成库，试听满意后再收藏进「我的声音」</span>
+              <span class="commit-tip">关闭时结果只进入生成库，试听满意后再到生成库点「加入我的声音」</span>
             </label>
             <n-button type="primary" class="glow"
               :disabled="!designForm.name.trim() || !designForm.text.trim() || !modelStatus.design.ready || selectedPresetGenerated"
@@ -156,11 +149,12 @@ import { useCapabilitiesStore } from '../stores/capabilities';
 import { useSynthStore } from '../stores/synth';
 import { useVoicesStore } from '../stores/voices';
 import { useTasksStore } from '../stores/tasks';
+import { useLibraryStore } from '../stores/library';
 import ModelSetupCard from '../components/ModelSetupCard.vue';
 import Icon from '../components/Icon.vue';
 
 const router = useRouter();
-defineEmits(['add-persona']);
+const library = useLibraryStore();
 const synthStore = useSynthStore();
 const { designPresets } = storeToRefs(synthStore);
 const { designForm, doDesign } = synthStore;
@@ -179,10 +173,16 @@ const selectedPresetGenerated = computed(() => designPresets.value.some(
   (p) => p.voice_name === selectedPresetName.value && p.has_generated,
 ));
 
+// 模板只生成一次：默认只列还没生成的，生成过的切到「全部」能看到并试听。
+const presetView = ref('pending');
+const pendingCount = computed(() => designPresets.value.filter((p) => !p.has_generated).length);
 const filteredPresets = computed(() => {
   const kw = presetSearch.value.trim().toLowerCase();
-  if (!kw) return designPresets.value;
-  return designPresets.value.filter(
+  const base = presetView.value === 'pending'
+    ? designPresets.value.filter((p) => !p.has_generated)
+    : designPresets.value;
+  if (!kw) return base;
+  return base.filter(
     (p) => (p.voice_name || '').toLowerCase().includes(kw)
       || (p.tone || '').toLowerCase().includes(kw)
       || (p.text || '').toLowerCase().includes(kw),
@@ -212,64 +212,6 @@ const goToAssets = () => {
 </script>
 
 <style scoped>
-.tab-content-container {
-  max-width: 1180px;
-  margin: 0 auto;
-}
-
-/* 顶层指引横幅 */
-.design-flow-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 18px;
-  background: var(--vf-bg-2);
-  border: 1px solid var(--vf-border);
-  border-radius: var(--vf-radius-md);
-  margin-bottom: var(--vf-space-4);
-}
-.banner-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.banner-text-group {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.banner-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--vf-primary);
-}
-.banner-desc {
-  font-size: 12px;
-  color: var(--vf-text-3);
-  line-height: 1.4;
-}
-
-.goto-assets-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  background: var(--vf-bg-3);
-  border: 1px solid var(--vf-border);
-  border-radius: var(--vf-radius-full);
-  color: var(--vf-text-1);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s var(--vf-ease);
-  white-space: nowrap;
-}
-.goto-assets-btn:hover {
-  background: var(--vf-bg-hover);
-  border-color: var(--vf-primary);
-  color: var(--vf-primary);
-  transform: translateX(2px);
-}
-
 /* 左右分栏工作台 */
 .design-workbench {
   display: grid;
@@ -287,8 +229,13 @@ const goToAssets = () => {
   display: flex;
   flex-direction: column;
   gap: var(--vf-space-3);
-  height: 560px;
+  /* 跟着窗口高度走：小屏不溢出、大屏不留半屏空白（原来写死 560px） */
+  height: clamp(420px, calc(100vh - var(--vf-header-h) - var(--vf-player-h) - 190px), 820px);
 }
+
+.preset-filter { display: inline-flex; gap: 2px; padding: 2px; background: var(--vf-bg-1); border: 1px solid var(--vf-border); border-radius: var(--vf-radius-full); }
+.preset-filter button { padding: 3px 10px; font-size: 12px; color: var(--vf-text-3); background: transparent; border: 0; border-radius: var(--vf-radius-full); cursor: pointer; }
+.preset-filter button[aria-pressed="true"] { color: var(--vf-text-1); background: var(--vf-bg-3); }
 
 .preset-search-box {
   position: relative;
@@ -354,7 +301,7 @@ const goToAssets = () => {
 }
 
 .preset-badge {
-  font-size: 11px;
+  font-size: var(--vf-fs-xs);
   color: var(--vf-text-3);
   background: var(--vf-bg-3);
   padding: 1px 7px;
@@ -407,7 +354,7 @@ const goToAssets = () => {
 }
 
 .using-badge {
-  font-size: 10px;
+  font-size: var(--vf-fs-xs);
   color: var(--vf-primary);
   background: var(--vf-primary-soft);
   padding: 1px 6px;
@@ -415,20 +362,28 @@ const goToAssets = () => {
 }
 
 .preset-tone {
-  font-size: 11px;
+  font-size: var(--vf-fs-xs);
   color: var(--vf-text-2);
   line-height: 1.4;
 }
 
-.preset-audio {
-  display: block;
-  width: 100%;
-  max-width: 100%;
-  height: 32px;
-  margin-top: 8px;
+.preset-play {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--vf-space-1);
+  margin-top: var(--vf-space-2);
+  padding: var(--vf-space-1) var(--vf-space-3);
+  background: var(--vf-primary-soft);
+  border: 1px solid transparent;
+  border-radius: var(--vf-radius-full);
+  color: var(--vf-primary-hover);
+  font-size: 12px;
+  cursor: pointer;
 }
+.preset-play:hover { border-color: var(--vf-primary); }
+.preset-play:focus-visible { outline: 2px solid var(--vf-primary); outline-offset: 2px; }
 .preset-text {
-  font-size: 11px;
+  font-size: var(--vf-fs-xs);
   color: var(--vf-text-3);
   white-space: nowrap;
   overflow: hidden;
@@ -472,7 +427,7 @@ const goToAssets = () => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--vf-fs-xs);
   color: var(--vf-primary);
   background: var(--vf-primary-soft);
   padding: 2px 8px;
@@ -484,7 +439,7 @@ const goToAssets = () => {
   color: var(--vf-primary);
   cursor: pointer;
   padding: 0 2px;
-  font-size: 11px;
+  font-size: var(--vf-fs-xs);
   opacity: 0.7;
 }
 .clear-preset-btn:hover {
@@ -510,7 +465,7 @@ const goToAssets = () => {
 }
 
 .text-counter {
-  font-size: 11px;
+  font-size: var(--vf-fs-xs);
   color: var(--vf-text-3);
   font-variant-numeric: tabular-nums;
 }
@@ -541,7 +496,7 @@ const goToAssets = () => {
 }
 
 .commit-tip {
-  font-size: 11px;
+  font-size: var(--vf-fs-xs);
   color: var(--vf-text-3);
 }
 

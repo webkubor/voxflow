@@ -3,45 +3,51 @@
     <!-- 模型未就绪 / 正在下载 -->
     <ModelSetupCard v-if="!modelStatus.base.ready" model="Base" />
 
-    <!-- 顶层流程指引 -->
-    <div class="clone-flow-banner">
-      <div class="banner-left">
-        <Icon name="voice" size="sm" />
-        <div class="banner-text-group">
-          <span class="banner-title">声音工坊 · 文本配音：选定声线角色，一键口播朗读</span>
-          <span class="banner-desc">在左侧挑选已入库的声音角色，输入台词与语气描述，即刻生成广播级品质旁白与配音音频。</span>
-        </div>
+    <header class="page-head">
+      <div>
+        <h2 class="page-title">我的声音</h2>
+        <p class="page-sub">录 10–20 秒自己的声音并填上原文，就能克隆。选中一个声音，输入文字生成配音。</p>
       </div>
-      <div class="banner-right">
-        <button class="goto-design-btn" @click="goToDesign">
-          <Icon name="sparkles" size="sm" />
-          <span>✨ 捏造新声线角色</span>
-          <Icon name="arrow-right" size="sm" />
+      <div class="page-actions">
+        <button class="ghost-btn" @click="goToDesign">设计新音色</button>
+        <button class="primary-btn" @click="$emit('add-persona')">
+          <Icon name="plus" size="sm" /> 录制 / 导入我的声音
         </button>
       </div>
-    </div>
+    </header>
 
-    <div class="clone-workbench">
+    <!-- 一个声音都没有时：工作台没有意义，给三步引导，不让人对着空的配音框发呆 -->
+    <section v-if="personasArr.length === 0" class="first-run">
+      <h3>先有一个声音，才能配音</h3>
+      <ol class="first-run-steps">
+        <li><strong>录 15 秒</strong><span>照着屏幕上的一段话念，安静环境就行</span></li>
+        <li><strong>起个名字</strong><span>保存后它就在「我的声音」里</span></li>
+        <li><strong>输入文字配音</strong><span>选中声音，写字，点生成</span></li>
+      </ol>
+      <div class="first-run-actions">
+        <button class="primary-btn" @click="$emit('add-persona')"><Icon name="voice" size="sm" /> 录制我的声音</button>
+        <button class="ghost-btn" @click="goToDesign">没有麦克风？用文字设计一个</button>
+      </div>
+    </section>
+
+    <div v-else class="clone-workbench">
       <!-- 左侧：发音角色资产库（310px，与 DesignTab 预设库完全对称） -->
       <aside class="personas-sidebar">
         <div class="sidebar-header">
           <div class="section-title">
-            <Icon name="voice" size="sm" />
             <span>我的声音</span>
+            <span class="persona-badge">{{ personasArr.filter(p => p.favorite !== false).length }}</span>
           </div>
-          <span class="persona-badge">{{ personasArr.filter(p => p.favorite !== false).length }} 位</span>
+          <button class="voice-filter" :aria-pressed="showAllVoices" @click="showAllVoices = !showAllVoices">
+            {{ showAllVoices ? '只看我的声音' : '显示已移出的' }}
+          </button>
         </div>
-
-        <button class="new-persona-btn" @click="$emit('add-persona')">
-          <Icon name="plus" size="sm" /> <span>录制 / 导入我的声音</span>
-        </button>
-        <button class="voice-filter" @click="showAllVoices = !showAllVoices">{{ showAllVoices ? '只看收藏' : '查看全部音色（含未收藏）' }}</button>
         <div class="persona-search-box">
           <Icon name="search" size="sm" class="search-icon" />
           <input
             v-model="personaSearch"
             type="text"
-            placeholder="搜索发音角色、描述..."
+            placeholder="搜索声音"
             class="persona-search-input"
           />
           <button v-if="personaSearch" class="clear-search-btn" @click="personaSearch = ''" title="清除">
@@ -82,18 +88,21 @@
                 <Icon :name="previewKey === p.key ? 'pause' : 'play'" size="sm" />
               </button>
             </div>
-            <div class="persona-desc" :title="p.desc || p.instruction">
-              {{ p.desc || p.instruction || '已装载声音特征' }}
+            <div v-if="p.desc || p.instruction" class="persona-desc" :title="p.desc || p.instruction">
+              {{ p.desc || p.instruction }}
             </div>
             <div class="voice-actions" @click.stop>
-              <button @click="toggleFavorite(p)">{{ p.favorite === false ? '☆ 收藏' : '★ 取消收藏' }}</button>
+              <button @click="toggleFavorite(p)">{{ p.favorite === false ? '加入我的声音' : '移出我的声音' }}</button>
               <button @click="startRename(p)">重命名</button>
-              <button @click="removeVoice(p)">删除</button>
+              <button v-if="p.favorite === false" class="danger" @click="removeVoice(p)">删除</button>
             </div>
           </div>
           <div v-if="filteredPersonas.length === 0" class="persona-empty">
-            <p v-if="personaSearch">未找到「{{ personaSearch }}」相关角色</p>
-            <p v-else>暂无发音角色</p>
+            <p v-if="personaSearch">没有叫「{{ personaSearch }}」的声音</p>
+            <template v-else>
+              <p>还没有声音</p>
+              <button class="primary-btn small" @click="$emit('add-persona')">录制我的声音</button>
+            </template>
           </div>
         </div>
 
@@ -106,7 +115,7 @@
           <div class="speaker-indicator" :class="{ 'warning-indicator': !selectedPersona }">
             <Icon name="voice" size="sm" />
             <span v-if="selectedPersona">当前发音人：<strong>{{ currentPersonaName }}</strong></span>
-            <span v-else class="warn-text">⚠️ 请在左侧选择发音角色</span>
+            <span v-else class="warn-text">先在左侧选一个声音</span>
           </div>
 
           <div class="sub-bar-left">
@@ -180,47 +189,16 @@
           />
         </div>
 
-        <!-- 快捷情感预设 -->
-        <div class="mood-bar">
-          <span class="mood-label"><Icon name="mask" size="sm" />快捷语气：</span>
-          <div class="mood-list">
-            <button
-              v-for="mood in moodPresets"
-              :key="mood.label"
-              class="mood-chip"
-              :class="{ active: activeMood === mood.label }"
-              @click="toggleMood(mood)"
-            >
-              {{ mood.label }}
-            </button>
-          </div>
-        </div>
-
-        <!-- 细化微调参数 -->
-        <div class="params-grid">
-          <div class="param-cell">
-            <label class="param-label"><Icon name="speech" size="sm" />语气描述微调</label>
-            <n-input
-              v-model:value="cloneForm.tone"
-              placeholder="如：沉稳深情、语速适中（留空继承音色描述）"
-            />
-          </div>
-          <div class="param-cell">
-            <label class="param-label"><Icon name="mask" size="sm" />情绪标签匹配</label>
-            <n-input
-              v-model:value="cloneForm.emotion"
-              placeholder="如：happy、sad、angry（留空自动适配）"
-            />
-          </div>
-        </div>
+        <!-- 克隆声音只学音色：MLX base 没有情绪指令入口（core/modes/cloner.py）。
+             以前这里摆着「快捷语气 / 情绪标签 / 情绪优先」，点了没有任何效果 —— 删掉，说实话。 -->
+        <p class="emotion-hint">
+          <Icon name="info" size="sm" />
+          克隆的声音会照着样音的语气说话。想要更激动或更温柔，直接写进文字里（标点、语气词都有用），或换一段同样语气的样音重新录。
+        </p>
 
         <!-- 底部控制栏 -->
         <div class="studio-footer">
           <div class="footer-left">
-            <label class="switch-row">
-              <n-switch v-model:value="cloneForm.emotionPriority" size="small" />
-              <span>情绪控制优先</span>
-            </label>
             <n-button @click="saveScript">
               <Icon name="save" size="sm" />
               <span>保存为草稿</span>
@@ -276,7 +254,7 @@ const renameKey = ref('');
 const toggleFavorite = async (p) => {
   try {
     await voicesStore.updatePersona(p.key, { favorite: p.favorite === false });
-  } catch (error) { tasksStore.showToast(`更新收藏失败：${error.message || error}`, 'error'); }
+  } catch (error) { tasksStore.showToast(`操作失败：${error.message || error}`, 'error'); }
 };
 const startRename = (p) => { renameKey.value = p.key; renameValue.value = p.name || p.key; renameDialog.value = true; };
 const saveRename = async () => {
@@ -289,10 +267,11 @@ const saveRename = async () => {
 };
 const removeVoice = async (p) => {
   const name = p.name || p.key;
-  const msg = p.favorite === false
-    ? `删除音色「${name}」？参考音频文件会保留。`
-    : `删除音色「${name}」？它会同时从收藏音色库移除；参考音频文件会保留。`;
-  if (!window.confirm(msg)) return;
+  // 规则与生成库、CLI 一致：在「我的声音」里的不能删，先移出再删。
+  if (p.favorite !== false) {
+    return tasksStore.showToast('先「移出我的声音」，才能删除', 'warning');
+  }
+  if (!window.confirm(`删除声音「${name}」？\n\n· 它会从列表里消失，配音时不能再选\n· 原始录音文件保留在本机，不会被删\n· 这一步不能撤销`)) return;
   try { await voicesStore.deletePersona(p.key, true); }
   catch (error) { tasksStore.showToast(`删除失败：${error.message || error}`, 'error'); }
 };
@@ -326,32 +305,7 @@ const showDrafts = ref(false);
 
 const cloneForm = reactive({
   text: '',
-  tone: '',
-  emotion: '',
-  emotionPriority: false,
 });
-
-const moodPresets = [
-  { label: '温柔治愈', tone: '语速轻柔，声线细腻温和', emotion: 'gentle, comforting' },
-  { label: '激情旁白', tone: '情绪饱满，抑扬顿挫富有感染力', emotion: 'excited, dynamic' },
-  { label: '午夜低语', tone: '气声偏多，极具亲近感的耳语', emotion: 'whispering, intimate' },
-  { label: '武侠江湖', tone: '苍劲豪迈，带有江湖侠客的洒脱与威严', emotion: 'heroic, calm' },
-];
-const activeMood = ref('');
-
-const toggleMood = (mood) => {
-  if (activeMood.value === mood.label) {
-    activeMood.value = '';
-    cloneForm.tone = '';
-    cloneForm.emotion = '';
-    tasksStore.showToast(`已取消「${mood.label}」`, 'info');
-  } else {
-    activeMood.value = mood.label;
-    cloneForm.tone = mood.tone;
-    cloneForm.emotion = mood.emotion;
-    tasksStore.showToast(`已应用「${mood.label}」`, 'success');
-  }
-};
 
 const handleSynthesize = () => {
   if (!selectedPersona.value) return tasksStore.showToast('请先选择发音角色', 'warning');
@@ -360,9 +314,6 @@ const handleSynthesize = () => {
     mode: 'clone',
     persona: selectedPersona.value,
     text: cloneForm.text,
-    tone: cloneForm.tone,
-    emotion: cloneForm.emotion,
-    emotion_priority: cloneForm.emotionPriority,
   });
 };
 
@@ -397,67 +348,38 @@ onMounted(() => synthStore.loadScripts());
   font-size: 12px;
   padding: 5px 8px;
 }
-.voice-filter { margin: 0 0 8px; }
-.voice-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.voice-filter { padding: 3px 8px; }
+.voice-filter[aria-pressed="true"] { color: var(--vf-primary-hover); border-color: var(--vf-primary); }
+/* 操作只在选中 / 悬停 / 键盘聚焦时出现：列表扫读时只看名字，不被一排按钮淹没。 */
+.voice-actions { display: none; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.persona-card.active .voice-actions,
+.persona-card:hover .voice-actions,
+.persona-card:focus-within .voice-actions { display: flex; }
 .voice-actions button:hover, .voice-filter:hover { color: var(--vf-text-1); }
-.tab-content-container {
-  max-width: 1180px;
-  margin: 0 auto;
-}
-
-/* 顶层指引横幅 */
-.clone-flow-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 18px;
+/* 左右分栏工作台：严格 310px + 1fr 对齐 DesignTab */
+.first-run {
+  margin-top: var(--vf-space-6);
+  padding: var(--vf-space-8, 32px) var(--vf-space-6);
   background: var(--vf-bg-2);
   border: 1px solid var(--vf-border);
   border-radius: var(--vf-radius-md);
-  margin-bottom: var(--vf-space-4);
+  text-align: center;
 }
-.banner-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.first-run h3 { margin: 0 0 var(--vf-space-4); font-size: 16px; font-weight: 600; color: var(--vf-text-1); }
+.first-run-steps {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--vf-space-3);
+  max-width: 720px; margin: 0 auto var(--vf-space-6); padding: 0; list-style: none; counter-reset: step;
 }
-.banner-text-group {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.first-run-steps li {
+  counter-increment: step; display: flex; flex-direction: column; gap: 4px;
+  padding: var(--vf-space-3); background: var(--vf-bg-1); border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-sm); font-size: 12px; color: var(--vf-text-2);
 }
-.banner-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--vf-primary);
-}
-.banner-desc {
-  font-size: 12px;
-  color: var(--vf-text-3);
-  line-height: 1.4;
-}
-.goto-design-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  background: var(--vf-bg-3);
-  border: 1px solid var(--vf-border);
-  border-radius: var(--vf-radius-full);
-  color: var(--vf-text-1);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s var(--vf-ease);
-  white-space: nowrap;
-}
-.goto-design-btn:hover {
-  background: var(--vf-bg-hover);
-  border-color: var(--vf-primary);
-  color: var(--vf-primary);
-  transform: translateX(2px);
-}
+.first-run-steps li::before { content: counter(step); font-size: 18px; font-weight: 700; color: var(--vf-primary); }
+.first-run-steps strong { font-size: 13px; color: var(--vf-text-1); }
+.first-run-actions { display: flex; justify-content: center; gap: var(--vf-space-2); flex-wrap: wrap; }
+@media (max-width: 640px) { .first-run-steps { grid-template-columns: 1fr; } }
 
-/* 左右分栏工作台：严格 310px + 1fr 对齐 DesignTab */
 .clone-workbench {
   display: grid;
   grid-template-columns: 310px 1fr;
@@ -474,7 +396,8 @@ onMounted(() => synthStore.loadScripts());
   display: flex;
   flex-direction: column;
   gap: var(--vf-space-3);
-  height: 560px;
+  /* 跟着窗口高度走：小屏不溢出、大屏不留半屏空白（原来写死 560px） */
+  height: clamp(420px, calc(100vh - var(--vf-header-h) - var(--vf-player-h) - 190px), 820px);
 }
 
 .sidebar-header {
@@ -495,7 +418,7 @@ onMounted(() => synthStore.loadScripts());
 }
 
 .persona-badge {
-  font-size: 11px;
+  font-size: var(--vf-fs-xs);
   color: var(--vf-text-3);
   background: var(--vf-bg-3);
   padding: 1px 7px;
@@ -612,7 +535,7 @@ onMounted(() => synthStore.loadScripts());
   text-overflow: ellipsis;
 }
 .using-badge {
-  font-size: 10px;
+  font-size: var(--vf-fs-xs);
   color: var(--vf-primary);
   background: rgba(16, 185, 129, 0.15);
   border: 1px solid var(--vf-primary);
@@ -621,7 +544,7 @@ onMounted(() => synthStore.loadScripts());
   white-space: nowrap;
 }
 .persona-status-tag {
-  font-size: 10px;
+  font-size: var(--vf-fs-xs);
 }
 .persona-status-tag.ready {
   color: var(--vf-primary);
@@ -655,7 +578,7 @@ onMounted(() => synthStore.loadScripts());
   animation: pulse 1.5s infinite;
 }
 .persona-desc {
-  font-size: 11px;
+  font-size: var(--vf-fs-xs);
   color: var(--vf-text-3);
   line-height: 1.4;
   display: -webkit-box;
@@ -671,26 +594,7 @@ onMounted(() => synthStore.loadScripts());
   color: var(--vf-text-3);
 }
 
-.new-persona-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  padding: 8px;
-  background: var(--vf-bg-3);
-  border: 1px dashed var(--vf-border-strong);
-  border-radius: var(--vf-radius-sm);
-  color: var(--vf-text-2);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.new-persona-btn:hover {
-  border-color: var(--vf-primary);
-  color: var(--vf-primary);
-  background: var(--vf-primary-soft);
-}
+
 
 /* 右侧核心工作台 */
 .studio {
@@ -768,7 +672,7 @@ onMounted(() => synthStore.loadScripts());
 }
 
 .studio-counter {
-  font-size: 11px;
+  font-size: var(--vf-fs-xs);
   color: var(--vf-text-3);
   font-variant-numeric: tabular-nums;
   font-family: ui-monospace, monospace;
@@ -876,69 +780,21 @@ onMounted(() => synthStore.loadScripts());
   color: var(--vf-err);
 }
 
-/* mood 预设栏 */
-.mood-bar {
+/* 语气说明：克隆不支持情绪指令，如实告知 */
+.emotion-hint {
   display: flex;
-  align-items: center;
-  gap: var(--vf-space-3);
-  flex-wrap: wrap;
-}
-
-.mood-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--vf-text-3);
-  flex: none;
-}
-
-.mood-list {
-  display: flex;
+  align-items: flex-start;
   gap: var(--vf-space-2);
-  flex-wrap: wrap;
-}
-
-.mood-chip {
-  background: var(--vf-bg-3);
-  border: 1px solid var(--vf-border);
-  color: var(--vf-text-2);
+  margin: 0;
+  padding: var(--vf-space-2) var(--vf-space-3);
   font-size: 12px;
-  padding: 4px 12px;
-  border-radius: var(--vf-radius-full);
-  cursor: pointer;
-  transition: all 0.15s var(--vf-ease);
-}
-
-.mood-chip:hover {
-  border-color: var(--vf-border-strong);
-  color: var(--vf-text-1);
-}
-
-.mood-chip.active {
-  background: var(--vf-primary-soft);
-  border-color: var(--vf-primary);
-  color: var(--vf-primary);
-  font-weight: 600;
-}
-
-/* params 参数区 */
-.params-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--vf-space-4);
-}
-
-.param-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.param-label {
-  font-size: 12px;
+  line-height: 1.6;
   color: var(--vf-text-2);
+  background: var(--vf-bg-1);
+  border: 1px dashed var(--vf-border);
+  border-radius: var(--vf-radius-sm);
 }
+.voice-actions button.danger:hover { color: var(--vf-err); border-color: var(--vf-err); }
 
 /* footer 控制区 */
 .studio-footer {
@@ -957,26 +813,12 @@ onMounted(() => synthStore.loadScripts());
   gap: var(--vf-space-4);
 }
 
-.switch-row {
-  display: flex;
-  align-items: center;
-  gap: var(--vf-space-2);
-  font-size: 12px;
-  color: var(--vf-text-2);
-  cursor: pointer;
-}
-
-
-
 @media (max-width: 860px) {
   .clone-workbench {
     grid-template-columns: 1fr;
   }
   .personas-sidebar {
     height: 260px;
-  }
-  .params-grid {
-    grid-template-columns: 1fr;
   }
 }
 </style>

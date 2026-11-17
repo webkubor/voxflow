@@ -1,12 +1,9 @@
 <template>
   <div class="tab-content-container">
-    <header class="lib-head">
-      <div class="lib-title-row">
-        <h3 class="tab-title">
-          <Icon name="library" size="md" />
-          <span>生成库</span>
-        </h3>
-        <span class="count-pill">{{ audioFiles.length }} 条</span>
+    <header class="page-head">
+      <div>
+        <h2 class="page-title">生成库</h2>
+        <p class="page-sub">本机生成的所有音频，共 {{ audioFiles.length }} 条。设计样音试听满意后点「加入我的声音」，就能用来配音。</p>
       </div>
       <div class="lib-tools">
         <div class="search-input-wrap">
@@ -26,8 +23,6 @@
           <option value="clone">克隆</option>
           <option value="design">设计</option>
           <option value="dialogue">剧本</option>
-          <option value="suno">音乐</option>
-          <option value="cover">翻唱</option>
         </select>
         <n-button @click="loadAudioList">
           <Icon name="refresh" size="sm" />
@@ -48,13 +43,15 @@
               <Icon name="play" size="sm" />
             </button>
             <div class="row-main">
-              <div class="file-name" :title="f.filename">{{ f.filename }}</div>
+              <div class="file-name" :title="f.filename">{{ displayName(f.filename) }}</div>
               <div class="file-meta">
                 <span class="meta-type" :class="guessType(f.filename)">{{ TYPE_LABEL[guessType(f.filename)] }}</span>
                 <span class="meta-dot">·</span>
                 <span>{{ formatBytes(f.size) }}</span>
                 <span class="meta-dot">·</span>
                 <span class="time-text">{{ f.created }}</span>
+                <span class="meta-dot">·</span>
+                <span class="raw-name">{{ f.filename }}</span>
               </div>
             </div>
             <div class="row-actions">
@@ -62,9 +59,10 @@
                 <Icon name="download" size="sm" />
                 <span>下载</span>
               </a>
-              <button v-if="guessType(f.filename) === 'design' && !f.voice" class="action-pill" @click="startSave(f)">收藏音色</button>
-              <span v-if="f.voice" class="action-pill">{{ f.voice.favorite ? '已收藏' : '已取消收藏' }} · {{ f.voice.name }}</span>
-              <button v-if="!f.voice?.favorite" class="delete-btn" title="删除" @click="removeAudio(f.filename)">
+              <button v-if="guessType(f.filename) === 'design' && !f.voice" class="action-pill primary" @click="startSave(f)">加入我的声音</button>
+              <span v-if="f.voice?.favorite" class="voice-link">在我的声音里 · {{ f.voice.name }}</span>
+              <button v-else-if="f.voice" class="action-pill primary" @click="readdVoice(f.voice)">重新加入我的声音</button>
+              <button v-if="!f.voice?.favorite" class="delete-btn" :title="'删除 ' + displayName(f.filename)" @click="removeAudio(f.filename)">
                 <Icon name="trash" size="sm" />
               </button>
             </div>
@@ -79,7 +77,7 @@
       class="lib-empty"
     >
       <template #extra>
-        <p class="empty-hint">在「声音克隆」或「音色设计」页面开始合成声音，产物会自动归档到这里。</p>
+        <p class="empty-hint">在「我的声音」配音，或在「音色设计」生成样音，结果会出现在这里。</p>
       </template>
     </n-empty>
 
@@ -92,12 +90,12 @@
         <n-button @click="keyword = ''">清除搜索</n-button>
       </template>
     </n-empty>
-    <n-modal v-model:show="saveDialog" preset="card" title="收藏设计音色" style="width: min(480px, 92vw)">
+    <n-modal v-model:show="saveDialog" preset="card" title="加入我的声音" style="width: min(480px, 92vw)">
       <p>音色名称</p>
       <n-input v-model:value="saveName" placeholder="为音色取名" />
       <p>参考音频里的原文（历史文件没有记录时必填）</p>
       <n-input v-model:value="saveText" type="textarea" placeholder="输入样音中实际说出的文字；已有记录可留空" />
-      <template #footer><n-button type="primary" :loading="saving" @click="saveVoice">收藏到音色库</n-button></template>
+      <template #footer><n-button type="primary" :loading="saving" @click="saveVoice">加入我的声音</n-button></template>
     </n-modal>
   </div>
 </template>
@@ -118,6 +116,11 @@ const { loadAudioList, playAudio, deleteAudio } = libraryStore;
 
 const keyword = ref('');
 const filterType = ref('all');
+/** 文件名去掉类型前缀、名称指纹和时间戳，只留人取的名字；原文件名仍在副行可见。 */
+const displayName = (filename) => filename
+  .replace(/^\[[^\]]+\]/, '')
+  .replace(/(_[0-9a-f]{8})?_\d{8}_\d{6}(\.[a-z0-9]+)$/i, '')
+  .replace(/\.[a-z0-9]+$/i, '') || filename;
 const saveDialog = ref(false);
 const saveName = ref('');
 const saveText = ref('');
@@ -125,7 +128,7 @@ const saveFile = ref('');
 const saving = ref(false);
 const startSave = (file) => {
   saveFile.value = file.filename;
-  saveName.value = file.filename.replace(/^\[设计\]/, '').replace(/_\d{8}_\d{6}.*$/, '');
+  saveName.value = displayName(file.filename);
   saveText.value = '';
   saveDialog.value = true;
 };
@@ -141,14 +144,21 @@ const saveVoice = async () => {
     tasksStore.showToast(await toMessage(error), 'error');
   } finally { saving.value = false; }
 };
+// 删除规则与「我的声音」页、CLI 一致：关联声音还在「我的声音」里的文件不给删（按钮不出现）。
 const removeAudio = async (filename) => {
   const voice = audioFiles.value.find((f) => f.filename === filename)?.voice;
-  const msg = voice?.favorite
-    ? `删除生成文件「${filename}」？它关联的音色「${voice.name}」会失去这份样音（音色本身保留）。`
-    : `删除生成文件「${filename}」？`;
-  if (!window.confirm(msg)) return;
+  const lines = [`删除「${displayName(filename)}」？`, '', '· 音频文件会从本机删除，不能撤销'];
+  if (voice) lines.push(`· 已移出的声音「${voice.name}」会失去这份样音`);
+  if (!window.confirm(lines.join('\n'))) return;
   try { await deleteAudio(filename, true); }
   catch (error) { tasksStore.showToast(await toMessage(error), 'error'); }
+};
+const readdVoice = async (voice) => {
+  try {
+    await useVoicesStore().updatePersona(voice.key, { favorite: true });
+    await loadAudioList();
+    tasksStore.showToast(`「${voice.name}」已回到我的声音`, 'success');
+  } catch (error) { tasksStore.showToast(await toMessage(error), 'error'); }
 };
 
 const TYPE_LABEL = {
@@ -249,7 +259,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.tab-content-container { max-width: 1080px; margin: 0 auto; }
 
 .tab-title { display: flex; align-items: center; gap: var(--vf-space-2); }
 
@@ -265,7 +274,7 @@ onMounted(async () => {
 }
 .lib-title-row { display: flex; align-items: center; gap: var(--vf-space-3); }
 .count-pill {
-  font-size: 11px;
+  font-size: var(--vf-fs-xs);
   background: var(--vf-bg-3);
   color: var(--vf-text-2);
   padding: 2px 8px;
@@ -332,7 +341,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: var(--vf-space-2);
-  font-size: 11px;
+  font-size: var(--vf-fs-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -400,7 +409,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: var(--vf-space-2);
-  font-size: 11px;
+  font-size: var(--vf-fs-xs);
   color: var(--vf-text-3);
 }
 .meta-dot { color: var(--vf-border-strong); }
@@ -462,4 +471,22 @@ onMounted(async () => {
 
 .empty-hint { font-size: 12px; color: var(--vf-text-3); margin: 0; }
 
+.raw-name {
+  color: var(--vf-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.action-pill.primary { color: var(--vf-primary-hover); border-color: var(--vf-primary-soft); }
+.action-pill.primary:hover { border-color: var(--vf-primary); }
+.voice-link { font-size: 12px; color: var(--vf-text-3); white-space: nowrap; }
+
+/* 窄屏：操作按钮折到第二行，文件名不被挤成一个字 */
+@media (max-width: 720px) {
+  .audio-row { flex-wrap: wrap; }
+  .row-main { flex: 1 1 calc(100% - 60px); }
+  .row-actions { flex: 1 1 100%; justify-content: flex-end; flex-wrap: wrap; }
+  .raw-name { display: none; }
+}
 </style>

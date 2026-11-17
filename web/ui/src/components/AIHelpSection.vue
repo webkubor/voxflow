@@ -39,7 +39,7 @@
                 :disabled="!llm.available || !llm.genPrompt.trim()"
                 @click="aiGenerate"
               >
-                ✨ 生成文案
+                生成文案
               </n-button>
             </div>
           </n-space>
@@ -66,7 +66,7 @@
                 :disabled="!llm.available"
                 @click="aiPolish"
               >
-                ✨ 润色文案
+                润色文案
               </n-button>
             </div>
           </n-space>

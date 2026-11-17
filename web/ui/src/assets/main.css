@@ -272,10 +272,43 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: var(--vf-space-4);
-  max-width: 1080px;
+  max-width: 1320px;
   margin: 0 auto;
   width: 100%;
   padding: 0 0 var(--vf-space-8);
+}
+
+/* 页面头：标题 + 一句用途 + 右侧操作。不加卡片底，不写营销口号 ——
+   导航已经告诉用户「在哪」，这里只回答「这页能做什么、下一步按什么」。 */
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--vf-space-6);
+  padding: var(--vf-space-2) 0 var(--vf-space-4);
+  border-bottom: 1px solid var(--vf-border);
+}
+.page-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--vf-text-1);
+}
+.page-sub {
+  margin: var(--vf-space-1) 0 0;
+  max-width: 80ch;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--vf-text-2);
+}
+.page-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--vf-space-2);
+}
+@media (max-width: 760px) {
+  .page-head { flex-direction: column; align-items: flex-start; }
 }
 
 .tab-title {

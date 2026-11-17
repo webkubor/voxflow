@@ -78,6 +78,8 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
    * 不至于月底发现浪费了 1000 credits。
    */
   const capBadges = computed<CapBadge[]>(() => {
+    // 2026-11-17 产品评审：声音工作流不消耗 museav 积分，未连接时顶栏挂一个灰色
+    // 「museav 未接」只是噪音 —— 只在已连接时显示（余额仍然看得见）。
     return [
       { key: 'tts', label: '语音', what: caps.value.tts?.model || 'Qwen3-TTS',
         ready: caps.value.tts?.ready, detail: caps.value.tts?.detail },
@@ -95,7 +97,7 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
       },
       { key: 'llm', label: '文案', what: caps.value.llm?.model || '未接',
         ready: caps.value.llm?.ready, detail: caps.value.llm?.detail },
-    ];
+    ].filter((b) => b.key !== 'museav' || b.ready);
   });
 
   /**

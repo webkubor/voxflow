@@ -124,6 +124,12 @@
   --vf-shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.6);
 
   /* ── 布局常量 ── */
+  /* 字号阶梯：正文最小 12px，不再出现 10/11px 的按钮字 */
+  --vf-fs-xs: 12px;
+  --vf-fs-sm: 13px;
+  --vf-fs-md: 14px;
+  --vf-fs-lg: 16px;
+  --vf-fs-xl: 22px;
   --vf-header-h: 56px;
   --vf-player-h: 72px;
   --vf-sider-w: 280px;

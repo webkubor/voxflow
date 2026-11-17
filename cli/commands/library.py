@@ -11,7 +11,7 @@ from rich.table import Table
 from core import voice_library as vlib
 from cli.output import JSON_OPTION, confirm_or_fail, console, emit, fail_from
 
-app = typer.Typer(help="生成库：list / save（收藏设计样音）/ rm（仅未受保护的文件）。")
+app = typer.Typer(help="生成库：list / save（把设计样音加入我的声音）/ rm（需确认）。")
 
 KINDS = ("design", "clone", "dialogue", "preview", "other")
 

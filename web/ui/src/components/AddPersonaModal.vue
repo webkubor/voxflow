@@ -3,35 +3,37 @@
     :show="show" 
     preset="card" 
     style="width: min(500px, calc(100vw - 32px));"
-    title="注册新音色"
+    title="录制我的声音"
     :bordered="false"
     @update:show="closeModal"
   >
-    <n-form :model="addForm" label-placement="left" label-width="80">
-      <n-form-item label="显示名称">
-        <n-input 
-          v-model:value="addForm.name" 
-          placeholder="例如：我的旁白音色" 
-        />
+    <n-form :model="addForm" label-placement="top">
+      <!-- 顺序 = 动作顺序：先看要念什么 → 录 → 起名。原来先填名称和描述，
+           真正决定克隆质量的录音被挤到最后。 -->
+      <n-form-item label="① 照着念这段">
+        <n-input v-model:value="addForm.refText" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" :maxlength="1000"
+          placeholder="录音里实际说的每一个字。必须和录音一致，否则克隆会吞字或乱读。" />
       </n-form-item>
-      
-      <n-form-item label="音色描述">
-        <n-input 
-          v-model:value="addForm.instruction" 
-          type="textarea"
-          rows="2"
-          placeholder="描述这个声音的语速、语气和特色，如：中年男子，沉稳磁性" 
-        />
-      </n-form-item>
-
-      <n-form-item label="录音原文">
-        <n-input v-model:value="addForm.refText" type="textarea" :maxlength="1000" placeholder="逐字填写音频里实际说的话；录音时也可以先写好再照读。" />
-      </n-form-item>
-      <n-form-item label="参考音频">
+      <n-form-item label="② 录音">
         <!-- ⚠️ n-form-item 的内容区是横向 flex：直接放两个兄弟节点，
-             它们会各自成为并排的 flex 子项、被挤成竖排。必须包一层。
-             （同一个坑今天在作品看板的详情区已经踩过一次） -->
+             它们会各自成为并排的 flex 子项、被挤成竖排。必须包一层。 -->
         <div class="ref-audio-col">
+        <!-- 直接录：克隆自己的声音本来不该先去别的软件录一段再回来传文件。
+             浏览器自带 MediaRecorder，localhost 就是安全上下文，够用。 -->
+        <div class="record-row">
+          <button
+            class="record-btn"
+            :class="{ recording }"
+            type="button"
+            @click="recording ? stopRecord() : startRecord()"
+          >
+            <Icon :name="recording ? 'pause' : 'voice'" size="sm" />
+            <span>{{ recording ? `停止录音 ${recSec}s` : '直接录一段' }}</span>
+          </button>
+          <span class="sub-tip">
+            {{ recording ? '念完就点停止（最长 30 秒自动停）' : '安静环境，正常语速念完上面这段，10–20 秒' }}
+          </span>
+        </div>
         <div 
           class="file-drop-zone"
           :class="{ 'is-dragover': dragOver }"
@@ -50,8 +52,8 @@
           
           <div v-if="!addForm.audioFile" class="drop-placeholder">
             <Icon name="folder" size="lg" class="upload-icon" />
-            <p>点击选择 或 拖拽 WAV/MP3 音频文件到此处</p>
-            <span class="sub-tip">建议长度 3-15 秒，波形完整无杂音</span>
+            <p>或者上传已有录音：点击选择 / 拖进来</p>
+            <span class="sub-tip">WAV / MP3 / M4A，10–20 秒最好；上传时请把上面的原文改成录音里实际说的话</span>
           </div>
           
           <div v-else class="selected-file-info" @click.stop>
@@ -65,23 +67,13 @@
             </n-button>
           </div>
         </div>
-        <!-- 直接录：克隆自己的声音本来不该先去别的软件录一段再回来传文件。
-             浏览器自带 MediaRecorder，localhost 就是安全上下文，够用。 -->
-        <div class="record-row">
-          <button
-            class="record-btn"
-            :class="{ recording }"
-            type="button"
-            @click="recording ? stopRecord() : startRecord()"
-          >
-            <Icon :name="recording ? 'pause' : 'voice'" size="sm" />
-            <span>{{ recording ? `停止录音 ${recSec}s` : '直接录一段' }}</span>
-          </button>
-          <span class="sub-tip">
-            {{ recording ? '正常语速念一段话，10 秒左右最好' : '不用先去别处录好再传文件' }}
-          </span>
         </div>
-        </div>
+      </n-form-item>
+      <n-form-item label="③ 给它起个名字">
+        <n-input v-model:value="addForm.name" placeholder="例如：我的旁白" />
+      </n-form-item>
+      <n-form-item label="备注（选填）">
+        <n-input v-model:value="addForm.instruction" placeholder="自己看的说明，如：偏沉稳、适合旁白" />
       </n-form-item>
     </n-form>
 
@@ -89,7 +81,7 @@
       <div class="modal-footer-btns">
         <n-button @click="closeModal">取消</n-button>
         <n-button type="primary" :disabled="!isFormValid" @click="submitAdd">
-          确认注册
+          加入我的声音
         </n-button>
       </div>
     </template>
@@ -122,11 +114,14 @@ const { showToast, showLoading, hideLoading } = useTasksStore();
 const dragOver = ref(false);
 const fileInput = ref(null);
 
+// 预填一段：覆盖常见声母韵母、有停顿，念下来 12 秒左右。用户最不想做的就是自己想一段话。
+const SAMPLE_TEXT = '今天天气不错，我想用自己的声音录一段话。语速放平，咬字清楚，读完这一句就可以停了。';
+
 const addForm = reactive({
   key: '',
   name: '',
   instruction: '',
-  refText: '',
+  refText: SAMPLE_TEXT,
   audioFile: null
 });
 
@@ -197,7 +192,7 @@ const closeModal = () => {
   addForm.key = '';
   addForm.name = '';
   addForm.instruction = '';
-  addForm.refText = '';
+  addForm.refText = SAMPLE_TEXT;
   addForm.audioFile = null;
   dragOver.value = false;
   emit('update:show', false);
@@ -246,7 +241,7 @@ const submitAdd = async () => {
   formData.append('ref_text', addForm.refText.trim());
   formData.append('audio', addForm.audioFile);
 
-  showLoading('正在上传参考音频并注册音色...');
+  showLoading('正在保存你的声音…');
   try {
     await addPersona(formData);
     showToast('音色注册成功', 'success');
@@ -316,7 +311,7 @@ const submitAdd = async () => {
 }
 
 .sub-tip {
-  font-size: 11px;
+  font-size: var(--vf-fs-xs);
   color: var(--vf-text-3);
   margin-top: 4px;
 }
@@ -352,7 +347,7 @@ const submitAdd = async () => {
 }
 
 .file-size {
-  font-size: 11px;
+  font-size: var(--vf-fs-xs);
   color: var(--vf-text-3);
 }
 

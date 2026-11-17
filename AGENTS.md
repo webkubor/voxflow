@@ -30,12 +30,12 @@ voice voice add <key> <audio> --ref-text "逐字原文" [--name 显示名] --jso
 voice voice record <key> --ref-text "朗读原文" --seconds 15 --json          # 麦克风录音并注册（需终端麦克风权限）
 voice voice list [--favorites] --json                                      # 音色库；--favorites 只看收藏
 voice voice rename <key> <新名> | favorite <key> | unfavorite <key> --json
-voice voice rm <key> --yes --json                                          # 仅未收藏可删；参考音频保留
+voice voice rm <key> --yes --json                                          # --yes 即确认影响（收藏的也可删）；参考音频保留
 voice preset list [--pending] --json                                       # 模板及是否已生成
 voice preset run <模板> [--dry-run] --json                                  # 已生成/正在生成 → 退出 4
 voice library list [--kind design] [--unsaved] --json                      # 生成库
 voice library save <文件名> <音色名> [--ref-text ...] --json                # 收藏设计样音，不重新生成
-voice library rm <文件名> --yes --json                                     # 关联音色已收藏 → 退出 4
+voice library rm <文件名> --yes --json                                     # --yes 即确认；API 不带 confirm 时收藏关联文件返回 409
 voice design / voice clone ... --json                                      # 本地模型生成，返回文件路径
 ```
 

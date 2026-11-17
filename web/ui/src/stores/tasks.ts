@@ -157,7 +157,7 @@ export const useTasksStore = defineStore('tasks', () => {
       if (task.result?.committed) {
         showToast(`「${task.result.voice_name || '新音色'}」已加入我的声音，去文本配音即可使用`, 'success');
       } else {
-        showToast('样音已生成到生成库；试听满意后可收藏进我的声音', 'success');
+        showToast('样音已生成到生成库；试听满意后点「加入我的声音」', 'success');
       }
     } else if (task.type === 'clone') {
       showToast('配音完成，已自动播放；文件在生成库', 'success');

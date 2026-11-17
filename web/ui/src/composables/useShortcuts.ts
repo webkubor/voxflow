@@ -25,7 +25,8 @@
 import { onBeforeUnmount, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
-const TAB_ORDER = ['clone', 'design', 'dialogue', 'attest', 'library', 'intake', 'ops'];
+// 与 MainLayout 的 TAB_GROUPS 展示顺序一致（ShortcutHelp 也照这个写）。
+const TAB_ORDER = ['clone', 'design', 'library', 'dialogue', 'attest', 'ops'];
 
 /** 输入框判定：这些元素里所有快捷键都失效，避免打断输入 */
 const isEditableTarget = (target: EventTarget | null): boolean => {

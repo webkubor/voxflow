@@ -119,12 +119,12 @@
           >
             <!-- 顺序与 tab 名跟上面的 TABS 保持一致。导航条被 .hidden-tabs
                  藏起来了、这些 tab 文案看不见，但留着旧名会误导下一个人。 -->
+            <n-tab-pane name="clone" tab="我的声音"><CloneTab @add-persona="showAddPersona = true" /></n-tab-pane>
             <n-tab-pane name="design" tab="音色设计"><DesignTab /></n-tab-pane>
-            <n-tab-pane name="clone" tab="文本配音"><CloneTab @add-persona="showAddPersona = true" /></n-tab-pane>
             <n-tab-pane name="dialogue" tab="剧本演播"><DialogueTab /></n-tab-pane>
             <n-tab-pane name="attest" tab="原创存证"><AttestTab /></n-tab-pane>
             <n-tab-pane name="ops" tab="收益运营"><OpsTab /></n-tab-pane>
-            <n-tab-pane name="library" tab="媒体资产"><LibraryTab /></n-tab-pane>
+            <n-tab-pane name="library" tab="生成库"><LibraryTab /></n-tab-pane>
             <n-tab-pane name="intake" tab="导入音频"><IntakeTab /></n-tab-pane>
           </n-tabs>
         </n-layout-content>
@@ -250,7 +250,6 @@ import GlobalPlayer from './GlobalPlayer.vue';
 import TaskPanel from './TaskPanel.vue';
 import AddPersonaModal from './AddPersonaModal.vue';
 import EditPersonaModal from './EditPersonaModal.vue';
-import PersonaSidebar from './PersonaSidebar.vue';
 import CurrentPersonaChip from './CurrentPersonaChip.vue';
 import ErrorLogPanel from './ErrorLogPanel.vue';
 import ShortcutHelp from './ShortcutHelp.vue';
@@ -325,27 +324,29 @@ watch(
  * 等于让人先建立一遍认知再告诉他用不了。
  */
 const TAB_GROUPS = [
+  // 2026-11-17 产品评审后重排：用户的主线是「录/设计声音 → 用它配音 → 在生成库挑结果」，
+  // 三屏放同一组，顺序就是动线。原来「生成库」夹在「原创存证」和「成本」之间，
+  // 「原创存证」还是第二组的第一个入口 —— 那是音乐时代留下的排序。
+  // 本组不设 needsModel：没下模型时两个生成页各自显示下载卡，生成库照常可看。
   {
-    key: 'voice', title: '声音工坊', icon: 'voice', needsModel: true,
+    key: 'voice', title: '声音库', icon: 'voice',
     tabs: [
-      { name: 'design', label: '音色设计', icon: 'design', hint: '文字捏音色 / 录音样音克隆，打造专属 AI 声线' },
-      { name: 'clone', label: '文本配音', icon: 'clone', hint: '选定音色角色，一键朗读台词与口播合成' },
+      { name: 'clone', label: '我的声音', icon: 'clone', hint: '录制克隆自己的声音，选中声音输入文字生成配音' },
+      { name: 'design', label: '音色设计', icon: 'design', hint: '用文字描述生成新声线，每个模板只生成一次' },
+      { name: 'library', label: '生成库', icon: 'library', hint: '所有生成的音频：试听、加入我的声音、删除' },
+    ],
+  },
+  {
+    key: 'create', title: '创作', icon: 'dialogue', needsModel: true,
+    tabs: [
       { name: 'dialogue', label: '剧本演播', icon: 'dialogue', hint: '多角色多轨对话剧情演播' },
     ],
   },
   {
-    // 2026-10-10 拆分：原来这里还有个「发行与经营」组（宣推短视频 / 全网发行 /
-    // 专辑制作 / 收益运营）。发行那半截整体搬去了独立仓 suno-publisher，
-    // 本仓只留生成与创作留痕。
-    //
-    // 2026-11-13：「音乐制作」组（AI 出歌 / 作品展厅）也整体搬去了
-    // suno-publisher —— 那边是「音乐生成 → 自动化发布」一条龙。本仓收敛成
-    // **纯声音项目**：音色设计、文本配音、剧本演播、原创存证、媒体资产、
-    // 成本与健康。
-    key: 'works', title: '创作与资产', icon: 'board',
+    // 不在主线上的工具：留着（有用户数据），但排到最后，不和主线抢注意力。
+    key: 'more', title: '更多', icon: 'board',
     tabs: [
       { name: 'attest', label: '原创存证', icon: 'publish', hint: '创作留痕导出与区块链存证（证明独创性智力投入）' },
-      { name: 'library', label: '媒体资产', icon: 'library', hint: '物理音频文件管理、在线试听与批量下载' },
       { name: 'ops', label: '成本与健康', icon: 'pulse', hint: '生成成本、用量、服务健康与运行日志' },
     ],
   },

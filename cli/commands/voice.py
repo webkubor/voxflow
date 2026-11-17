@@ -20,7 +20,7 @@ from core.paths import DATA_DIR as BASE_DIR  # 数据根，不是代码目录
 from cli.output import (JSON_OPTION, confirm_or_fail, console, emit, fail, fail_from,
                         progress_console)
 
-app = typer.Typer(help="音色库：录制 / 注册、收藏、重命名、删除（仅未收藏）、试听。")
+app = typer.Typer(help="我的声音：录制 / 注册、收藏、重命名、删除（需确认，参考音频保留）、试听。")
 
 ALLOWED_AUDIO_EXTS = (".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".webm", ".mp4")
 
@@ -117,7 +117,7 @@ def voice_add(
 def voice_record(
     key: str = typer.Argument(..., help="音色唯一标识"),
     ref_text: str = typer.Option(..., "--ref-text", help="你将要朗读的原文（录音须逐字念出）"),
-    seconds: int = typer.Option(15, "--seconds", "-s", min=3, max=30, help="录音时长（3–30 秒）"),
+    seconds: int = typer.Option(15, "--seconds", "-s", min=3, max=30, help="录音时长（3–30 秒，建议 10–20）"),
     name: Optional[str] = typer.Option(None, "--name", "-n", help="显示名，默认等于 key"),
     device: str = typer.Option(":0", "--device", help="ffmpeg avfoundation 音频设备，默认 :0"),
     as_json: bool = JSON_OPTION,
@@ -181,7 +181,7 @@ def voice_rm(
     yes: bool = typer.Option(False, "--yes", "-y", "--force", "-f", help="跳过确认"),
     as_json: bool = JSON_OPTION,
 ):
-    """删除未收藏的音色（只移除映射，参考音频保留）"""
+    """删除音色（需确认；收藏的也可删，只移除映射，参考音频保留）"""
     v = _get(key, as_json)
     # 先问「人确认了没有」，再问业务规则 —— 非交互环境一律要显式 --yes，
     # 不该被「已收藏」抢在前面变成另一种退出码。
