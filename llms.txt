@@ -11,7 +11,8 @@
 见 README「安装」一节（pipx / uv 安装，Python 3.10+，需 Apple Silicon）。
 
 ## 仓库导览（改代码去哪）
-- `cli/` — 命令行入口与子命令
+- `cli/` — 命令行入口与子命令（音色库/生成库/模板命令均支持 `--json`，契约见 AGENTS.md）
+- `core/voice_library.py` — 音色库、生成库、模板生成状态的唯一规则出处（Web 与 CLI 共用）
 - `TUI_DESIGN.md` — 终端界面交互设计
 - `VOICE_DESIGN_SOP.md` — 音色设计标准流程
 - `TECHNICAL_PATH.md` — 技术路线与选型记录

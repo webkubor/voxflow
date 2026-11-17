@@ -9,14 +9,12 @@
 import os
 import sys
 import json
-import hashlib
 import re
 import shutil
 import threading
 import time
 import queue as queue_mod
 import uuid
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -43,6 +41,7 @@ from core.paths import (  # noqa: E402
 )
 
 from core import obs  # noqa: E402
+from core import voice_library as vlib  # noqa: E402
 
 # BASE_DIR 是数据根 —— personas.json 里的 ref 存的是相对它的路径
 BASE_DIR = DATA_DIR
@@ -469,12 +468,6 @@ def _run_design_task(task_id: str, params: dict, update_fn):
     """执行音色设计任务"""
     import soundfile as sf
     from core.modes.designer import DesignMode
-    from core.utils import (
-        upsert_persona_mapping,
-        resolve_design_voice_key,
-        write_generation_json,
-    )
-
     req = DesignRequest(**params)
     if not (req.tone or req.emotion):
         raise ValueError("必须提供 tone 或 emotion")
@@ -485,26 +478,29 @@ def _run_design_task(task_id: str, params: dict, update_fn):
 
     instruct = " ".join(p.strip() for p in [req.tone, req.emotion] if p.strip())
 
-    update_fn(task_id, progress=10, stage="加载模型中...")
-    engine = _get_design_engine()
-    processor = _get_processor()
-    designer = DesignMode(engine, processor)
+    from contextlib import nullcontext
+    # 模板生成持跨进程锁并在锁内复查「已生成」：CLI 同时跑同一模板时只放行一个。
+    guard = vlib.preset_generation_lock(req.voice_name, DATA_DIR) if req.preset_name else nullcontext()
+    try:
+        with guard:
+            update_fn(task_id, progress=10, stage="加载模型中...")
+            engine = _get_design_engine()
+            processor = _get_processor()
+            designer = DesignMode(engine, processor)
 
-    update_fn(task_id, progress=30, stage="设计音色中...")
-    wavs, sr = designer.run(text=req.text, lang="Chinese", instruct=instruct)
+            update_fn(task_id, progress=30, stage="设计音色中...")
+            wavs, sr = designer.run(text=req.text, lang="Chinese", instruct=instruct)
 
-    update_fn(task_id, progress=80, stage="保存文件中...")
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_name = re.sub(r"[^\w\u4e00-\u9fff-]", "_", req.voice_name)
-    name_id = hashlib.sha256(req.voice_name.encode("utf-8")).hexdigest()[:8]
-    out_filename = f"[设计]{safe_name}_{name_id}_{ts}.wav"
-    out_path = OUT_DIR / out_filename
-    sf.write(str(out_path), wavs[0], sr)
-    processor.apply_design_cleanup(str(out_path))
-    # Retain the exact utterance for a later, post-audition commit (also after restart).
-    out_path.with_suffix(".json").write_text(
-        json.dumps({"ref_text": req.text}, ensure_ascii=False), encoding="utf-8"
-    )
+            update_fn(task_id, progress=80, stage="保存文件中...")
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            out_filename = vlib.design_filename(req.voice_name, ts)
+            out_path = OUT_DIR / out_filename
+            sf.write(str(out_path), wavs[0], sr)
+            processor.apply_design_cleanup(str(out_path))
+            # Retain the exact utterance for a later, post-audition commit (also after restart).
+            vlib.write_design_sidecar(out_path, req.text)
+    except vlib.Conflict as exc:
+        raise ValueError(str(exc)) from exc
 
     result = {
         "ok": True,
@@ -809,68 +805,17 @@ def get_status():
 
 
 def _find_preset_audio_file(voice_name: str) -> Optional[Path]:
-    """寻找预设对应的最新生成样音文件"""
-    candidates = []
-    # out/design/ 下按日期分目录（20260830/…），**不能写死日期** —— 写死的那版
-    # 只认 0828/0830 两天，今天生成的样音一律找不到。这里列出全部子目录。
-    design_root = DATA_DIR / "out" / "design"
-    search_dirs = [DATA_DIR / "assets" / "temp", DATA_DIR / "out"]
-    if design_root.is_dir():
-        search_dirs += sorted((d for d in design_root.iterdir() if d.is_dir()), reverse=True)
-    # 与生成侧共用相同清洗名，并给新文件加原始名称指纹，避免非法字符
-    # 导致漏标，也避免不同名称清洗成相同名字时误认模板。
-    safe_name = re.sub(r"[^\w\u4e00-\u9fff-]", "_", voice_name)
-    name_id = hashlib.sha256(voice_name.encode("utf-8")).hexdigest()[:8]
-    legacy_pattern = re.compile(rf"^{re.escape(safe_name)}_\d{{8}}_\d{{6}}\.wav$")
-    design_root_pattern = re.compile(rf"^\[设计\]{re.escape(safe_name)}_(?:{name_id}_)?\d{{8}}_\d{{6}}\.wav$")
-    for d in search_dirs:
-        if not d.exists():
-            continue
-        for f in d.glob("*.wav"):
-            if design_root_pattern.fullmatch(f.name) or legacy_pattern.fullmatch(f.name):
-                candidates.append(f)
-            elif f.name == f"当前参考_{voice_name}.wav":
-                candidates.append(f)
-    if not candidates:
-        return None
-    candidates.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-    return candidates[0]
+    """寻找预设对应的最新生成样音文件（规则见 core/voice_library.py）"""
+    return vlib.find_preset_audio(voice_name, DATA_DIR)
 
 
 def _scan_design_presets() -> list:
-    """扫描 configs/presets/ 目录，加载设计配方，并自动探测是否有已生成样音"""
-    # presets 是代码自带的内置预设，留在项目里跟着版本走；
-    # 你自己存的预设落在数据目录。两处都扫。
-    preset_dirs = [DATA_DIR / "configs" / "presets", PROJECT_DIR / "configs" / "presets"]
-    # 用户模板优先，按文件名去重；不能因为用户目录存在就隐藏内置模板。
-    files = {}
-    for directory in preset_dirs:
-        if directory.is_dir():
-            for path in directory.glob("*.json"):
-                files.setdefault(path.name, path)
+    """全部设计模板及生成状态；用户模板目录与内置目录都扫。"""
     result = []
-    for f in sorted(files.values(), key=lambda p: p.name):
-        try:
-            with open(f, "r", encoding="utf-8") as fh:
-                cfg = json.load(fh)
-            if cfg.get("model_type") != "VoiceDesign":
-                continue
-            voice_name = cfg.get("voice_name", "").strip()
-            if not voice_name:
-                continue
-            audio_file = _find_preset_audio_file(voice_name)
-            has_generated = audio_file is not None
-            result.append({
-                "voice_name": voice_name,
-                "config_file": f.name,
-                "tone": cfg.get("tone", ""),
-                "emotion": cfg.get("emotion", ""),
-                "text": cfg.get("text", ""),
-                "has_generated": has_generated,
-                "audio_url": f"/api/preset-audio?voice_name={quote(voice_name)}" if has_generated else None,
-            })
-        except Exception:
-            continue
+    for p in vlib.scan_design_presets(DATA_DIR, PROJECT_DIR):
+        result.append({k: p[k] for k in ("voice_name", "config_file", "tone", "emotion", "text", "has_generated")}
+                      | {"audio_url": f"/api/preset-audio?voice_name={quote(p['voice_name'])}"
+                         if p["has_generated"] else None})
     return result
 
 
@@ -1217,43 +1162,13 @@ def design_commit(req: DesignCommitRequest):
 
     这个端点让「满意后存入」名副其实：生成完、听过、觉得行，再点一下。
     """
-    from core.utils import (  # noqa: PLC0415
-        resolve_design_voice_key, sanitize_path_component,
-        upsert_persona_mapping, write_generation_json,
-    )
-
-    name = (req.voice_name or "").strip()
-    if not name:
-        raise HTTPException(400, "voice_name 不能为空")
-    src = OUT_DIR / os.path.basename(req.filename)
-    if not src.is_file():
-        raise HTTPException(404, f"找不到音频：{req.filename}")
-
-    voice_key = resolve_design_voice_key({"voice_name": name})
-    safe_name = sanitize_path_component(name, fallback="未命名音色")
-    ref_text = req.ref_text.strip()
-    if not ref_text and src.with_suffix(".json").is_file():
-        ref_text = json.loads(src.with_suffix(".json").read_text(encoding="utf-8")).get("ref_text", "")
     with _persona_registration_lock:
         try:
-            seed = _get_processor().prepare_clone_reference(str(src), ref_text)
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
-        try:
-            upsert_persona_mapping(
-                str(BASE_DIR), persona_key=voice_key, persona_name=name,
-                ref_rel=os.path.relpath(str(seed), str(BASE_DIR)).replace("\\", "/"),
-                ref_text=ref_text, design_rel=f"voice_designs/{safe_name}.json",
-                instruction=req.instruction or "", create_only=True,
-                source_filename=src.name, favorite=True,
-            )
-        except FileExistsError as exc:
-            Path(seed).unlink(missing_ok=True)
-            raise HTTPException(409, str(exc)) from exc
-        except Exception:
-            Path(seed).unlink(missing_ok=True)
-            raise
-        write_generation_json(str(BASE_DIR), voice_key, source="voice_design")
+            saved = vlib.save_design(req.filename, req.voice_name, req.instruction, req.ref_text,
+                                     processor=_get_processor(), data_dir=BASE_DIR, out_dir=OUT_DIR)
+        except vlib.VoiceLibraryError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
+    voice_key, name = saved["persona_key"], saved["name"]
     obs.log("design_committed", persona_key=voice_key, name=name)
     return {"ok": True, "persona_key": voice_key, "name": name}
 
@@ -1297,40 +1212,15 @@ def add_persona(
             upsert_persona_mapping(
                 str(BASE_DIR), persona_key=safe_key, persona_name=display_name,
                 ref_rel=ref_rel, ref_text=ref_text, instruction=instruction or "",
+                create_only=True,
             )
+        except FileExistsError as exc:
+            Path(sample).unlink(missing_ok=True)
+            raise HTTPException(409, "音色标识已存在，请使用新标识") from exc
         except Exception:
             Path(sample).unlink(missing_ok=True)
             raise
     return {"ok": True, "key": safe_key, "name": display_name, "ref": ref_rel, "ref_text": ref_text.strip()}
-
-
-@contextmanager
-def _personas_file_lock():
-    """Use the same cross-process lock as the CLI's persona writer."""
-    from fcntl import flock, LOCK_EX, LOCK_UN
-    PERSONAS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(str(PERSONAS_FILE) + ".lock", "a") as lock:
-        flock(lock.fileno(), LOCK_EX)
-        try:
-            yield
-        finally:
-            flock(lock.fileno(), LOCK_UN)
-
-
-def _write_personas_atomic(data: dict):
-    """Replace the mapping atomically; interrupted writes must not truncate the library."""
-    import tempfile
-    temp_path = None
-    try:
-        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=PERSONAS_FILE.parent, delete=False) as f:
-            temp_path = f.name
-            json.dump(data, f, ensure_ascii=False, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(temp_path, PERSONAS_FILE)
-    finally:
-        if temp_path and os.path.exists(temp_path):
-            os.unlink(temp_path)
 
 
 @app.patch("/api/personas/{key}")
@@ -1346,41 +1236,23 @@ def update_persona(key: str, name: str = Form(None), desc: str = Form(None), fav
     参考音频的路径本来就完整存在 ref 字段里（注册音色时写进去的），
     改成只读 ref 之后，名字回归成纯粹的名字，改名就是改个字段。
     """
-    with _persona_registration_lock, _personas_file_lock():
-        if not PERSONAS_FILE.exists():
-            raise HTTPException(404, "personas.json 不存在")
-        with open(PERSONAS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if key not in data:
-            raise HTTPException(404, f"音色 {key} 不存在")
-        entry = data[key] if isinstance(data[key], dict) else {"name": data[key]}
-        if name is not None and name.strip():
-            entry["name"] = name.strip()
-        if desc is not None:
-            entry["desc"] = desc.strip()
-        if favorite is not None:
-            entry["favorite"] = favorite
-        data[key] = entry
-        _write_personas_atomic(data)
-    return {"ok": True, "key": key, "name": entry.get("name", key), "desc": entry.get("desc", "")}
+    with _persona_registration_lock:
+        try:
+            v = vlib.update_voice(key, name=name if name and name.strip() else None, desc=desc,
+                                  favorite=favorite, personas_file=PERSONAS_FILE)
+        except vlib.VoiceLibraryError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
+    return {"ok": True, "key": key, "name": v["name"], "desc": v["desc"], "favorite": v["favorite"]}
 
 
 @app.delete("/api/personas/{key}")
 def delete_persona(key: str):
-    """删除音色注册（不删除音频文件）"""
-    with _persona_registration_lock, _personas_file_lock():
-        if not PERSONAS_FILE.exists():
-            raise HTTPException(404, "personas.json 不存在")
-        with open(PERSONAS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if key not in data:
-            raise HTTPException(404, f"音色 {key} 不存在")
-        entry = data[key]
-        # 旧注册音色默认受保护，避免升级后历史资产意外变为可删除。
-        if not isinstance(entry, dict) or entry.get("favorite", True):
-            raise HTTPException(409, "已收藏的音色不能删除，请先取消收藏")
-        del data[key]
-        _write_personas_atomic(data)
+    """删除音色注册（不删除音频文件）；已收藏的音色拒绝删除。"""
+    with _persona_registration_lock:
+        try:
+            vlib.delete_voice(key, personas_file=PERSONAS_FILE)
+        except vlib.VoiceLibraryError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
     return {"ok": True}
 
 
@@ -1559,33 +1431,11 @@ MEDIA_TYPES = {
 }
 
 
-_DESIGN_FILE_RE = re.compile(r"^\[设计\](.+?)_(?:[0-9a-f]{8}_)?\d{8}_\d{6}\.wav$")
-
-
-def _voice_for_audio(filename: str, personas: dict) -> Optional[dict]:
-    """生成文件关联的已入库音色。
-
-    新记录按 source_filename 精确关联；旧版本入库的设计音色没有这个字段，
-    只在文件名里的音色名与已注册音色的 key 或名称**完全相同**时视为关联，
-    这样历史样音也受收藏保护，又不会把相近名称误认成同一个音色。
-    """
-    for k, v in personas.items():
-        if isinstance(v, dict) and v.get("source_filename") == filename:
-            return {"key": k, "favorite": v.get("favorite", True), "name": v.get("name", k)}
-    m = _DESIGN_FILE_RE.match(filename)
-    if not m:
-        return None
-    for k, v in personas.items():
-        if isinstance(v, dict) and not v.get("source_filename") and m.group(1) in (k, v.get("name")):
-            return {"key": k, "favorite": v.get("favorite", True), "name": v.get("name", k), "legacy": True}
-    return None
-
-
 @app.get("/api/audio-list")
 def audio_list():
     """列出已生成的音频文件（TTS wav + Suno 音乐 mp3/m4a 统一管理）"""
     files = []
-    personas = json.loads(PERSONAS_FILE.read_text(encoding="utf-8")) if PERSONAS_FILE.exists() else {}
+    personas = vlib.load_personas(PERSONAS_FILE)
     if OUT_DIR.exists():
         for f in sorted(OUT_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
             if f.suffix.lower() in AUDIO_EXTS:
@@ -1599,7 +1449,7 @@ def audio_list():
                         "%Y-%m-%d %H:%M:%S"
                     ),
                     "kind": "tts",
-                    "voice": _voice_for_audio(f.name, personas),
+                    "voice": vlib.voice_for_audio(f.name, personas),
                 })
     return {"files": files}
 
@@ -1619,16 +1469,11 @@ def get_audio(filename: str):
 @app.delete("/api/audio/{filename}")
 def delete_audio(filename: str):
     """删除音频文件"""
-    safe = os.path.basename(filename)
-    path = OUT_DIR / safe
-    with _persona_registration_lock, _personas_file_lock():
-        if not path.exists():
-            raise HTTPException(404, f"音频文件不存在: {safe}")
-        personas = json.loads(PERSONAS_FILE.read_text(encoding="utf-8")) if PERSONAS_FILE.exists() else {}
-        voice = _voice_for_audio(safe, personas)
-        if voice and voice["favorite"]:
-            raise HTTPException(409, "已收藏的音色不能删除，请先取消收藏")
-        path.unlink()
+    with _persona_registration_lock:
+        try:
+            vlib.delete_generated(filename, out_dir=OUT_DIR, personas_file=PERSONAS_FILE)
+        except vlib.VoiceLibraryError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
     return {"ok": True}
 
 

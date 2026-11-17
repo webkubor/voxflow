@@ -23,6 +23,8 @@ from core.processor import AudioProcessor
 from core.modes.designer import DesignMode
 from core.modes.cloner import CloneMode
 from core.utils import get_persona_map, get_persona_cn
+from core import voice_library as vlib
+from cli.output import JSON_OPTION, emit, fail, fail_from, progress_console
 
 console = Console()
 
@@ -59,14 +61,12 @@ def tts_clone(
     reference_audio: Optional[str] = typer.Option(
         None, "--ref", help="直接指定参考音频路径（绝对或相对项目根目录）"
     ),
+    as_json: bool = JSON_OPTION,
 ):
     """从已注册的音色克隆合成语音。"""
     persona_map = get_persona_map()
     if persona not in persona_map:
-        console.print(
-            f"[red]✗[/red] 音色 key 不存在：{persona}，请先使用 [cyan]tts voice list[/cyan] 查看可用音色"
-        )
-        raise typer.Exit(1)
+        fail(f"音色 key 不存在：{persona}（voice voice list 查看可用音色）", as_json, 404)
 
     pdata = persona_map[persona]
     pdata = pdata if isinstance(pdata, dict) else {}
@@ -89,10 +89,7 @@ def tts_clone(
             )
 
     if not ref_path or not ref_path.exists():
-        console.print(
-            f"[red]✗[/red] 音色 {persona} 未找到可用参考音频（标准样音 assets/temp/当前参考_{display_name}.wav 或 ref 配置均缺失）"
-        )
-        raise typer.Exit(1)
+        fail(f"音色 {persona} 未找到可用参考音频（ref 配置缺失或文件不存在）", as_json, 404)
 
     # 只传「本次的」语气/情绪 —— personas.json 里的 instruction 由 CloneMode 自己合
     # （它读得到 persona_data）。这里再合一次的话指令会被写两遍，实测输出：
@@ -113,14 +110,15 @@ def tts_clone(
     safe_name = re.sub(r"[^\w\u4e00-\u9fff-]", "_", display_name)
     out_path = out_dir / f"[克隆]{safe_name}_{ts}.wav"
 
-    console.print(f"\n[gold1]⏳ 正在合成...[/gold1]")
+    out = progress_console(as_json)
+    out.print(f"\n[gold1]⏳ 正在合成...[/gold1]")
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
         TimeElapsedColumn(),
-        console=console,
+        console=out,
     ) as pbar:
         pbar.add_task("[cyan]加载模型 Base-1.7B-8bit (MLX)...", total=None)
 
@@ -141,8 +139,9 @@ def tts_clone(
         sf.write(str(out_path), wavs[0], sr)
         processor.apply_post_tuning(str(out_path))
 
-    console.print(f"\n[green]✓[/green] [bold]{display_name}[/bold] 克隆合成完成")
-    console.print(f"  输出 → {out_path.relative_to(BASE_DIR)}")
+    emit({"persona": persona, "filename": out_path.name, "path": str(out_path)}, as_json, lambda: (
+        console.print(f"\n[green]✓[/green] [bold]{display_name}[/bold] 克隆合成完成"),
+        console.print(f"  输出 → {out_path.relative_to(BASE_DIR)}")))
 
 
 def tts_design(
@@ -157,13 +156,13 @@ def tts_design(
         None, "--emotion", help="情绪标签（如「温柔，安抚」）"
     ),
     commit_to_temp: bool = typer.Option(
-        False, "--commit", help="确认满意后存入标准样音库（assets/temp/）"
+        False, "--commit", help="生成后直接收藏进音色库（默认只进生成库，试听后用 voice library save 收藏）"
     ),
+    as_json: bool = JSON_OPTION,
 ):
     """从文字描述凭空设计新音色，不依赖任何参考音频。"""
     if not (tone or emotion):
-        console.print("[red]✗[/red] 必须提供 --tone 或 --emotion（至少一个）")
-        raise typer.Exit(1)
+        fail("必须提供 --tone 或 --emotion（至少一个）", as_json)
 
     instruct = _build_instruct(tone or "", emotion or "")
     if not text.strip():
@@ -174,18 +173,17 @@ def tts_design(
 
     out_dir = BASE_DIR / "out"
     out_dir.mkdir(exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_name = re.sub(r"[^\w\u4e00-\u9fff-]", "_", voice_name)
-    out_path = out_dir / f"[设计]{safe_name}_{ts}.wav"
+    out_path = out_dir / vlib.design_filename(voice_name)
 
-    console.print(f"\n[gold1]⏳ 正在设计音色：{voice_name}[/gold1]")
+    out = progress_console(as_json)
+    out.print(f"\n[gold1]⏳ 正在设计音色：{voice_name}[/gold1]")
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
         TimeElapsedColumn(),
-        console=console,
+        console=out,
     ) as pbar:
         pbar.add_task("[cyan]加载 VoiceDesign 模型 1.7B...", total=None)
         wavs, sr = designer.run(text=text, lang="Chinese", instruct=instruct)
@@ -196,34 +194,19 @@ def tts_design(
         sf.write(str(out_path), wavs[0], sr)
         processor.apply_design_cleanup(str(out_path))
 
-    console.print(f"\n[green]✓[/green] 音色 [bold]{voice_name}[/bold] 设计完成")
-    console.print(f"  输出 → {out_path.relative_to(BASE_DIR)}")
+    vlib.write_design_sidecar(out_path, text)
+    result = {"voice_name": voice_name, "filename": out_path.name, "path": str(out_path)}
+    out.print(f"\n[green]✓[/green] 音色 [bold]{voice_name}[/bold] 设计完成 → {out_path.relative_to(BASE_DIR)}")
 
     if commit_to_temp:
-        from core.utils import (
-            upsert_persona_mapping,
-            resolve_design_voice_key,
-            write_generation_json,
-        )
-
-        voice_key = resolve_design_voice_key({"voice_name": voice_name})
-        temp_seed_path = processor.prepare_clone_reference(str(out_path), text)
-        ref_rel = os.path.relpath(temp_seed_path, BASE_DIR).replace("\\", "/")
-        design_rel = f"voice_designs/{safe_name}.json"
-        persona_file = upsert_persona_mapping(
-            str(BASE_DIR),
-            persona_key=voice_key,
-            persona_name=voice_name,
-            ref_rel=ref_rel,
-            ref_text=text,
-            design_rel=design_rel,
-            instruction=instruct,
-        )
-        gen_json_path = write_generation_json(
-            str(BASE_DIR), voice_key, source="voice_design"
-        )
-        console.print(f"  [green]✓ 标准样音已沉淀 → {ref_rel}[/green]")
-        console.print(f"  [green]✓ 角色映射已更新 → {persona_file}[/green]")
+        try:
+            saved = vlib.save_design(out_path.name, voice_name, instruct, text, processor=processor)
+            result["persona_key"] = saved["persona_key"]
+            out.print(f"  [green]✓ 已收藏到音色库 → {saved['persona_key']}[/green]")
+        except vlib.VoiceLibraryError as exc:
+            result["commit_error"] = str(exc)
+            out.print(f"  [yellow]⚠ 未收藏（生成结果仍在生成库）：{exc}[/yellow]")
+    emit(result, as_json)
 
 
 def tts_dialogue(

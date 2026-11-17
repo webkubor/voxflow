@@ -7,6 +7,7 @@ from cli.commands.doctor import doctor
 from cli.commands.ai import ai_script, ai_polish
 from cli.commands.stats import stats, logs, backfill
 from cli.commands.museav import app as museav_app
+from cli.commands.library import app as library_app
 
 app = typer.Typer(
     name="voice",
@@ -16,6 +17,7 @@ app = typer.Typer(
 app.add_typer(voice_app, name="voice")
 app.add_typer(job_app, name="job")
 app.add_typer(preset_app, name="preset")
+app.add_typer(library_app, name="library")
 app.add_typer(museav_app, name="museav")
 app.command("clone")(tts_clone)
 app.command("design")(tts_design)
@@ -116,7 +118,9 @@ def main(ctx: typer.Context):
     voice — VoxFlow 声流
 
     子命令组：
-      voice      音色素材管理（list / add / preview / show / rm / import）
+      voice      音色库（list / add / record / rename / favorite / unfavorite / rm / import / preview）
+      library    生成库（list / save 收藏设计样音 / rm）
+      所有音色/生成库/模板命令支持 --json：stdout 单个 JSON；退出码 0 成功 1 错误 3 不存在 4 冲突
 
     发行（release / promo）已于 2026-10-10 迁往独立仓 suno-publisher —— 本仓只管生成。
       clone      从已有音色克隆合成
@@ -126,7 +130,7 @@ def main(ctx: typer.Context):
       doctor     环境自检（Python / 依赖 / 模型 / 硬件 / 目录 / FreeLLMAPI）
       ai-script  AI 文案生成（需 FreeLLMAPI）
       ai-polish  AI 文案润色（需 FreeLLMAPI）
-      preset     预设管理（list / show / run / batch）
+      preset     设计模板（list 含已生成状态 / show / run 每个模板只生成一次 / batch）
       job        任务历史（list / show / clean）
       stats      成本与用量（钱花在哪 / 本地省了多少 / 每首歌多少钱）
       logs       运行日志（失败的调用、慢请求）
