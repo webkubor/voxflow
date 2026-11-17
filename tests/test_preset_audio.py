@@ -39,6 +39,18 @@ def run():
 
             assert app._find_preset_audio_file("查无此音") is None, "不存在的预设应该返回 None"
             assert app._find_preset_audio_file("新音_D") is None, "相似名称的音色不应被误认为已生成"
+            assert app._find_preset_audio_file("新音") is None, "短前缀不应误匹配长名称模板"
+
+            # 清洗非法字符后仍能找到生成文件；不同原名的清洗碰撞不能互相误判。
+            import hashlib
+            import re
+            raw_name = "带 空格·名称"
+            safe = re.sub(r"[^\w\u4e00-\u9fff-]", "_", raw_name)
+            name_id = hashlib.sha256(raw_name.encode("utf-8")).hexdigest()[:8]
+            exact = root / "out" / "design" / "29991231" / f"[设计]{safe}_{name_id}_29991231_120000.wav"
+            exact.write_bytes(b"RIFF")
+            assert app._find_preset_audio_file(raw_name) == exact
+            assert app._find_preset_audio_file("带_空格_名称") is None
 
             # 同名多份时取 mtime 最新的那个
             newer = root / "out" / "design" / "29991231" / "[设计]新音_C_29991231_235959.wav"

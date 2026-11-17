@@ -2,7 +2,7 @@ import os
 import json
 import re
 from datetime import datetime
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 # 数据根（~/.voxflow），不是代码目录 —— personas.json 里的 ref、design
 # 存的都是相对它的路径。真源见 core/paths.py。
@@ -465,6 +465,9 @@ def upsert_persona_mapping(
     ref_text: str,
     design_rel: str = "",
     instruction: str = "",
+    create_only: bool = False,
+    source_filename: str = "",
+    favorite: Optional[bool] = None,
 ) -> str:
     """新增或更新 personas.json 的映射关系。
 
@@ -489,6 +492,13 @@ def upsert_persona_mapping(
                     data = json.load(source)
                 if not isinstance(data, dict):
                     raise ValueError("personas.json 格式错误；保留原文件，请先修复")
+            if create_only and key in data:
+                raise FileExistsError(f"音色名称已存在：{key}")
+            if source_filename and any(
+                isinstance(value, dict) and value.get("source_filename") == source_filename
+                for value in data.values()
+            ):
+                raise FileExistsError("该生成结果已在音色库中")
             current = data.get(key, {})
             if not isinstance(current, dict):
                 current = {}
@@ -497,6 +507,10 @@ def upsert_persona_mapping(
                 current["design"] = _normalize_ref_path(design_rel)
             if instruction.strip():
                 current["instruction"] = instruction.strip()
+            if source_filename:
+                current["source_filename"] = source_filename
+            if favorite is not None:
+                current["favorite"] = favorite
             data[key] = current
             with NamedTemporaryFile(mode="w", encoding="utf-8", dir=os.path.dirname(persona_file), delete=False) as temp:
                 temp_name = temp.name

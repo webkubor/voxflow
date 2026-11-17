@@ -373,7 +373,7 @@ const (
 	routeDesign   = "/#/design"
 	routeClone    = "/#/clone"
 	routeDialogue = "/#/dialogue"
-	routeGallery  = "/#/gallery"
+	routeLibrary  = "/#/library"
 	routeAttest   = "/#/attest"
 	routeOps      = "/#/ops"
 )
@@ -408,7 +408,7 @@ func buildMenu(getWin func() *mygo.Window) *mygo.Menu {
 			{Label: "文本配音", Accelerator: "CmdOrCtrl+2", Click: nav(routeClone)},
 			{Label: "剧本演播", Accelerator: "CmdOrCtrl+3", Click: nav(routeDialogue)},
 			mygo.Separator(),
-			{Label: "作品展厅", Accelerator: "CmdOrCtrl+4", Click: nav(routeGallery)},
+			{Label: "生成库", Accelerator: "CmdOrCtrl+4", Click: nav(routeLibrary)},
 			{Label: "原创存证", Accelerator: "CmdOrCtrl+5", Click: nav(routeAttest)},
 			{Label: "成本与健康", Accelerator: "CmdOrCtrl+6", Click: nav(routeOps)},
 		}},

@@ -169,7 +169,8 @@ const { showToast } = useTasksStore();
 const selectedPresetName = ref('');
 const presetSearch = ref('');
 
-const personasCount = computed(() => Object.keys(personas.value || {}).length);
+const personasCount = computed(() => Object.values(personas.value || {})
+  .filter((p) => p?.favorite !== false).length);
 const selectedPresetGenerated = computed(() => designPresets.value.some(
   (p) => p.voice_name === selectedPresetName.value && p.has_generated,
 ));

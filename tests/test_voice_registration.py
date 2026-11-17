@@ -104,6 +104,16 @@ class RegistrationTests(unittest.TestCase):
                 list(pool.map(lambda key: upsert_persona_mapping(root, key, key, key + '.wav', '原文'), ['a', 'b']))
             self.assertEqual(set(json.loads((Path(root) / 'configs/personas.json').read_text())), {'a', 'b'})
 
+    def test_create_only_conflicts_are_checked_under_file_lock(self):
+        with tempfile.TemporaryDirectory() as root:
+            upsert_persona_mapping(root, "a", "甲", "x.wav", "原文", create_only=True, source_filename="s.wav", favorite=True)
+            before = (Path(root) / "configs" / "personas.json").read_bytes()
+            with self.assertRaises(FileExistsError):
+                upsert_persona_mapping(root, "a", "乙", "y.wav", "原文", create_only=True)
+            with self.assertRaises(FileExistsError):
+                upsert_persona_mapping(root, "b", "丙", "z.wav", "原文", create_only=True, source_filename="s.wav")
+            self.assertEqual((Path(root) / "configs" / "personas.json").read_bytes(), before)
+
     def test_generated_and_running_presets_cannot_be_submitted_twice(self):
         import web.app as service
         preset = {"voice_name": "模板A", "has_generated": True}

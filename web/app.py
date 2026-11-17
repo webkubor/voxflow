@@ -9,6 +9,7 @@
 import os
 import sys
 import json
+import hashlib
 import re
 import shutil
 import threading
@@ -495,7 +496,8 @@ def _run_design_task(task_id: str, params: dict, update_fn):
     update_fn(task_id, progress=80, stage="保存文件中...")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_name = re.sub(r"[^\w\u4e00-\u9fff-]", "_", req.voice_name)
-    out_filename = f"[设计]{safe_name}_{ts}.wav"
+    name_id = hashlib.sha256(req.voice_name.encode("utf-8")).hexdigest()[:8]
+    out_filename = f"[设计]{safe_name}_{name_id}_{ts}.wav"
     out_path = OUT_DIR / out_filename
     sf.write(str(out_path), wavs[0], sr)
     processor.apply_design_cleanup(str(out_path))
@@ -815,13 +817,19 @@ def _find_preset_audio_file(voice_name: str) -> Optional[Path]:
     search_dirs = [DATA_DIR / "assets" / "temp", DATA_DIR / "out"]
     if design_root.is_dir():
         search_dirs += sorted((d for d in design_root.iterdir() if d.is_dir()), reverse=True)
-    # 模糊匹配会把相近名称的其他音色误判成当前模板的生成结果。
-    # 只识别生成器的设计文件名和历史标准样音名。
+    # 与生成侧共用相同清洗名，并给新文件加原始名称指纹，避免非法字符
+    # 导致漏标，也避免不同名称清洗成相同名字时误认模板。
+    safe_name = re.sub(r"[^\w\u4e00-\u9fff-]", "_", voice_name)
+    name_id = hashlib.sha256(voice_name.encode("utf-8")).hexdigest()[:8]
+    legacy_pattern = re.compile(rf"^{re.escape(safe_name)}_\d{{8}}_\d{{6}}\.wav$")
+    design_root_pattern = re.compile(rf"^\[设计\]{re.escape(safe_name)}_(?:{name_id}_)?\d{{8}}_\d{{6}}\.wav$")
     for d in search_dirs:
         if not d.exists():
             continue
         for f in d.glob("*.wav"):
-            if f.name.startswith(f"[设计]{voice_name}_") or f.name == f"当前参考_{voice_name}.wav":
+            if design_root_pattern.fullmatch(f.name) or legacy_pattern.fullmatch(f.name):
+                candidates.append(f)
+            elif f.name == f"当前参考_{voice_name}.wav":
                 candidates.append(f)
     if not candidates:
         return None
@@ -1227,11 +1235,6 @@ def design_commit(req: DesignCommitRequest):
     if not ref_text and src.with_suffix(".json").is_file():
         ref_text = json.loads(src.with_suffix(".json").read_text(encoding="utf-8")).get("ref_text", "")
     with _persona_registration_lock:
-        existing = json.loads(PERSONAS_FILE.read_text(encoding="utf-8")) if PERSONAS_FILE.exists() else {}
-        if voice_key in existing:
-            raise HTTPException(409, "音色名称已存在，请使用其他名称")
-        if any(isinstance(v, dict) and v.get("source_filename") == src.name for v in existing.values()):
-            raise HTTPException(409, "该生成结果已在音色库中")
         try:
             seed = _get_processor().prepare_clone_reference(str(src), ref_text)
         except ValueError as exc:
@@ -1241,16 +1244,15 @@ def design_commit(req: DesignCommitRequest):
                 str(BASE_DIR), persona_key=voice_key, persona_name=name,
                 ref_rel=os.path.relpath(str(seed), str(BASE_DIR)).replace("\\", "/"),
                 ref_text=ref_text, design_rel=f"voice_designs/{safe_name}.json",
-                instruction=req.instruction or "",
+                instruction=req.instruction or "", create_only=True,
+                source_filename=src.name, favorite=True,
             )
+        except FileExistsError as exc:
+            Path(seed).unlink(missing_ok=True)
+            raise HTTPException(409, str(exc)) from exc
         except Exception:
             Path(seed).unlink(missing_ok=True)
             raise
-        with _personas_file_lock():
-            data = json.loads(PERSONAS_FILE.read_text(encoding="utf-8"))
-            data[voice_key]["source_filename"] = src.name
-            data[voice_key]["favorite"] = True
-            _write_personas_atomic(data)
         write_generation_json(str(BASE_DIR), voice_key, source="voice_design")
     obs.log("design_committed", persona_key=voice_key, name=name)
     return {"ok": True, "persona_key": voice_key, "name": name}
