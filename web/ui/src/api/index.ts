@@ -173,13 +173,6 @@ export const api = {
     post<{ text: string; lyrics?: string }>('llm/lyrics', p),
   aiTags: (p: { theme: string }) => post<{ text: string }>('llm/tags', p),
 
-  // ── 作品展厅 ──
-  gallery: (limit = 60) => get<{ cards: GalleryCard[] }>('gallery', { limit }),
-  /** 展厅里的「选它去发 / 已选中」切换。**只允许 generated ↔ selected** ——
-   *  已经 published 的是上架事实，不该被这里的一个按钮改掉。 */
-  setTrackStage: (id: string, stage: Stage) =>
-    post<{ ok: boolean }>(`tracks/${encodeURIComponent(id)}/stage`, { stage }),
-
   // ── MUSE AV 授权（设备码流程）──
   museavLoginStart: () => post<{
     user_code: string; verification_uri: string; device_code: string; interval?: number;
@@ -191,47 +184,6 @@ export const api = {
   // ── 音频库 ──
   audioList: () => get<{ files: unknown[] }>('audio-list'),
   deleteAudio: (filename: string) => del<{ ok: boolean }>(`audio/${encodeURIComponent(filename)}`),
-
-  // ── Suno ──
-  sunoStatus: () => get<Record<string, unknown>>('suno/status'),
-  sunoGenerate: (p: { title: string; tags?: string; lyrics?: string; persona?: string }) =>
-    post<{ task_id: string }>('suno/generate', p),
-  // ── 歌词（网易云公开接口，只读、不花额度）──
-  /** 按歌名搜歌 —— 只回歌名/歌手/id，歌词单独取（多数结果一眼就排除了） */
-  lyricsSearch: (q: string, limit = 8) => get<{
-    songs: { id: string; name: string; artists: string; album: string; duration_ms: number }[];
-  }>('lyrics/search', { q, limit }),
-  /** 取一首歌的歌词（已去时间戳）。纯音乐没词是正常的，看 has_lyrics */
-  lyricsGet: (songId: string) => get<{
-    song_id: string; lyrics: string; has_lyrics: boolean; note: string;
-  }>(`lyrics/${encodeURIComponent(songId)}`),
-
-  /** Suno 库里的作品，给翻唱选源用 */
-  sunoClips: () => get<{
-    clips: { id: string; title: string; tags: string; model: string;
-             image_url: string; created_at: string; status: string }[];
-  }>('suno/clips'),
-
-  /**
-   * 翻唱：把库里**已有的一首 clip** 换个风格重做。
-   *
-   * ⚠️ 接的是 `clip_id`，**不是上传音频** —— `suno cover` 只认库里的 clip，
-   * CLI 没有上传参数。想翻唱外部歌曲要先去 Suno 网页端 Upload Audio
-   * 把它变成一个 clip。这一步绕不开。
-   */
-  sunoCover: (p: { clip_id: string; tags?: string; title?: string;
-                   model?: string; audio_influence?: number }) =>
-    post<{ task_id: string }>('suno/cover', p),
-
-  // ── 热点风格追踪（测试1：哪个火做哪个，不抄袭）──
-  trending: () => get<{
-    ok: boolean; updated?: string; error?: string;
-    songs?: { rank: number; name: string; artist: string; score: number; platforms: string[] }[];
-    trend?: {
-      trend?: string; tags?: string; moods?: string[]; themes?: string[];
-      hotness?: number; hotness_reason?: string;
-    };
-  }>('trending'),
 
   // ── 模型下载（首次运行）──
   modelDownloadStatus: () => get<{
@@ -249,37 +201,6 @@ export const api = {
     return postForm<{ ok: boolean; status: string; detail: string }>('models/download', fd);
   },
 
-  // ── 封面出图（museav 中台）──
-  coverStatus: () => get<{
-    available: boolean; can_generate: boolean; credits: number;
-    /** 不受额度闸门约束（自家租户）。余额恒为 0 但出图正常，只看 credits 会误判 */
-    unmetered: boolean;
-    covers_left: number; credits_per_cover: number; est_cny: number; detail: string;
-    /** 常用比例，给下拉填值用。**不是白名单** */
-    common_ratios: { value: string; label: string }[];
-    /** 目标短边（平台要求：汽水 ≥1440、网易云 ≥1400） */
-    cover_side: number;
-    /** 各常用比例算出的实际出图尺寸，如 { "1:1": "1440x1440" } */
-    sizes: Record<string, string>;
-  }>('cover/status'),
-  // ⚠️ **这个端点后端不存在**（2026-10-11 查实：POST /api/cover/generate 返回 405，
-  // 因为路径被 GET /api/cover/{track_id} 匹配走了；基线 6ab5b27 里就没有该路由）。
-  // 也就是说「一键备料」里那个「生成封面」一直是坏的，报错是 405 而不是人话。
-  // 保留接口定义而不是删掉：本仓有 core/cover.generate() 和 cover 任务执行器
-  // （web/app.py 的 _run_cover_task），缺的只是一个提交路由。
-  // 补路由时要小心：**出图要花 museav 积分**，验证不能拿真出图当探测。
-  generateCover: (p: {
-    track_id?: string; title: string; tags?: string; prompt?: string;
-    /** 任意 W:H（1:1 / 3:4 / 1:2.1 …）。不限枚举 —— 中台支持任意尺寸，
-     *  合法性由它判定；写错会在提交时 400 挡掉。 */
-    ratio?: string;
-    /** 显式尺寸 'WxH'。留空则按 ratio 自动算一个短边 ≥1440 的 */
-    size?: string;
-  }) => post<{ task_id: string }>('cover/generate', p),
-  /** 本地 GPU 超分现有封面到 1440，不花积分。 */
-  upscaleCover: (p: { track_id: string }) =>
-    post<{ task_id: string }>('cover/upscale', p),
-
   // ── 可观测性与成本 ──
   // 四个分开而不是合成一个 /debug：想看一眼健康状态时，不该等日志和
   // 聚合查询也跑完。前端也按这个粒度各自刷新（健康 10 秒、成本 60 秒）。
@@ -288,10 +209,6 @@ export const api = {
   logs: (p?: { limit?: number; level?: string; event?: string; days?: number }) =>
     get<{ logs: LogRecord[] }>('logs', p),
   economics: (days = 30) => get<EconomicsResponse>('economics', { days }),
-
-  // ── 下载接管 ──
-  inbox: () => get<{ files: unknown[]; downloads_dir: string }>('inbox'),
-  inboxImport: (paths: string[]) => post<{ ok: boolean; count: number }>('inbox/import', { paths }),
 
 };
 

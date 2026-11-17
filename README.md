@@ -30,7 +30,7 @@
 </p>
 
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/gh/webkubor/free-imgbed@main/voxflow/social-banner.png" width="100%" alt="VoxFlow 声流 — 本地中文语音克隆 · 音色设计 · 播客 · BGM · Suno 音乐生成" />
+  <img src="https://cdn.jsdelivr.net/gh/webkubor/free-imgbed@main/voxflow/social-banner.png" width="100%" alt="VoxFlow 声流 — 本地中文语音克隆 · 音色设计 · 剧本演播" />
 </p>
 
 ---
@@ -134,11 +134,21 @@ voice dialogue configs/dialogue.json
 ### 📦 4. 音色库管理 (Voice Assets)
 
 ```bash
-voice voice list                        # 查看本地所有已注册音色
-voice voice add my_voice sample.wav --ref-text "录音里实际说的完整短句"  # 注册完整参考音频与原文
-voice voice preview narrator            # 试听音色预设样音
-voice voice rm old_voice                # 删除指定音色
+voice voice list [--favorites]          # 全部音色 / 只看收藏音色库
+voice voice add my_voice sample.wav --ref-text "录音里实际说的完整短句"  # 用已有录音克隆自己的声音
+voice voice record my_voice --ref-text "要朗读的原文" --seconds 15       # 麦克风录音并注册
+voice voice rename my_voice "我的旁白"   # 只改显示名
+voice voice unfavorite my_voice         # 取消收藏后才能删除
+voice voice rm my_voice --yes           # 删除未收藏音色（参考音频保留）
+voice voice preview narrator            # 试听
+
+voice preset list [--pending]           # 设计模板及是否已生成
+voice preset run <模板>                 # 每个模板只生成一次，已生成 / 正在生成会被拒绝
+voice library list --kind design        # 生成库
+voice library save "<文件名>" 新音色名    # 试听满意后收藏进音色库，不重新生成
 ```
+
+规则：收藏的音色及其对应生成文件不能删除；重名、重复收藏都会失败，不覆盖已有数据。Web 与 CLI 共用同一份规则（`core/voice_library.py`）。
 
 录音或导入参考音频时，填写与声音逐字对应的「录音原文」。建议 3–15 秒，接受 0.5–30 秒、最大 20 MB；整句保留，不截掉开头。音频与原文仅保存在本机。设计音色入库会自动保存生成时的文本。已有音色不被迁移或覆盖。
 
@@ -306,6 +316,15 @@ VoxFlow 原生面向自动化 Agent 体系设计：
 ```bash
 voice doctor           # 终端表格检查报告
 voice doctor --json    # 输出 JSON 格式供 Agent 决策解析
+```
+
+### 3. 音色库 / 生成库 / 模板（机器可读）
+
+`voice voice`、`voice library`、`voice preset`、`voice design`、`voice clone` 均支持 `--json`：stdout 只输出一个 JSON 对象（`{"ok": true, ...}` 或 `{"ok": false, "error", "status"}`），进度走 stderr。退出码：`0` 成功、`1` 错误、`3` 不存在、`4` 冲突（已收藏不可删、重名、模板已生成）。非交互环境删除须加 `--yes`。完整清单见 [AGENTS.md](AGENTS.md)。
+
+```bash
+voice preset list --pending --json | jq -r '.presets[].name'
+voice voice rm my_voice --yes --json; echo "exit=$?"
 ```
 
 ---

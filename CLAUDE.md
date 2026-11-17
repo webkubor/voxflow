@@ -10,20 +10,22 @@
 | 命令 / 端点 | 花什么 |
 |---|---|
 | `suno generate` / `describe` / `cover` / `extend` / `remaster` / `concat` / `stems` | Suno credits（月度上限，用完要等下个月） |
-| `POST /api/suno/generate`、`/api/suno/batch`、`/api/suno/cover` | 同上（它们就是在调上面那些） |
-| `POST /api/cover/generate`、`museav gen`、中台 `/api/generate` | museav 积分 |
-| `POST /api/llm/*`、`/api/trending` | LLM token |
+| `voice museav ...`、`museav gen`、中台 `/api/generate` | museav 积分 |
+| `POST /api/llm/*` | LLM token |
+
+> Suno 生成与封面出图的 Web 端点已随音乐生成迁到 suno-publisher，本仓不再提供。
+> 本地 MLX 模型的克隆 / 设计 / 试听不花钱，但会占用本机较长时间，批量跑前也先说一声。
 
 **免费的可以随便跑**：`suno list` / `credits` / `status` / `info`、
 `suno write` / `lyrics`（CLI 明说不花积分）、以及所有只读端点
-（`/api/health`、`/api/metrics`、`/api/economics`、`/api/suno/clips`……）。
+（`/api/health`、`/api/metrics`、`/api/economics`、`/api/personas`……）。
 
 ### 想验证功能怎么办
 
 按这个顺序，**前三条都不花钱**：
 
 1. **看参数校验** —— 传非法入参看是不是按预期 400（`{"clip_id":""}` → 400）
-2. **看只读端点** —— `/api/suno/clips` 能列出库、`/api/cover/status` 能报能力
+2. **看只读端点** —— `/api/personas`、`/api/capabilities`、`voice ... --json` 的 list 类命令
 3. **看代码路径** —— 单测、`--help`、CLI 的 dry-run
 4. 确实需要真跑 → **停下来问**，说清楚要花多少、为什么非跑不可
 

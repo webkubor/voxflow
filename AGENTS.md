@@ -3,7 +3,7 @@
 ## 这是什么
 
 VoxFlow（声流）—— Apple Silicon 本地 AI 音频工作台：本地 TTS（Qwen3-TTS MLX 8-bit）、
-语音克隆、音色设计，另支持 Suno 音乐生成。**音频不出本机**是硬承诺。
+语音克隆、音色设计、剧本演播。音乐生成与发行已迁到 suno-publisher（它仍通过 `/api/catalog/*`、`/api/artist`、`/api/economics` 读取本仓数据，这些接口不要删）。**音频不出本机**是硬承诺。
 
 ## 关键文件
 
@@ -14,7 +14,7 @@ VoxFlow（声流）—— Apple Silicon 本地 AI 音频工作台：本地 TTS�
 
 ## 约定
 
-- **隐私红线**：任何改动不得引入音频上传 / 云端处理路径（Suno 是用户显式授权的例外，只传生成请求需要的最少内容）。
+- **隐私红线**：任何改动不得引入音频上传 / 云端处理路径。
 - Python 3.10+；模型走 MLX，改动注意 Apple Silicon 兼容。
 - 双语 README（`README.md` / `README.en.md`）同步维护。
 - 发版与 CHANGELOG 走既有流程。

@@ -49,7 +49,6 @@ declare module 'vue' {
     NTooltip: typeof import('naive-ui')['NTooltip']
     PersonaSidebar: typeof import('./../components/PersonaSidebar.vue')['default']
     PlatformMark: typeof import('./../components/PlatformMark.vue')['default']
-    PrepModal: typeof import('./../components/PrepModal.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ShortcutHelp: typeof import('./../components/ShortcutHelp.vue')['default']

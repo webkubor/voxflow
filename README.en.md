@@ -69,9 +69,8 @@ voice web
 
 | Immediately usable (zero download) | Needs Base model (2.9 GB) | Needs VoiceDesign (2.9 GB) |
 |---|---|---|
-| AI music (Suno) | Voice cloning | One-prompt voice creation |
-| Work board / full-net distribution ledger | Multi-character script synthesis | |
-| Ops (cost / health / logs) | | |
+| Originality attestation / media library | Voice cloning / text-to-speech | One-prompt voice creation |
+| Ops (cost / health / logs) | Multi-character script synthesis | |
 
 So the first screen **lands on what the current capability supports**: when the model isn't downloaded, it goes to "AI Music" instead of a screen of grey buttons. Want cloning? Tap in, that screen has a card that **starts downloading in place** (background, page close doesn't interrupt), with a list of what's still usable in the meantime.
 
@@ -125,11 +124,21 @@ voice dialogue configs/dialogue.json
 ### 📦 4. Voice Asset Management
 
 ```bash
-voice voice list                        # list all locally registered voices
-voice voice add my_voice sample.wav --ref-text "The exact words spoken in the recording"
-voice voice preview narrator            # preview a preset voice's sample
-voice voice rm old_voice                # remove a voice
+voice voice list [--favorites]          # all voices / favorites-only voice library
+voice voice add my_voice sample.wav --ref-text "The exact words spoken in the recording"  # clone your own voice
+voice voice record my_voice --ref-text "Text to read aloud" --seconds 15                 # record from microphone and register
+voice voice rename my_voice "Narrator"  # display name only
+voice voice unfavorite my_voice         # required before deletion
+voice voice rm my_voice --yes           # delete an unfavorited voice (reference audio is kept)
+voice voice preview narrator            # preview
+
+voice preset list [--pending]           # design templates and whether they were generated
+voice preset run <template>             # each template is generated once; generated/running ones are refused
+voice library list --kind design        # generated library
+voice library save "<file>" "New voice" # favorite a design sample into the voice library without regenerating
 ```
+
+Rules: favorited voices and their generated files cannot be deleted; duplicate names or duplicate saves fail without overwriting anything. Web and CLI share the same rules (`core/voice_library.py`).
 
 When recording or importing a voice, provide the exact transcript of the reference audio. Recommended length: 3–15 seconds; accepted range: 0.5–30 seconds, up to 20 MB. The entire utterance is preserved locally, without cropping its beginning. Designed voices retain their generation text automatically. Existing voices are not migrated or overwritten.
 
@@ -222,78 +231,39 @@ VoxFlow includes a high-contrast, clean dark modern audio creation interface:
 
 - **Voice Workshop** — left-side unified management of all loaded voice artists, with quick waveform preview and sample status
 - **Creation Console** — quick atmosphere presets (gentle / passionate / midnight-whisper / wuxia), emotion priority control and drafts
-- **Full-net Distribution Hub** — direct to **Qishui Music, QQ Music, NetEase Cloud Music** distribution ledger; manages artist profiles, song ID mapping, platform metadata
+- **Originality attestation** — export creation provenance (prompts, parameters, chosen take, audio fingerprints) for verifiable attestation
 - **Media Library** — one-click online preview, waveform view, batch physical download of historical audio
 - **Fully Custom Pure Player** — strips native browser controls; offers fine-grained time track, precise drag positioning, lossless playback
-- **Ops Console** — cost / revenue / system health / runtime logs in one place (see next section)
+- **Cost & health** — generation cost, usage, service health and runtime logs in one place (see next section)
+
+> Distribution (Qishui / QQ / NetEase uploads, albums, platform accounts) moved to
+> [suno-publisher](https://github.com/webkubor/suno-publisher) on 2026-10-10; this repository no longer ships a distribution UI.
 
 ---
 
-## 📊 Ops console: the actual business math
-
-Most AI creation tools only tell you "generation succeeded". VoxFlow also tells you **how much this generation cost, how many plays before payback, by today whether it's in the green or red**.
+## 📊 Ops console: the cost ledger
 
 Visit `http://localhost:8866/#/ops`, or run `voice stats`.
 
-### Cost side: three chains, one ledger
-
 | Source | Billing | How it appears in the ledger |
 |---|---|---|
-| Local TTS (Qwen3-TTS) | Free | Actual ¥0 always; also calculates "the same volume via commercial API would cost X" |
-| Suno AI music | Subscription credits | Credits per generation × current unit price |
+| Local TTS (Qwen3-TTS) | Free | Actual ¥0 always; also shows what the same volume would cost via a commercial API |
 | museav platform (image / copy) | Prepaid credits | Metered by token / image; authorize via `voice museav login`, charged to **your own account** |
 
-Two details easy to overlook but explicitly handled here:
-
-- **Failed calls get logged too.** Suno failures still consume credits; only logging successes means the ledger can never balance, and "failure rate × unit price" is precisely the waste that needs to be visible.
-- **Costs are stamped at the current unit price when written.** Plan changes, platform repricing — none of them retroactively rewrites history — otherwise one reprice changes the whole past half-year.
-
-Unit price table at [`configs/pricing.json`](configs/pricing.json) — copy to `~/.voxflow/configs/` to override; upgrades won't clobber your override.
-
-### Revenue side: measured data drives actual split rate
-
-The platform backend gives both cumulative plays and withdrawable amount — divide and you have **the actual ¥/1000-plays this account receives** — more accurate than any public data, because it includes actual rights tiers.
-
-The UI explicitly marks each rate as "measured" or "estimated". Platforms with no first-hand split-rate data (e.g. Tencent's stack) — better to leave blank than fill in a guess — guesses become decisions.
-
-### Per-track: which song is making money
-
-Account-level totals can't answer "what style should the next song be". Per-track plays aren't available via public API (NetEase Cloud's `song/detail` `playedNum` is always 0, measured), only from the artist backend:
+- **Costs are stamped at the unit price in effect when written.** Plan changes or repricing never rewrite history.
+- Unit prices live in [`configs/pricing.json`](configs/pricing.json); copy it to `~/.voxflow/configs/` to override — upgrades won't clobber it.
 
 ```bash
-VF_BASE=$PWD browser-harness < scripts/ncm_stats.py         # account-level: total plays / followers / earnings
-VF_BASE=$PWD browser-harness < scripts/ncm_track_stats.py   # track-level: last 30 days plays
-```
-
-The ops workbench's work table then gives each song: **cost · last-30-day plays · estimated revenue · ROI · plays to payback**.
-
-Two stated conventions:
-
-- **Plays are last 30 days, not cumulative.** The backend only gives 7-day / 30-day buckets; cumulative is mostly old-song sediment — "which songs are growing in the last 30 days" is the actionable signal.
-- **Per-track revenue is estimated.** The backend has no per-track revenue column, so it's calculated as `plays × measured ¥/1000-plays`. NetEase pays by play, per-account rates are roughly the same, the estimate holds — but it's not platform-actual; the UI marks it, don't use it for accounting.
-
-A "—" in the table means **no data**, not 0. The two are very different meanings: the former is "not yet fetched", the latter is "really zero plays".
-
-### System health: not ping, checkup
-
-`/api/health` checks: can the DB read, can the data dir write, how much disk left, has the model finished downloading, is the task queue blocked — returns `ok` / `degraded` / `down`.
-
-`degraded` is the most useful of the three — "can still make songs but space is almost gone". With only ok/down, `degraded` counts as ok, and by the time you notice it's down.
-
-```bash
-curl -s localhost:8866/api/health | jq .status     # for monitoring / agents
+curl -s localhost:8866/api/health | jq .status     # ok / degraded / down, for monitoring and agents
 curl -s localhost:8866/api/metrics | jq .routes    # per-endpoint volume, error rate, P50/P95
 ```
 
 ---
 
-## 🌐 Full-net Music Distribution
+## 🎵 Music generation & distribution now live separately
 
-VoxFlow isn't just a TTS engine — it's a **music and audio distribution management hub** for independent creators:
-
-- **Artist identity ledger** (`configs/artist.json`): unified maintenance of public stage names, real-name copyright entities, each platform's home + artist ID
-- **Multi-platform data alignment**: auto-parses and verifies Qishui Music / QQ Music / NetEase Cloud Music catalog IDs and play links
-- **Standard distribution spec**: one-click packaging of audio + cover + lyrics meta asset bundles, aligned with each distribution channel's spec
+VoxFlow is now a **pure voice workbench** (local TTS, voice design, voice cloning, script performance). All **AI music generation (Suno)** and **distribution (Qishui / NetEase / Tencent uploads and revenue ledger)** moved to
+👉 **[suno-publisher](https://github.com/webkubor/suno-publisher)** — its own repository, database and automation. This repository contains no music-generation logic.
 
 ---
 
@@ -313,6 +283,15 @@ VoxFlow is designed for automation agents from the start:
 ```bash
 voice doctor           # terminal table report
 voice doctor --json    # JSON output for agent decision parsing
+```
+
+### 3. Voice library / generated library / templates (machine-readable)
+
+`voice voice`, `voice library`, `voice preset`, `voice design` and `voice clone` all accept `--json`: stdout carries exactly one JSON object (`{"ok": true, ...}` or `{"ok": false, "error", "status"}`), progress goes to stderr. Exit codes: `0` success, `1` error, `3` not found, `4` conflict (favorited, duplicate name, template already generated). Deletions in non-interactive environments require `--yes`. Full list in [AGENTS.md](AGENTS.md).
+
+```bash
+voice preset list --pending --json | jq -r '.presets[].name'
+voice voice rm my_voice --yes --json; echo "exit=$?"
 ```
 
 ---
