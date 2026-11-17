@@ -80,7 +80,7 @@ interface DialogueForm {
 }
 
 const createCloneForm = (): CloneForm => ({ persona: '', text: '', tone: '', emotion: '', emotionPriority: false });
-const createDesignForm = (): DesignForm => ({ name: '', text: '', tone: '', emotion: '', commit: false });
+const createDesignForm = (): DesignForm => ({ name: '', text: '', tone: '', emotion: '', commit: true });
 
 export const useSynthStore = defineStore('synth', () => {
   const cloneForm = reactive<CloneForm>(createCloneForm());
