@@ -27,11 +27,15 @@
         <div class="sidebar-header">
           <div class="section-title">
             <Icon name="voice" size="sm" />
-            <span>🎙️ 我的声音资产</span>
+            <span>收藏音色库</span>
           </div>
-          <span class="persona-badge">{{ personasArr.length }} 位</span>
+          <span class="persona-badge">{{ personasArr.filter(p => p.favorite !== false).length }} 位</span>
         </div>
 
+        <button class="new-persona-btn" @click="$emit('add-persona')">
+          <Icon name="plus" size="sm" /> <span>录制 / 导入我的声音</span>
+        </button>
+        <button class="voice-filter" @click="showAllVoices = !showAllVoices">{{ showAllVoices ? '只看收藏' : '查看全部音色（含未收藏）' }}</button>
         <div class="persona-search-box">
           <Icon name="search" size="sm" class="search-icon" />
           <input
@@ -81,6 +85,11 @@
             <div class="persona-desc" :title="p.desc || p.instruction">
               {{ p.desc || p.instruction || '已装载声音特征' }}
             </div>
+            <div class="voice-actions" @click.stop>
+              <button @click="toggleFavorite(p)">{{ p.favorite === false ? '☆ 收藏' : '★ 取消收藏' }}</button>
+              <button @click="startRename(p)">重命名</button>
+              <button v-if="p.favorite === false" @click="removeVoice(p)">删除</button>
+            </div>
           </div>
           <div v-if="filteredPersonas.length === 0" class="persona-empty">
             <p v-if="personaSearch">未找到「{{ personaSearch }}」相关角色</p>
@@ -88,10 +97,6 @@
           </div>
         </div>
 
-        <button class="new-persona-btn" @click="$emit('add-persona')">
-          <Icon name="plus" size="sm" />
-          <span>录制 / 导入我的声音</span>
-        </button>
       </aside>
 
       <!-- 右侧：核心配音输入工作区 -->
@@ -231,6 +236,10 @@
         </div>
       </section>
     </div>
+    <n-modal v-model:show="renameDialog" preset="card" title="重命名音色" style="width: min(420px, 92vw)">
+      <n-input v-model:value="renameValue" placeholder="输入新的显示名称" @keydown.enter="saveRename" />
+      <template #footer><n-button type="primary" @click="saveRename">保存</n-button></template>
+    </n-modal>
   </div>
 </template>
 
@@ -260,6 +269,29 @@ const { selectPersona, togglePreview } = voicesStore;
 const { savedScripts } = storeToRefs(synthStore);
 
 const personaSearch = ref('');
+const showAllVoices = ref(false);
+const renameDialog = ref(false);
+const renameValue = ref('');
+const renameKey = ref('');
+const toggleFavorite = async (p) => {
+  try {
+    await voicesStore.updatePersona(p.key, { favorite: p.favorite === false });
+  } catch (error) { tasksStore.showToast(`更新收藏失败：${error.message || error}`, 'error'); }
+};
+const startRename = (p) => { renameKey.value = p.key; renameValue.value = p.name || p.key; renameDialog.value = true; };
+const saveRename = async () => {
+  if (!renameValue.value.trim()) return tasksStore.showToast('请填写音色名称', 'error');
+  try {
+    await voicesStore.updatePersona(renameKey.value, { name: renameValue.value.trim() });
+    renameDialog.value = false;
+    tasksStore.showToast('音色已重命名', 'success');
+  } catch (error) { tasksStore.showToast(`重命名失败：${error.message || error}`, 'error'); }
+};
+const removeVoice = async (p) => {
+  if (!window.confirm(`删除未收藏的音色「${p.name || p.key}」？参考音频文件会保留。`)) return;
+  try { await voicesStore.deletePersona(p.key); }
+  catch (error) { tasksStore.showToast(`删除失败：${error.message || error}`, 'error'); }
+};
 
 const personasArr = computed(() =>
   Object.entries(personas.value || {}).map(([key, p]) => ({ key, ...p })),
@@ -267,13 +299,12 @@ const personasArr = computed(() =>
 
 const filteredPersonas = computed(() => {
   const kw = personaSearch.value.trim().toLowerCase();
-  if (!kw) return personasArr.value;
-  return personasArr.value.filter(
-    (p) => (p.name || '').toLowerCase().includes(kw)
+  return personasArr.value.filter((p) => (showAllVoices.value || p.favorite !== false) &&
+    (!kw || (p.name || '').toLowerCase().includes(kw)
       || p.key.toLowerCase().includes(kw)
       || (p.desc || '').toLowerCase().includes(kw)
-      || (p.instruction || '').toLowerCase().includes(kw),
-  );
+      || (p.instruction || '').toLowerCase().includes(kw)));
+
 });
 
 const currentPersonaName = computed(() => {
@@ -353,6 +384,18 @@ onMounted(() => synthStore.loadScripts());
 </script>
 
 <style scoped>
+.voice-filter, .voice-actions button {
+  color: var(--vf-text-2);
+  background: transparent;
+  border: 1px solid var(--vf-border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+.voice-filter { margin: 0 0 8px; }
+.voice-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.voice-actions button:hover, .voice-filter:hover { color: var(--vf-text-1); }
 .tab-content-container {
   max-width: 1180px;
   margin: 0 auto;

@@ -92,7 +92,7 @@ export const useVoicesStore = defineStore('voices', () => {
    */
   const updatePersona = async (
     key: string,
-    { name, desc }: { name?: string; desc?: string },
+    { name, desc, favorite }: { name?: string; desc?: string; favorite?: boolean },
   ): Promise<{ ok: boolean; name: string; desc: string }> => {
     error.value = '';
     try {
@@ -101,6 +101,7 @@ export const useVoicesStore = defineStore('voices', () => {
       // 所以判 undefined 不判真值，否则清空这个操作会被吞掉。
       if (name !== undefined) body.append('name', name);
       if (desc !== undefined) body.append('desc', desc);
+      if (favorite !== undefined) body.append('favorite', String(favorite));
       const data = await api.updatePersona(key, body);
       await loadPersonas();
       return data;

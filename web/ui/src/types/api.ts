@@ -219,6 +219,7 @@ export interface Persona {
   instruction?: string;
   desc?: string;
   source?: string;
+  favorite?: boolean;
   /** has_temp / has_ref 是它的历史别名，都指同一个文件 */
   has_audio?: boolean;
 }

@@ -10,14 +10,15 @@
         <div class="banner-text-group">
           <span class="banner-title">声音工坊 · 音色设计：凭空塑造独一无二的 AI 专属声线</span>
           <span class="banner-desc">
-            从左侧「官方灵感预设」挑选模板或自由填写；合成入库后将沉淀至「我的声音资产」，供【文本配音】与【Suno 歌手】调用！
+            从模板选择声线并生成样音，在生成库试听后收藏；收藏的音色可用于文本配音。
           </span>
         </div>
       </div>
       <div class="banner-right">
+        <button class="goto-assets-btn" @click="router.push({ name: 'library' })">查看生成库</button>
         <button class="goto-assets-btn" @click="goToAssets">
           <Icon name="voice" size="sm" />
-          <span>查看我的声音资产 ({{ personasCount }})</span>
+          <span>收藏音色库 ({{ personasCount }})</span>
           <Icon name="arrow-right" size="sm" />
         </button>
       </div>
@@ -59,10 +60,12 @@
           >
             <div class="preset-item-head">
               <span class="preset-name">{{ p.voice_name }}</span>
-              <span v-if="selectedPresetName === p.voice_name" class="using-badge">已套用</span>
+              <span v-if="p.has_generated" class="using-badge">已生成</span>
+              <span v-else-if="selectedPresetName === p.voice_name" class="using-badge">已套用</span>
             </div>
             <div class="preset-tone">{{ p.tone }}</div>
             <div class="preset-text" :title="p.text">{{ p.text }}</div>
+            <audio v-if="p.audio_url" controls preload="none" :src="p.audio_url" @click.stop />
           </div>
           <div v-if="filteredPresets.length === 0" class="preset-empty">
             没有匹配「{{ presetSearch }}」的灵感模板
@@ -129,11 +132,11 @@
               <span class="commit-tip">合成完成自动沉淀为【我的声音资产】并带上 ✓ 样音标识</span>
             </label>
             <n-button type="primary" class="glow"
-              :disabled="!designForm.name.trim() || !designForm.text.trim() || !modelStatus.design.ready"
-              @click="doDesign"
+              :disabled="!designForm.name.trim() || !designForm.text.trim() || !modelStatus.design.ready || selectedPresetGenerated"
+              @click="doDesign(selectedPresetName)"
             >
               <Icon name="design" size="sm" />
-              <span>合成并设计音色</span>
+              <span>{{ selectedPresetGenerated ? '模板已生成，请到生成库查看' : '合成并设计音色' }}</span>
             </n-button>
           </div>
         </section>
@@ -167,6 +170,9 @@ const selectedPresetName = ref('');
 const presetSearch = ref('');
 
 const personasCount = computed(() => Object.keys(personas.value || {}).length);
+const selectedPresetGenerated = computed(() => designPresets.value.some(
+  (p) => p.voice_name === selectedPresetName.value && p.has_generated,
+));
 
 const filteredPresets = computed(() => {
   const kw = presetSearch.value.trim().toLowerCase();

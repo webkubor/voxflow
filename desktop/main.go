@@ -13,7 +13,7 @@
 //
 //	┌─────────────────────────────────────────────┐
 //	│ MyGo 窗口 (WKWebView)                       │
-//	│   加载 mygo://localhost/  ← 嵌入式前端产物  │
+//	│   加载 http://127.0.0.1:<随机>/#/clone      │
 //	│   fetch('/api/...')  ─────────────┐         │
 //	└──────────────────────────────────┼─────────┘
 //	                                   │ 代理
@@ -39,6 +39,7 @@ import (
 	"io/fs"
 	"log"
 	"mime"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -325,6 +326,23 @@ func frontend() http.Handler {
 	})
 }
 
+// protectFrontend 限制桌面内嵌页面只接受回环同源请求。
+//
+// 这个 HTTP 服务只属于 App 自己的窗口：Host 必须就是监听地址（挡住
+// DNS 重绑定），Origin 不允许别的来源（挡住网页跨站脚本调用），Sec-Fetch-Site
+// 显式标 cross-site 的也拒掉。普通导航和同源 fetch 不受影响。
+func protectFrontend(origin string, next http.Handler) http.Handler {
+	host := origin[len("http://"):]
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != host || r.Header.Get("Sec-Fetch-Site") == "cross-site" ||
+			(r.Header.Get("Origin") != "" && r.Header.Get("Origin") != origin) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // contentType 按扩展名给出内容类型。嵌入的资源类型是固定的几种，
 // 不必引入 mime 的扩展名数据库。
 func contentType(name string) string {
@@ -368,7 +386,7 @@ func navigate(win *mygo.Window, route string) {
 	if win == nil {
 		return
 	}
-	_, _ = win.Page().Eval(fmt.Sprintf("location.hash = %q; true", route))
+	_, _ = win.Page().Eval(fmt.Sprintf("location.hash = %q; true", strings.TrimPrefix(route, "/#")))
 }
 
 // buildMenu 造出原生菜单。
@@ -426,6 +444,10 @@ func buildMenu(getWin func() *mygo.Window) *mygo.Menu {
 
 // dataDir 返回数据目录，和 core/paths.py 的 DATA_DIR 一致。
 func dataDir() string {
+	if dir := os.Getenv("VOXFLOW_HOME"); dir != "" {
+		return dir
+	}
+	// 旧版本写的 VOXFLOW_DATA_HOME 仍认，避免已有用户升级后日志换地方。
 	if dir := os.Getenv("VOXFLOW_DATA_HOME"); dir != "" {
 		return dir
 	}
@@ -486,10 +508,20 @@ func main() {
 		os.Exit(0)
 	}()
 
-	// 前端协议：窗口里加载 mygo://localhost/ 拿到嵌入式页面。
-	if err := mygo.Protocol.Handle("mygo", frontend()); err != nil {
-		log.Fatalf("register protocol: %v", err)
+	// WKWebView custom scheme requests can lose multipart bodies. Serve the
+	// embedded UI over loopback HTTP instead so recorded files reach FastAPI.
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		log.Fatalf("start desktop UI: %v", err)
 	}
+	origin := "http://" + listener.Addr().String()
+	server := &http.Server{ReadHeaderTimeout: 10 * time.Second, Handler: protectFrontend(origin, frontend())}
+	go func() {
+		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
+			log.Printf("desktop UI: %v", err)
+		}
+	}()
+	defer server.Close()
 
 	mygo.App.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
@@ -500,15 +532,19 @@ func main() {
 			MinHeight:       620,
 			BackgroundColor: "#0f1115",
 			StateKey:        "main",
-			URL:             routeClone,
+			URL:             origin + routeClone,
+			Page:            mygo.PageOptions{TrustedOrigins: []string{origin}},
 		})
 		mygo.App.SetMenu(buildMenu(func() *mygo.Window { return win }))
 
 		// 外部链接交给系统浏览器，不在特权窗口里加载远端内容。
 		win.Page().OnWillNavigate(func(e *mygo.NavigateEvent) {
-			if !strings.HasPrefix(e.URL, "mygo://") {
+			u, err := url.Parse(e.URL)
+			if err != nil || u.Scheme+"://"+u.Host != origin {
 				e.PreventDefault()
-				_ = mygo.Shell.OpenExternal(e.URL)
+				if e.UserInitiated && err == nil && (u.Scheme == "https" || u.Scheme == "http") {
+					_ = mygo.Shell.OpenExternal(e.URL)
+				}
 			}
 		})
 	})

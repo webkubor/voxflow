@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = tempfile.TemporaryDirectory(prefix="voxflow-registration-test-")
 os.environ["VOXFLOW_HOME"] = ROOT.name
@@ -72,6 +73,19 @@ class RegistrationTests(unittest.TestCase):
         saved = json.loads(PERSONAS_FILE.read_text())[response.json()["persona_key"]]
         self.assertEqual(saved["ref_text"], "设计时实际念的短句。")
         self.assertAlmostEqual(sf.info(BASE_DIR / saved["ref"]).duration, 12, places=2)
+        original_ref = (BASE_DIR / saved["ref"]).read_bytes()
+        self.assertEqual(self.client.delete(f"/api/audio/{sample.name}").status_code, 409)
+        duplicate = self.client.post("/api/design/commit", json={"filename": sample.name, "voice_name": "另一个名称"})
+        self.assertEqual(duplicate.status_code, 409)
+        self.assertEqual((BASE_DIR / saved["ref"]).read_bytes(), original_ref)
+        entry = next(f for f in self.client.get("/api/audio-list").json()["files"] if f["filename"] == sample.name)
+        self.assertTrue(entry["voice"]["favorite"])
+        key = response.json()["persona_key"]
+        self.assertEqual(self.client.patch(f"/api/personas/{key}", data={"name": "改名后"}).status_code, 200)
+        self.assertEqual(self.client.patch(f"/api/personas/{key}", data={"favorite": "false"}).status_code, 200)
+        self.assertEqual(self.client.delete(f"/api/audio/{sample.name}").status_code, 200)
+        self.assertEqual(self.client.delete(f"/api/personas/{key}").status_code, 200)
+        self.assertEqual((BASE_DIR / saved["ref"]).read_bytes(), original_ref)
 
     def test_corrupt_mapping_is_never_overwritten(self):
         with tempfile.TemporaryDirectory() as root:
@@ -89,6 +103,25 @@ class RegistrationTests(unittest.TestCase):
             with ThreadPoolExecutor(max_workers=2) as pool:
                 list(pool.map(lambda key: upsert_persona_mapping(root, key, key, key + '.wav', '原文'), ['a', 'b']))
             self.assertEqual(set(json.loads((Path(root) / 'configs/personas.json').read_text())), {'a', 'b'})
+
+    def test_generated_and_running_presets_cannot_be_submitted_twice(self):
+        import web.app as service
+        preset = {"voice_name": "模板A", "has_generated": True}
+        body = {"voice_name": "模板A", "tone": "清晰", "text": "你好", "preset_name": "模板A"}
+        with patch.object(service, "_scan_design_presets", return_value=[preset]):
+            self.assertEqual(self.client.post("/api/design", json=body).status_code, 409)
+        preset["has_generated"] = False
+        running = {"type": "design", "status": "running", "params": {"preset_name": "模板A"}}
+        with patch.object(service, "_scan_design_presets", return_value=[preset]), patch.object(service, "_tasks", {"task": running}):
+            self.assertEqual(self.client.post("/api/design", json=body).status_code, 409)
+        with patch.object(service, "_scan_design_presets", return_value=[preset]), patch.object(service, "_submit_task", return_value="test"):
+            self.assertEqual(self.client.post("/api/design", json=body).status_code, 200)
+
+    def test_favorite_voice_is_protected_until_unfavorited(self):
+        self.assertEqual(self.register("protected").status_code, 200)
+        self.assertEqual(self.client.delete("/api/personas/protected").status_code, 409)
+        self.assertEqual(self.client.patch("/api/personas/protected", data={"favorite": "false"}).status_code, 200)
+        self.assertEqual(self.client.delete("/api/personas/protected").status_code, 200)
 
     def test_capability_and_empty_text_guard(self):
         response = self.client.get("/api/personas")

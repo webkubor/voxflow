@@ -78,22 +78,9 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
    * 不至于月底发现浪费了 1000 credits。
    */
   const capBadges = computed<CapBadge[]>(() => {
-    const sunoCaps = caps.value.suno;
     return [
       { key: 'tts', label: '语音', what: caps.value.tts?.model || 'Qwen3-TTS',
         ready: caps.value.tts?.ready, detail: caps.value.tts?.detail },
-      {
-        key: 'suno', label: '音乐',
-        // 显示文本：有总额时「套餐 · 已用/总额」，否则「套餐 · 剩余」
-        what: formatSunoBadge(sunoCaps),
-        ready: sunoCaps?.ready,
-        num: sunoCaps?.credits,
-        plan: sunoCaps?.plan,
-        creditsRemaining: sunoCaps?.credits,
-        creditsTotal: sunoCaps?.credits_total,
-        renewDate: sunoCaps?.renew_date,
-        detail: sunoCaps?.detail,
-      },
       {
         key: 'museav', label: 'museav',
         // 显示积分而不是只显示租户名。中台积分是**硬约束**（没了出不了图），
@@ -124,20 +111,6 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
     const c = m.credits;
     if (c === undefined || c === null) return who;
     return `${who} · ${c} 分`;
-  };
-
-  /** 顶栏 Suno chip 的文案。优先「套餐 · 已用/总额」，降级到「套餐 · 剩余」。 */
-  const formatSunoBadge = (s: typeof caps.value.suno): string => {
-    if (!s) return 'Suno';
-    const plan = s.plan || 'Suno';
-    const remaining = s.credits;
-    const total = s.credits_total;
-    if (remaining !== undefined && total !== undefined && total > 0) {
-      const used = total - remaining;
-      return `${plan} · ${used}/${total}`;
-    }
-    if (remaining !== undefined) return `${plan} · ${remaining}`;
-    return plan;
   };
 
   const loadCaps = async (): Promise<CapabilitiesResponse> => {

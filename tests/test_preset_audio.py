@@ -38,6 +38,7 @@ def run():
             assert got_old is not None and "旧音_A" in got_old.name, f"旧样音丢了：{got_old}"
 
             assert app._find_preset_audio_file("查无此音") is None, "不存在的预设应该返回 None"
+            assert app._find_preset_audio_file("新音_D") is None, "相似名称的音色不应被误认为已生成"
 
             # 同名多份时取 mtime 最新的那个
             newer = root / "out" / "design" / "29991231" / "[设计]新音_C_29991231_235959.wav"

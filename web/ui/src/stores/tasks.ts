@@ -148,7 +148,7 @@ export const useTasksStore = defineStore('tasks', () => {
     await library.loadAudioList().catch((cause) => {
       error.value = cause instanceof Error ? cause.message : String(cause);
     });
-    if (task.result?.committed) await voices.loadPersonas().catch((cause) => {
+    if (task.type === 'design' || task.result?.committed) await voices.loadPersonas().catch((cause) => {
       error.value = cause instanceof Error ? cause.message : String(cause);
     });
   };

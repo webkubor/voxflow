@@ -31,6 +31,8 @@ export interface DesignPreset {
   tone: string;
   text: string;
   emotion: string;
+  has_generated?: boolean;
+  audio_url?: string | null;
 }
 
 /** 草稿箱条目（CloneTab 消费 id/title/content）。 */
@@ -171,12 +173,13 @@ export const useSynthStore = defineStore('synth', () => {
     emotion_priority: cloneForm.emotionPriority,
   }, '正在提交克隆合成任务...');
 
-  const doDesign = (): Promise<{ task_id: string }> => submitTask('/api/design', {
+  const doDesign = (presetName = ''): Promise<{ task_id: string }> => submitTask('/api/design', {
     voice_name: designForm.name,
     text: designForm.text,
     tone: designForm.tone,
     emotion: designForm.emotion,
     commit: designForm.commit,
+    preset_name: presetName,
   }, '正在提交音色设计任务...');
 
   const loadDialogueSample = async (): Promise<{ scripts: unknown[] }> => {

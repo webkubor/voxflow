@@ -15,6 +15,7 @@ import threading
 import time
 import queue as queue_mod
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -78,6 +79,7 @@ obs.log("server_start", version=VERSION)
 # ── 引擎单例（懒加载） ────────────────────────────────────
 _engine_lock = threading.Lock()
 _persona_registration_lock = threading.Lock()
+_preset_submit_lock = threading.Lock()
 _base_engine = None
 _design_engine = None
 _processor = None
@@ -510,22 +512,14 @@ def _run_design_task(task_id: str, params: dict, update_fn):
     }
 
     if req.commit:
-        voice_key = resolve_design_voice_key({"voice_name": req.voice_name})
-        temp_seed_path = processor.prepare_clone_reference(str(out_path), req.text)
-        ref_rel = os.path.relpath(str(temp_seed_path), str(BASE_DIR)).replace("\\", "/")
-        design_rel = f"voice_designs/{safe_name}.json"
-        upsert_persona_mapping(
-            str(BASE_DIR),
-            persona_key=voice_key,
-            persona_name=req.voice_name,
-            ref_rel=ref_rel,
-            ref_text=req.text,
-            design_rel=design_rel,
-            instruction=instruct,
-        )
-        write_generation_json(str(BASE_DIR), voice_key, source="voice_design")
-        result["committed"] = True
-        result["persona_key"] = voice_key
+        try:
+            saved = design_commit(DesignCommitRequest(filename=out_filename, voice_name=req.voice_name,
+                                                      instruction=instruct, ref_text=req.text))
+            result["committed"] = True
+            result["persona_key"] = saved["persona_key"]
+        except HTTPException as exc:
+            # The generated file remains available in the library even if the name conflicts.
+            result["commit_error"] = str(exc.detail)
 
     update_fn(task_id, progress=100, stage="完成",
               status="done",
@@ -643,6 +637,7 @@ class DesignRequest(BaseModel):
     tone: str = ""
     emotion: str = ""
     commit: bool = False
+    preset_name: str = ""
 
 
 class PersonaAddRequest(BaseModel):
@@ -814,26 +809,20 @@ def get_status():
 def _find_preset_audio_file(voice_name: str) -> Optional[Path]:
     """寻找预设对应的最新生成样音文件"""
     candidates = []
-    short_name = voice_name.split("-")[0].split("_")[0].strip()
     # out/design/ 下按日期分目录（20260830/…），**不能写死日期** —— 写死的那版
     # 只认 0828/0830 两天，今天生成的样音一律找不到。这里列出全部子目录。
     design_root = DATA_DIR / "out" / "design"
     search_dirs = [DATA_DIR / "assets" / "temp", DATA_DIR / "out"]
     if design_root.is_dir():
         search_dirs += sorted((d for d in design_root.iterdir() if d.is_dir()), reverse=True)
-    # 精确命中（文件名含完整 voice_name）和模糊命中（只含 short_name）分两组：
-    # short_name 砍掉了「-」「_」之后的部分，「朝朝-元气阳光」和「朝朝-温柔」
-    # 的 short_name 都是「朝朝」。混在一起按 mtime 排，查 A 会返回更晚生成的 B。
-    exact, fuzzy = [], []
+    # 模糊匹配会把相近名称的其他音色误判成当前模板的生成结果。
+    # 只识别生成器的设计文件名和历史标准样音名。
     for d in search_dirs:
         if not d.exists():
             continue
         for f in d.glob("*.wav"):
-            if voice_name in f.name:
-                exact.append(f)
-            elif len(short_name) >= 2 and short_name in f.name:
-                fuzzy.append(f)
-    candidates = exact or fuzzy
+            if f.name.startswith(f"[设计]{voice_name}_") or f.name == f"当前参考_{voice_name}.wav":
+                candidates.append(f)
     if not candidates:
         return None
     candidates.sort(key=lambda x: x.stat().st_mtime, reverse=True)
@@ -845,11 +834,14 @@ def _scan_design_presets() -> list:
     # presets 是代码自带的内置预设，留在项目里跟着版本走；
     # 你自己存的预设落在数据目录。两处都扫。
     preset_dirs = [DATA_DIR / "configs" / "presets", PROJECT_DIR / "configs" / "presets"]
-    preset_dir = next((d for d in preset_dirs if d.is_dir()), preset_dirs[-1])
+    # 用户模板优先，按文件名去重；不能因为用户目录存在就隐藏内置模板。
+    files = {}
+    for directory in preset_dirs:
+        if directory.is_dir():
+            for path in directory.glob("*.json"):
+                files.setdefault(path.name, path)
     result = []
-    if not preset_dir.exists():
-        return result
-    for f in sorted(preset_dir.glob("*.json")):
+    for f in sorted(files.values(), key=lambda p: p.name):
         try:
             with open(f, "r", encoding="utf-8") as fh:
                 cfg = json.load(fh)
@@ -1110,7 +1102,7 @@ def model_download_status():
         out[name] = {**prog, "ready": _check_model_dir(name), "running": alive}
 
     base_ready = out["Base"]["ready"]
-    caps_now = ["AI 音乐（Suno）", "作品看板与全网发行台账", "运营台（成本 / 健康 / 日志）"]
+    caps_now = ["生成库（本地音频）", "成本与健康（用量 / 日志）"]
     caps_after = ["声音克隆", "多角色剧本合成"] + (
         [] if out["VoiceDesign"]["ready"] else ["音色设计（需 VoiceDesign）"])
     return {
@@ -1234,20 +1226,32 @@ def design_commit(req: DesignCommitRequest):
     ref_text = req.ref_text.strip()
     if not ref_text and src.with_suffix(".json").is_file():
         ref_text = json.loads(src.with_suffix(".json").read_text(encoding="utf-8")).get("ref_text", "")
-    try:
-        seed = _get_processor().prepare_clone_reference(str(src), ref_text)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    upsert_persona_mapping(
-        str(BASE_DIR),
-        persona_key=voice_key,
-        persona_name=name,
-        ref_rel=os.path.relpath(str(seed), str(BASE_DIR)).replace("\\", "/"),
-        ref_text=ref_text,
-        design_rel=f"voice_designs/{safe_name}.json",
-        instruction=req.instruction or "",
-    )
-    write_generation_json(str(BASE_DIR), voice_key, source="voice_design")
+    with _persona_registration_lock:
+        existing = json.loads(PERSONAS_FILE.read_text(encoding="utf-8")) if PERSONAS_FILE.exists() else {}
+        if voice_key in existing:
+            raise HTTPException(409, "音色名称已存在，请使用其他名称")
+        if any(isinstance(v, dict) and v.get("source_filename") == src.name for v in existing.values()):
+            raise HTTPException(409, "该生成结果已在音色库中")
+        try:
+            seed = _get_processor().prepare_clone_reference(str(src), ref_text)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        try:
+            upsert_persona_mapping(
+                str(BASE_DIR), persona_key=voice_key, persona_name=name,
+                ref_rel=os.path.relpath(str(seed), str(BASE_DIR)).replace("\\", "/"),
+                ref_text=ref_text, design_rel=f"voice_designs/{safe_name}.json",
+                instruction=req.instruction or "",
+            )
+        except Exception:
+            Path(seed).unlink(missing_ok=True)
+            raise
+        with _personas_file_lock():
+            data = json.loads(PERSONAS_FILE.read_text(encoding="utf-8"))
+            data[voice_key]["source_filename"] = src.name
+            data[voice_key]["favorite"] = True
+            _write_personas_atomic(data)
+        write_generation_json(str(BASE_DIR), voice_key, source="voice_design")
     obs.log("design_committed", persona_key=voice_key, name=name)
     return {"ok": True, "persona_key": voice_key, "name": name}
 
@@ -1298,8 +1302,37 @@ def add_persona(
     return {"ok": True, "key": safe_key, "name": display_name, "ref": ref_rel, "ref_text": ref_text.strip()}
 
 
+@contextmanager
+def _personas_file_lock():
+    """Use the same cross-process lock as the CLI's persona writer."""
+    from fcntl import flock, LOCK_EX, LOCK_UN
+    PERSONAS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(str(PERSONAS_FILE) + ".lock", "a") as lock:
+        flock(lock.fileno(), LOCK_EX)
+        try:
+            yield
+        finally:
+            flock(lock.fileno(), LOCK_UN)
+
+
+def _write_personas_atomic(data: dict):
+    """Replace the mapping atomically; interrupted writes must not truncate the library."""
+    import tempfile
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=PERSONAS_FILE.parent, delete=False) as f:
+            temp_path = f.name
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, PERSONAS_FILE)
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+
 @app.patch("/api/personas/{key}")
-def update_persona(key: str, name: str = Form(None), desc: str = Form(None)):
+def update_persona(key: str, name: str = Form(None), desc: str = Form(None), favorite: Optional[bool] = Form(None)):
     """
     改音色的名字和描述。就是改两个字段，不碰任何文件。
 
@@ -1311,45 +1344,41 @@ def update_persona(key: str, name: str = Form(None), desc: str = Form(None)):
     参考音频的路径本来就完整存在 ref 字段里（注册音色时写进去的），
     改成只读 ref 之后，名字回归成纯粹的名字，改名就是改个字段。
     """
-    if not PERSONAS_FILE.exists():
-        raise HTTPException(404, "personas.json 不存在")
-
-    with open(PERSONAS_FILE, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    if key not in data:
-        raise HTTPException(404, f"音色 {key} 不存在")
-
-    entry = data[key] if isinstance(data[key], dict) else {"name": data[key]}
-
-    # 只写传了的字段。空字符串是有意义的输入（清空描述），判 None 不判真值。
-    if name is not None and name.strip():
-        entry["name"] = name.strip()
-    if desc is not None:
-        entry["desc"] = desc.strip()
-
-    data[key] = entry
-    with open(PERSONAS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
+    with _persona_registration_lock, _personas_file_lock():
+        if not PERSONAS_FILE.exists():
+            raise HTTPException(404, "personas.json 不存在")
+        with open(PERSONAS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if key not in data:
+            raise HTTPException(404, f"音色 {key} 不存在")
+        entry = data[key] if isinstance(data[key], dict) else {"name": data[key]}
+        if name is not None and name.strip():
+            entry["name"] = name.strip()
+        if desc is not None:
+            entry["desc"] = desc.strip()
+        if favorite is not None:
+            entry["favorite"] = favorite
+        data[key] = entry
+        _write_personas_atomic(data)
     return {"ok": True, "key": key, "name": entry.get("name", key), "desc": entry.get("desc", "")}
 
 
 @app.delete("/api/personas/{key}")
 def delete_persona(key: str):
     """删除音色注册（不删除音频文件）"""
-    if not PERSONAS_FILE.exists():
-        raise HTTPException(404, "personas.json 不存在")
-
-    with open(PERSONAS_FILE, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    if key not in data:
-        raise HTTPException(404, f"音色 {key} 不存在")
-
-    del data[key]
-    with open(PERSONAS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
+    with _persona_registration_lock, _personas_file_lock():
+        if not PERSONAS_FILE.exists():
+            raise HTTPException(404, "personas.json 不存在")
+        with open(PERSONAS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if key not in data:
+            raise HTTPException(404, f"音色 {key} 不存在")
+        entry = data[key]
+        # 旧注册音色默认受保护，避免升级后历史资产意外变为可删除。
+        if not isinstance(entry, dict) or entry.get("favorite", True):
+            raise HTTPException(409, "已收藏的音色不能删除，请先取消收藏")
+        del data[key]
+        _write_personas_atomic(data)
     return {"ok": True}
 
 
@@ -1378,7 +1407,22 @@ def design(req: DesignRequest):
         raise HTTPException(400, f"设计文本过长（{len(req.text)} > 45 字）")
 
     label = f"{req.voice_name} — {req.tone or req.emotion}"
-    task_id = _submit_task("design", label, req.model_dump())
+    with _preset_submit_lock:
+        if req.preset_name:
+            presets = {p["voice_name"]: p for p in _scan_design_presets()}
+            if req.preset_name not in presets:
+                raise HTTPException(400, "设计模板不存在")
+            if req.voice_name != req.preset_name:
+                raise HTTPException(400, "模板名称不能更改，请使用自定义设计")
+            if presets[req.preset_name]["has_generated"]:
+                raise HTTPException(409, "该模板已经生成，请在生成库中查看")
+            with _tasks_lock:
+                running = any(t["type"] == "design" and t["status"] in ("queued", "running")
+                              and t["params"].get("preset_name") == req.preset_name
+                              for t in _tasks.values())
+            if running:
+                raise HTTPException(409, "该模板正在生成，请等待任务完成")
+        task_id = _submit_task("design", label, req.model_dump())
     return {"task_id": task_id, "status": "queued"}
 
 
@@ -1517,6 +1561,9 @@ MEDIA_TYPES = {
 def audio_list():
     """列出已生成的音频文件（TTS wav + Suno 音乐 mp3/m4a 统一管理）"""
     files = []
+    personas = json.loads(PERSONAS_FILE.read_text(encoding="utf-8")) if PERSONAS_FILE.exists() else {}
+    linked = {v.get("source_filename"): {"key": k, "favorite": v.get("favorite", True), "name": v.get("name", k)}
+              for k, v in personas.items() if isinstance(v, dict) and v.get("source_filename")}
     if OUT_DIR.exists():
         for f in sorted(OUT_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
             if f.suffix.lower() in AUDIO_EXTS:
@@ -1530,6 +1577,7 @@ def audio_list():
                         "%Y-%m-%d %H:%M:%S"
                     ),
                     "kind": "tts",
+                    "voice": linked.get(f.name),
                 })
     return {"files": files}
 
@@ -1551,9 +1599,14 @@ def delete_audio(filename: str):
     """删除音频文件"""
     safe = os.path.basename(filename)
     path = OUT_DIR / safe
-    if not path.exists():
-        raise HTTPException(404, f"音频文件不存在: {safe}")
-    path.unlink()
+    with _persona_registration_lock, _personas_file_lock():
+        if not path.exists():
+            raise HTTPException(404, f"音频文件不存在: {safe}")
+        personas = json.loads(PERSONAS_FILE.read_text(encoding="utf-8")) if PERSONAS_FILE.exists() else {}
+        if any(isinstance(v, dict) and v.get("source_filename") == safe and v.get("favorite", True)
+               for v in personas.values()):
+            raise HTTPException(409, "已收藏的音色不能删除，请先取消收藏")
+        path.unlink()
     return {"ok": True}
 
 

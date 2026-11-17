@@ -7,5 +7,10 @@
   "license": "MIT",
   "icon": "resources/icon.png",
   "out": "build",
-  "frontendDist": "web"
+  "frontendDist": "web",
+  "macos": {
+    "infoPlist": {
+      "NSMicrophoneUsageDescription": "录制您的参考声音，用于在本机创建和使用您的克隆音色。"
+    }
+  }
 }

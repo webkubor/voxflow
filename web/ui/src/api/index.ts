@@ -155,6 +155,8 @@ export const api = {
   // ── 合成 ──
   clone: (body: unknown) => post<{ task_id: string }>('clone', body),
   design: (body: unknown) => post<{ task_id: string }>('design', body),
+  saveDesignedVoice: (body: { filename: string; voice_name: string; ref_text?: string }) =>
+    post<{ ok: boolean; persona_key: string }>('design/commit', body),
   dialogue: (body: unknown) => post<{ task_id: string }>('dialogue', body),
 
   // ── 文案 ──

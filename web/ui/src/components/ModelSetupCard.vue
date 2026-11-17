@@ -96,9 +96,8 @@ const subtitle = computed(() => {
 
 /** 现在能用的功能 → 可点的跳转。名字对应 router 里的 tab 名。 */
 const SHORTCUTS = [
-  { name: 'suno', label: 'AI 音乐', match: 'AI 音乐' },
-  { name: 'works', label: '作品看板', match: '作品看板' },
-  { name: 'ops', label: '运营台', match: '运营台' },
+  { name: 'library', label: '生成库', match: '生成库' },
+  { name: 'ops', label: '成本与健康', match: '成本与健康' },
 ];
 const shortcuts = computed(() =>
   SHORTCUTS.filter((s) => canDoNow.value.some((c) => c.includes(s.match))));

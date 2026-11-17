@@ -4,15 +4,18 @@
       <div class="sider-header">
         <div class="sider-title-row">
           <Icon name="voice" size="sm" />
-          <h3>我的声音资产</h3>
-          <span class="count" :title="`已拥有 ${personas.length} 位角色`">{{ personas.length }}</span>
+          <h3>收藏音色库</h3>
+          <span class="count">{{ personasArr.filter(p => p.favorite !== false).length }}</span>
         </div>
         <button class="add-btn" @click="$emit('addPersona')" title="登记新声音角色">
           <Icon name="plus" size="sm" />
         </button>
       </div>
 
-      <div v-if="personas.length > 5" class="sider-search">
+      <div class="sider-search">
+        <button class="icon-btn" @click="showAll = !showAll">{{ showAll ? '只看收藏' : '查看全部' }}</button>
+      </div>
+      <div v-if="personasArr.length > 5" class="sider-search">
         <Icon name="search" size="sm" class="search-icon" />
         <input
           ref="searchInput"
@@ -71,7 +74,10 @@
             <button class="icon-btn" title="编辑" @click="$emit('editPersona', p.key)">
               <Icon name="edit" size="sm" />
             </button>
-            <button class="icon-btn danger" title="删除" @click="$emit('deletePersona', p.key)">
+            <button class="icon-btn" :title="p.favorite === false ? '收藏音色' : '取消收藏'" @click="toggleFavorite(p)">
+              {{ p.favorite === false ? '☆' : '★' }}
+            </button>
+            <button v-if="p.favorite === false" class="icon-btn danger" title="删除" @click="$emit('deletePersona', p.key)">
               <Icon name="trash" size="sm" />
             </button>
           </div>
@@ -95,7 +101,7 @@
   >
     <Icon name="chevron-right" size="sm" />
     <span class="rail-label">资产</span>
-    <span class="rail-count">{{ personas.length }}</span>
+    <span class="rail-count">{{ personasArr.length }}</span>
   </button>
 </template>
 
@@ -115,6 +121,7 @@
  */
 import { computed, nextTick, ref } from 'vue';
 import { useVoicesStore } from '../stores/voices';
+import { useTasksStore } from '../stores/tasks';
 import { storeToRefs } from 'pinia';
 import Icon from './Icon.vue';
 
@@ -128,19 +135,26 @@ const { personas, selectedPersona, previewKey, previewProgress } = storeToRefs(v
 const { selectPersona, togglePreview } = voicesStore;
 
 const keyword = ref('');
+const showAll = ref(false);
 const searchInput = ref(null);
 const personasArr = computed(() =>
   Object.entries(personas.value).map(([key, p]) => ({ key, ...p })),
 );
 const filteredPersonas = computed(() => {
   const k = keyword.value.trim().toLowerCase();
-  if (!k) return personasArr.value;
-  return personasArr.value.filter(
-    (p) => (p.name || '').toLowerCase().includes(k) || p.key.toLowerCase().includes(k),
-  );
+  return personasArr.value.filter((p) => (showAll.value || p.favorite !== false) &&
+    (!k || (p.name || '').toLowerCase().includes(k) || p.key.toLowerCase().includes(k)));
+
 });
 
 const select = (key) => voicesStore.selectPersona(key);
+const toggleFavorite = async (persona) => {
+  try {
+    await voicesStore.updatePersona(persona.key, { favorite: persona.favorite === false });
+  } catch (error) {
+    useTasksStore().showToast(`更新收藏失败：${error.message || error}`, 'error');
+  }
+};
 
 /** 暴露给父组件触发：被父级的全局快捷键调用 */
 const focusSearch = () => {

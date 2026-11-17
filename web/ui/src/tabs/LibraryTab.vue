@@ -4,7 +4,7 @@
       <div class="lib-title-row">
         <h3 class="tab-title">
           <Icon name="library" size="md" />
-          <span>已生成的音频文件</span>
+          <span>生成库</span>
         </h3>
         <span class="count-pill">{{ audioFiles.length }} 条</span>
       </div>
@@ -62,7 +62,9 @@
                 <Icon name="download" size="sm" />
                 <span>下载</span>
               </a>
-              <button class="delete-btn" title="删除" @click="deleteAudio(f.filename)">
+              <button v-if="guessType(f.filename) === 'design' && !f.voice" class="action-pill" @click="startSave(f)">收藏音色</button>
+              <span v-if="f.voice" class="action-pill">{{ f.voice.favorite ? '已收藏' : '已取消收藏' }} · {{ f.voice.name }}</span>
+              <button v-if="!f.voice?.favorite" class="delete-btn" title="删除" @click="removeAudio(f.filename)">
                 <Icon name="trash" size="sm" />
               </button>
             </div>
@@ -90,6 +92,13 @@
         <n-button @click="keyword = ''">清除搜索</n-button>
       </template>
     </n-empty>
+    <n-modal v-model:show="saveDialog" preset="card" title="收藏设计音色" style="width: min(480px, 92vw)">
+      <p>音色名称</p>
+      <n-input v-model:value="saveName" placeholder="为音色取名" />
+      <p>参考音频里的原文（历史文件没有记录时必填）</p>
+      <n-input v-model:value="saveText" type="textarea" placeholder="输入样音中实际说出的文字；已有记录可留空" />
+      <template #footer><n-button type="primary" :loading="saving" @click="saveVoice">收藏到音色库</n-button></template>
+    </n-modal>
   </div>
 </template>
 
@@ -98,7 +107,8 @@ import { computed, onMounted, ref } from 'vue';
 import { useLibraryStore } from '../stores/library';
 import { storeToRefs } from 'pinia';
 import { useTasksStore } from '../stores/tasks';
-import { toMessage } from '../api';
+import { api, toMessage } from '../api';
+import { useVoicesStore } from '../stores/voices';
 import Icon from '../components/Icon.vue';
 
 const libraryStore = useLibraryStore();
@@ -108,6 +118,34 @@ const { loadAudioList, playAudio, deleteAudio } = libraryStore;
 
 const keyword = ref('');
 const filterType = ref('all');
+const saveDialog = ref(false);
+const saveName = ref('');
+const saveText = ref('');
+const saveFile = ref('');
+const saving = ref(false);
+const startSave = (file) => {
+  saveFile.value = file.filename;
+  saveName.value = file.filename.replace(/^\[设计\]/, '').replace(/_\d{8}_\d{6}.*$/, '');
+  saveText.value = '';
+  saveDialog.value = true;
+};
+const saveVoice = async () => {
+  if (!saveName.value.trim()) return tasksStore.showToast('请填写音色名称', 'error');
+  saving.value = true;
+  try {
+    await api.saveDesignedVoice({ filename: saveFile.value, voice_name: saveName.value.trim(), ref_text: saveText.value.trim() });
+    await Promise.all([loadAudioList(), useVoicesStore().loadPersonas()]);
+    saveDialog.value = false;
+    tasksStore.showToast('已收藏到音色库', 'success');
+  } catch (error) {
+    tasksStore.showToast(await toMessage(error), 'error');
+  } finally { saving.value = false; }
+};
+const removeAudio = async (filename) => {
+  if (!window.confirm(`删除生成文件「${filename}」？`)) return;
+  try { await deleteAudio(filename); }
+  catch (error) { tasksStore.showToast(await toMessage(error), 'error'); }
+};
 
 const TYPE_LABEL = {
   clone: '克隆',
