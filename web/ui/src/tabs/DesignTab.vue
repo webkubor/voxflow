@@ -65,7 +65,7 @@
             </div>
             <div class="preset-tone">{{ p.tone }}</div>
             <div class="preset-text" :title="p.text">{{ p.text }}</div>
-            <audio v-if="p.audio_url" controls preload="none" :src="p.audio_url" @click.stop />
+            <audio v-if="p.audio_url" class="preset-audio" controls preload="none" :src="p.audio_url" @click.stop />
           </div>
           <div v-if="filteredPresets.length === 0" class="preset-empty">
             没有匹配「{{ presetSearch }}」的灵感模板
@@ -128,8 +128,8 @@
           <div class="form-footer">
             <label class="commit-row">
               <n-switch v-model:value="designForm.commit" />
-              <span>满意后存入标准样音库</span>
-              <span class="commit-tip">合成完成自动沉淀为【我的声音资产】并带上 ✓ 样音标识</span>
+              <span>生成后直接收藏</span>
+              <span class="commit-tip">关闭时结果只进入生成库，试听满意后再收藏到音色库</span>
             </label>
             <n-button type="primary" class="glow"
               :disabled="!designForm.name.trim() || !designForm.text.trim() || !modelStatus.design.ready || selectedPresetGenerated"
@@ -416,6 +416,13 @@ const goToAssets = () => {
   line-height: 1.4;
 }
 
+.preset-audio {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 32px;
+  margin-top: 8px;
+}
 .preset-text {
   font-size: 11px;
   color: var(--vf-text-3);

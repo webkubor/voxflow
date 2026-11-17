@@ -1559,13 +1559,33 @@ MEDIA_TYPES = {
 }
 
 
+_DESIGN_FILE_RE = re.compile(r"^\[设计\](.+?)_(?:[0-9a-f]{8}_)?\d{8}_\d{6}\.wav$")
+
+
+def _voice_for_audio(filename: str, personas: dict) -> Optional[dict]:
+    """生成文件关联的已入库音色。
+
+    新记录按 source_filename 精确关联；旧版本入库的设计音色没有这个字段，
+    只在文件名里的音色名与已注册音色的 key 或名称**完全相同**时视为关联，
+    这样历史样音也受收藏保护，又不会把相近名称误认成同一个音色。
+    """
+    for k, v in personas.items():
+        if isinstance(v, dict) and v.get("source_filename") == filename:
+            return {"key": k, "favorite": v.get("favorite", True), "name": v.get("name", k)}
+    m = _DESIGN_FILE_RE.match(filename)
+    if not m:
+        return None
+    for k, v in personas.items():
+        if isinstance(v, dict) and not v.get("source_filename") and m.group(1) in (k, v.get("name")):
+            return {"key": k, "favorite": v.get("favorite", True), "name": v.get("name", k), "legacy": True}
+    return None
+
+
 @app.get("/api/audio-list")
 def audio_list():
     """列出已生成的音频文件（TTS wav + Suno 音乐 mp3/m4a 统一管理）"""
     files = []
     personas = json.loads(PERSONAS_FILE.read_text(encoding="utf-8")) if PERSONAS_FILE.exists() else {}
-    linked = {v.get("source_filename"): {"key": k, "favorite": v.get("favorite", True), "name": v.get("name", k)}
-              for k, v in personas.items() if isinstance(v, dict) and v.get("source_filename")}
     if OUT_DIR.exists():
         for f in sorted(OUT_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
             if f.suffix.lower() in AUDIO_EXTS:
@@ -1579,7 +1599,7 @@ def audio_list():
                         "%Y-%m-%d %H:%M:%S"
                     ),
                     "kind": "tts",
-                    "voice": linked.get(f.name),
+                    "voice": _voice_for_audio(f.name, personas),
                 })
     return {"files": files}
 
@@ -1605,8 +1625,8 @@ def delete_audio(filename: str):
         if not path.exists():
             raise HTTPException(404, f"音频文件不存在: {safe}")
         personas = json.loads(PERSONAS_FILE.read_text(encoding="utf-8")) if PERSONAS_FILE.exists() else {}
-        if any(isinstance(v, dict) and v.get("source_filename") == safe and v.get("favorite", True)
-               for v in personas.values()):
+        voice = _voice_for_audio(safe, personas)
+        if voice and voice["favorite"]:
             raise HTTPException(409, "已收藏的音色不能删除，请先取消收藏")
         path.unlink()
     return {"ok": True}

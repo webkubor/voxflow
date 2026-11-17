@@ -114,6 +114,19 @@ class RegistrationTests(unittest.TestCase):
                 upsert_persona_mapping(root, "b", "丙", "z.wav", "原文", create_only=True, source_filename="s.wav")
             self.assertEqual((Path(root) / "configs" / "personas.json").read_bytes(), before)
 
+    def test_legacy_design_file_is_linked_by_exact_name_and_protected(self):
+        upsert_persona_mapping(str(BASE_DIR), "旧模板", "旧模板", "x.wav", "原文")
+        legacy = OUT_DIR / "[设计]旧模板_20261108_124127.wav"
+        similar = OUT_DIR / "[设计]旧模板2_20261108_124127.wav"
+        legacy.write_bytes(wav(1))
+        similar.write_bytes(wav(1))
+        files = {f["filename"]: f["voice"] for f in self.client.get("/api/audio-list").json()["files"]}
+        self.assertEqual(files[legacy.name]["key"], "旧模板")
+        self.assertIsNone(files[similar.name])
+        self.assertEqual(self.client.delete(f"/api/audio/{legacy.name}").status_code, 409)
+        self.assertTrue(legacy.exists())
+        self.assertEqual(self.client.delete(f"/api/audio/{similar.name}").status_code, 200)
+
     def test_generated_and_running_presets_cannot_be_submitted_twice(self):
         import web.app as service
         preset = {"voice_name": "模板A", "has_generated": True}
