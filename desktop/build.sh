@@ -32,6 +32,13 @@ DEST="$HOME/Applications/$APP_NAME"
 export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
 export PATH="$PATH:$(go env GOPATH)/bin"
 
+# 模块代理：默认的 proxy.golang.org 在国内经常卡住（2026-11-18 实测：go build
+# 在 "Generating the TypeScript client" 之后挂死 6 分钟，CPU 只用了 0.5 秒，
+# lsof 显示连着 198.18.0.161:443 不放行 —— 典型的连上了但不通）。
+# goproxy.cn 实测 0.4 秒返回，同样代码立刻编完。
+# 仍然保留 fallback，国内网络抖动时还能走官方源。
+export GOPROXY="${GOPROXY:-https://goproxy.cn,https://proxy.golang.org,direct}"
+
 command -v mygo >/dev/null || { echo "✗ 找不到 mygo，先装：go install github.com/egoist/mygo/cmd/mygo@latest"; exit 1; }
 
 # ── 1. 前端产物 ──────────────────────────────────────────
