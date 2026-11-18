@@ -73,7 +73,7 @@ def test_model_default_follows_backend():
     """
     from core import llm_client
 
-    assert llm_client.default_model("museav") == "deepseek-v4-flash"
+    assert llm_client.default_model("museav") == "museav-auto"
     assert llm_client.default_model("freellm") == "auto"
     # 显式环境变量一律优先
     old = llm_client._env_model
@@ -82,6 +82,22 @@ def test_model_default_follows_backend():
         assert llm_client.default_model("museav") == "my-model"
     finally:
         llm_client._env_model = old
+
+
+def test_retired_model_falls_back():
+    """中台把默认模型下线时（HTTP 410），要自动换到可用的那个，不能报「未连接」。
+
+    2026-11-18 真实事故：`deepseek-v4-flash` 被下线，文案/润色/风格标签全挂，
+    而顶栏只显示「未接」，看不出是模型下线。
+    """
+    from core import llm_client
+
+    err = ("Error code: 410 - {'error': '模型 deepseek-v4-flash 已下线', "
+           "'retired': True, 'available_models': ['museav-auto', 'MiniMax-M3.1-Flash']}")
+    assert llm_client._retired_model_names(err) == ["museav-auto", "MiniMax-M3.1-Flash"]
+    # 普通报错不该被当成「模型下线」，否则会无限换模型掩盖真实错误
+    assert llm_client._retired_model_names("connection refused") == []
+    assert llm_client._retired_model_names("Model not found") == []
 
 
 if __name__ == "__main__":

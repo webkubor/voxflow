@@ -44,9 +44,18 @@ _env_key = os.environ.get("VOXFLOW_LLM_API_KEY", "")
 # **没跑 run.sh 的人（Windows 没有 bash、或直接 `voice web`）会拿 auto 去打
 # 中台，AI 文案直接报错**，而错误信息只说模型不存在，看不出是启动方式的差别。
 # 配置的默认值不该藏在某个平台的启动脚本里。
-_MODEL_BY_SOURCE = {"museav": "deepseek-v4-flash", "museav-cli": "deepseek-v4-flash",
+#
+# 2026-11-18：中台把默认的 `deepseek-v4-flash` 下线了（HTTP 410），
+# 于是文案、润色、风格标签全部报「未连接」，而顶栏只显示「未接」，
+# 看不出是模型下线 —— 不是没登录、也不是没联网。下面 _retired_fallback
+# 让它自己认下线、换到可用模型上，别让人去改配置。
+_MODEL_BY_SOURCE = {"museav": "museav-auto", "museav-cli": "museav-auto",
                     "freellm": "auto"}
 _env_model = os.environ.get("VOXFLOW_LLM_MODEL", "")
+
+# 下线后回退用的候选（顺序即优先级）。`museav-auto` 让中台自己路由，最省事。
+_MUSEAV_FALLBACKS = ("museav-auto", "MiniMax-M3.1-Flash", "MiniMax-M2.7",
+                     "MiniMax-M2.5", "MiniMax-M2.1-highspeed")
 
 
 def default_model(source: str = "") -> str:
@@ -56,6 +65,58 @@ def default_model(source: str = "") -> str:
     if not source:
         source = resolve_backend()[2]
     return _MODEL_BY_SOURCE.get(source, "auto")
+
+
+def _retired_model_names(err: str) -> list[str]:
+    """从中台的 410 报错里把「可用模型」抠出来。抠不出来就返回空。
+
+    报错形如：
+    {'error': '模型 deepseek-v4-flash 已下线', 'retired': True,
+     'available_models': ['museav-auto', 'MiniMax-M3.1-Flash', ...]}
+    """
+    import ast as _ast
+    import re as _re
+
+    if "已下线" not in err and "retired" not in err:
+        return []
+    m = _re.search(r"available_models['\"]?\s*:\s*(\[[^\]]*\])", err)
+    if not m:
+        return []
+    try:
+        names = _ast.literal_eval(m.group(1))
+    except Exception:  # noqa: BLE001 - 报错格式变了也不要因此挂掉
+        return []
+    return [n for n in names if isinstance(n, str) and n]
+
+
+def _chat_with_model(system: str, user: str, model: str, *, action: str,
+                     temperature: float, max_tokens: int) -> str:
+    """指定模型名走一次真实调用。顺带记用量。"""
+    from core import obs  # 延迟导入，避免 CLI 早期加载时的循环依赖
+
+    client = _get_client()
+    t0 = time.perf_counter()
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "system", "content": system},
+                      {"role": "user", "content": user}],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    except Exception as e:
+        obs.meter("llm", action, qty=1, credits=0, ok=False,
+                  duration_ms=int((time.perf_counter() - t0) * 1000),
+                  model=model, error=str(e)[:120])
+        raise
+    usage = getattr(resp, "usage", None)
+    obs.meter("llm", action, qty=1,
+              credits=getattr(usage, "total_tokens", 0) or 0,
+              duration_ms=int((time.perf_counter() - t0) * 1000),
+              model=model,
+              prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+              completion_tokens=getattr(usage, "completion_tokens", 0) or 0)
+    return resp.choices[0].message.content.strip()
 
 
 def _museav_cli_creds() -> tuple[str, str]:
@@ -242,32 +303,30 @@ def _chat(system: str, user: str, *, action: str, temperature: float = 0.8,
     然后成本表上会缺一块，而且没有任何报错提示你缺了。
 
     token 用量取 resp.usage 的真实值，不是估的。走中台时它就是扣积分的依据。
-    """
-    from core import obs  # 延迟导入，避免 CLI 早期加载时的循环依赖
 
-    client = _get_client()
-    t0 = time.perf_counter()
+    2026-11-18：中台下线默认模型时会返回 410 + 可用模型清单，这里直接换到
+    能用的那个继续，不把「模型下线」当成「未连接」报给人。
+    """
+    model = default_model()
     try:
-        resp = client.chat.completions.create(
-            model=default_model(),
-            messages=[{"role": "system", "content": system},
-                      {"role": "user", "content": user}],
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-    except Exception as e:
-        obs.meter("llm", action, qty=1, credits=0, ok=False,
-                  duration_ms=int((time.perf_counter() - t0) * 1000),
-                  model=default_model(), error=str(e)[:120])
+        return _chat_with_model(system, user, model, action=action,
+                                temperature=temperature, max_tokens=max_tokens)
+    except Exception as e:  # noqa: BLE001 - 只有认出「模型下线」才回退
+        names = _retired_model_names(str(e))
+        if not names:
+            raise
+        # 按顺序试到一个能用的为止，并记住这次成功的模型名，
+        # 后续调用不再挨个撞 410。
+        candidates = [n for n in names if n != model] or list(_MUSEAV_FALLBACKS)
+        for cand in candidates:
+            try:
+                out = _chat_with_model(system, user, cand, action=action,
+                                       temperature=temperature, max_tokens=max_tokens)
+            except Exception:  # noqa: BLE001 - 这个候选不行就换下一个
+                continue
+            _MODEL_BY_SOURCE[resolve_backend()[2]] = cand
+            return out
         raise
-    usage = getattr(resp, "usage", None)
-    obs.meter("llm", action, qty=1,
-              credits=getattr(usage, "total_tokens", 0) or 0,
-              duration_ms=int((time.perf_counter() - t0) * 1000),
-              model=default_model(),
-              prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
-              completion_tokens=getattr(usage, "completion_tokens", 0) or 0)
-    return resp.choices[0].message.content.strip()
 
 
 def generate_script(prompt: str, word_count: Optional[int] = None) -> str:
