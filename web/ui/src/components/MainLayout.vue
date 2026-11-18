@@ -27,20 +27,20 @@
               <template #trigger>
                 <div
                   class="cap-chip"
-                  :class="[c.ready ? 'ok' : 'off', c.key === 'llm' && !c.ready ? 'clickable' : '']"
-                  @click="c.key === 'llm' && !c.ready && startMuseavLogin()"
+                  :class="[c.pending ? 'pending' : c.ready ? 'ok' : 'off', c.key === 'llm' && !c.ready && !c.pending ? 'clickable' : '']"
+                  @click="c.key === 'llm' && !c.ready && !c.pending && startMuseavLogin()"
                 >
                   <span class="cap-dot"></span>
                   <span class="cap-label">{{ c.label }}</span>
                   <span class="cap-what">{{ c.what }}</span>
-                  <span v-if="c.key === 'llm' && !c.ready" class="cap-cta">点此连接</span>
+                  <span v-if="c.key === 'llm' && !c.ready && !c.pending" class="cap-cta">点此连接</span>
                 </div>
               </template>
               <div class="cap-popover">
                 <div class="cap-pop-row">
                   <span class="cap-pop-k">状态</span>
                   <span class="cap-pop-v" :class="c.ready ? 'ok' : 'off'">
-                    {{ c.ready ? '● 已就绪' : '○ 未就绪' }}
+                    {{ c.pending ? '◌ 检测中' : c.ready ? '● 已就绪' : '○ 未就绪' }}
                   </span>
                 </div>
                 <div class="cap-pop-row">
@@ -725,14 +725,16 @@ const startMuseavLogin = async () => {
 }
 .cap-chip:hover { border-color: var(--vf-border-strong); }
 .cap-chip.ok .cap-dot { background: var(--vf-ok); }
-.cap-chip.off .cap-dot { background: var(--vf-text-3); }
+.cap-chip.off .cap-dot,
+.cap-chip.pending .cap-dot { background: var(--vf-text-3); }
 .cap-dot {
   width: 6px; height: 6px; border-radius: 50%;
   box-shadow: 0 0 0 2px currentColor;
   background: currentColor;
 }
 .cap-chip.ok { color: var(--vf-ok); }
-.cap-chip.off { color: var(--vf-text-3); }
+.cap-chip.off,
+.cap-chip.pending { color: var(--vf-text-3); }
 .cap-label {
   color: var(--vf-text-1);
   font-weight: 500;

@@ -49,6 +49,8 @@ interface CapBadge {
   ready?: boolean;
   detail?: string;
   num?: number;
+  /** 首次探测尚未返回：显示「检测中」，不给「点此连接」 */
+  pending?: boolean;
 }
 
 /** /api/capabilities 实际还会返回 museav，契约里没有，这里补上。 */
@@ -65,6 +67,9 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
     genLoading: false, polStyle: '', polLoading: false,
   });
   const error = ref('');
+  // 首次探测要 4~7 秒（并行打中台 + LLM 探活）。探测完成前 caps 是空的，
+  // 不能据此显示「未接 · 点此连接」—— 那会让人以为模型丢了（2026-11-18 实际发生）。
+  const capsLoaded = ref(false);
 
   /**
    * 顶栏能力标签。
@@ -97,7 +102,8 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
       },
       { key: 'llm', label: '文案', what: caps.value.llm?.model || '未接',
         ready: caps.value.llm?.ready, detail: caps.value.llm?.detail },
-    ].filter((b) => b.key !== 'museav' || b.ready);
+    ].filter((b) => b.key !== 'museav' || b.ready)
+      .map((b) => (capsLoaded.value ? b : { ...b, what: '检测中…', pending: true }));
   });
 
   /**
@@ -124,6 +130,8 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
     } catch (cause) {
       error.value = await toMessage(cause);
       throw cause;
+    } finally {
+      capsLoaded.value = true;
     }
   };
 
