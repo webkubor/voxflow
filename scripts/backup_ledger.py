@@ -42,6 +42,7 @@ import sys
 import tempfile
 import urllib.request
 import urllib.parse
+import urllib.error
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -96,6 +97,37 @@ def api(method: str, path: str, token: str, data: bytes | None = None,
     })
     with urllib.request.urlopen(req, timeout=120) as r:
         return json.loads(r.read().decode())
+
+
+def ensure_bucket(token: str) -> None:
+    """桶不存在就建一个。
+
+    2026-11-19 实测：`voxflow-backup` 这个桶**从来不存在过** ——
+    脚本只管往里 PUT，从不检查桶在不在；Cloudflare 对不存在的桶返回
+    404，于是每一次备份都在第一步就失败，而失败信息淹没在输出里没人看。
+    结果是「有备份脚本」但**从来没有一份备份存在**。
+
+    台账记的是上架记录、平台账号、播放量、收益 —— 丢了没法从别处重建
+    （平台后台只给当前值，不给历史）。这种「以为有、其实没有」比没有更危险，
+    所以这里在建桶这一步失败时明确报出来，而不是让它带着 404 一路走下去。
+    """
+    url = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/r2/buckets"
+    body = json.dumps({"name": BUCKET, "locationHint": "apac"}).encode()
+    req = urllib.request.Request(url, data=body, method="POST", headers={
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            resp = json.loads(r.read().decode())
+        if resp.get("success"):
+            print(f"✓ 已创建备份桶 {BUCKET}")
+    except urllib.error.HTTPError as e:
+        # 已存在时 Cloudflare 返回 8xxx 的业务错误，不是 HTTP 错误
+        detail = e.read().decode()[:200]
+        if "already exists" in detail:
+            return
+        raise RuntimeError(f"创建备份桶 {BUCKET} 失败：HTTP {e.code} {detail}") from e
 
 
 def put(token: str, key: str, data: bytes, content_type: str) -> None:
@@ -165,6 +197,7 @@ def main() -> None:
         return
 
     # ── 2. 上传：每个仓各自「快照 + latest」双写 ──
+    ensure_bucket(token)          # 桶不存在就建 —— 见 ensure_bucket 的说明
     for repo, _, _, _ in VAULT_REPOS:
         for prefix in (f"{repo}/{today}/", f"{repo}/latest/"):
             for key, data, ct, r in plan:
