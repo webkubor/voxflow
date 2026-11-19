@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -78,12 +79,31 @@ VAULT_REPOS = [
 ]
 
 
+def _cs_binary() -> str:
+    """找 cs 可执行文件。
+
+    2026-11-19：原来写死 dev/gitlab/webkubor/CortexOS，而本机在 dev/cs/CortexOS ——
+    定时任务一跑就 FileNotFoundError。按顺序探测，找不到就明说。
+    """
+    hit = shutil.which("cs")
+    if hit:
+        return hit
+    candidates = [Path.home() / "dev" / "cs" / "CortexOS" / "bin" / "cs",
+                  Path.home() / "dev" / "gitlab" / "webkubor" / "CortexOS" / "bin" / "cs"]
+    root = os.environ.get("CORTEXOS_ROOT")
+    if root:
+        candidates.insert(0, Path(root) / "bin" / "cs")
+    for cand in candidates:
+        if cand.is_file():
+            return str(cand)
+    raise RuntimeError("找不到 cs：设置 CF_API_TOKEN 环境变量，或设 CORTEXOS_ROOT 指向 CortexOS 目录")
+
+
 def api_token() -> str:
     env = os.environ.get("CF_API_TOKEN")
     if env:
         return env.strip()
-    cs = os.environ.get("CORTEXOS_ROOT", str(Path.home() / "dev/gitlab/webkubor/CortexOS")) + "/bin/cs"
-    out = subprocess.run([cs, "kyvault", "get", "secret://cloudflare/api-token"],
+    out = subprocess.run([_cs_binary(), "kyvault", "get", "secret://cloudflare/api-token"],
                          capture_output=True, text=True, check=True)
     return out.stdout.strip().splitlines()[-1].strip()
 
