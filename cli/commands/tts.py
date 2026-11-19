@@ -146,7 +146,7 @@ def tts_clone(
 
 def tts_design(
     voice_name: str = typer.Argument(
-        ..., help="新音色名称（将用于生成 voice_designs/ 和 personas.json 条目）"
+        ..., help="新音色名称（将用于生成 personas.json 条目）"
     ),
     text: str = typer.Argument(..., help="音色建模用的短句（45 字以内）"),
     tone: Optional[str] = typer.Option(

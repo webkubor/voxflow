@@ -148,7 +148,6 @@ torch.manual_seed(42)
   "demo_narrator": {
     "name": "温柔旁白",
     "ref": "assets/temp/当前参考_温柔旁白.wav",
-    "design": "voice_designs/demo_narrator.json",
     "instruction": "中性、清晰、平稳、不带明显情绪",
     "ref_text": "<转写后填>",
     "desc": "中性偏柔，语速平稳，适合纪录片和知识讲解"

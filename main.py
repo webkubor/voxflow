@@ -64,7 +64,6 @@ def main():
             voice_key = resolve_design_voice_key(cfg)
             temp_seed_path = processor.extract_voice_seed(final_path, voice_label, max_sec=10, skip_start_ms=0)
             ref_rel = os.path.relpath(temp_seed_path, BASE_DIR).replace("\\", "/")
-            design_rel = f"voice_designs/{voice_label}.json"
             persona_file = upsert_persona_mapping(
                 BASE_DIR,
                 persona_key=voice_key,

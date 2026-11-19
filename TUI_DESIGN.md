@@ -159,13 +159,17 @@ CLI 入口（typer）
   "shui_yan": {
     "name": "水烟",
     "ref": "assets/temp/当前参考_水烟.wav",
-    "design": "voice_designs/水烟.json",
     "instruction": "极致软糯，带有慵懒撒娇的气息",
+    "ref_text": "<参考音频里那句的逐字原文>",
     "created_at": "2026-03-15",
     "last_used": "2026-04-07"
   }
 }
 ```
+
+> 2026-11-19 起没有 `design` 字段：它曾指向 `voice_designs/<名字>.json`，
+> 而那个文件从未被真正创建 —— 一条指向不存在文件的悬空指针。
+> 音色配方就在这条记录里，`configs/personas.json` 是唯一真源。
 
 ---
 

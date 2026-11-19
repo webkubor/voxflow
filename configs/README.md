@@ -20,7 +20,7 @@
 - 0-1 阶段（克隆/设计）可不注册 `personas.json`；生产阶段（单角色生成/对话）需在 `personas.json` 注册角色。
 - `personas.json` 的 `ref` 必须遵循统一命名：`assets/reference_audio/<角色名>_参考.<wav|mp3|m4a>`。
 - `design` 建议填写 `voice_name`；默认先输出到 `out/`。
-- 当 `commit_to_temp=true` 时，设计结果会沉淀到 `assets/temp/`，并自动更新 `configs/personas.json` 和 `configs/generated/<voice_name>_generate.json`。
+- 当 `commit_to_temp=true` 时，设计结果会沉淀到 `assets/temp/`，并自动更新 `configs/personas.json`（音色数据的唯一真源）。
 - `design` 文案最多 45 字，可留空自动填默认短句。
 ## 发布账号台账
 

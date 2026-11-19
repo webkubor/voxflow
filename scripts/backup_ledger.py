@@ -56,7 +56,9 @@ KEEP_DAYS = 14
 DB_PATH = DATA_DIR / "voxflow.db"
 LIVE_CONFIGS = ["personas.json", "artist.json", "publish_accounts.json",
                 "scripts.json", "platform_accounts.json"]
-GENERATED_DIR = CONFIG_DIR / "generated"
+# 2026-11-19：删掉了 GENERATED_DIR（CONFIG_DIR / "generated"）。
+# 那是音色配方的第二份副本（只写不读）—— 真源是 configs/personas.json，
+# 上面 LIVE_CONFIGS 已经备份它了。
 
 # ── 两个仓的数据都要备 ──
 #
@@ -142,11 +144,9 @@ def main() -> None:
             f = cfg_dir / name
             if f.exists():
                 plan.append((f"configs/{name}", f.read_bytes(), "application/json", repo))
-        gen = cfg_dir / "generated"
-        if gen.is_dir():
-            for f in sorted(gen.glob("*.json")):
-                plan.append((f"configs/generated/{f.name}", f.read_bytes(),
-                             "application/json", repo))
+        # 2026-11-19：删掉了 configs/generated/ 的备份。
+        # 那是音色配方的第二份副本（只写不读），真源是 configs/personas.json
+        # —— 上面 LIVE_CONFIGS 已经备份它了，备一份没人读的副本没有意义。
         print(f"  {repo:<16} {len(db_bytes)/1e6:>6.2f} MB + "
               f"{sum(1 for k, _, _, r in plan if r == repo) - 1} configs")
 

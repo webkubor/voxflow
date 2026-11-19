@@ -1081,6 +1081,7 @@ def update_persona(key: str, name: str = Form(None), desc: str = Form(None), fav
     这里曾经是一百行：改名要连带重命名 assets/temp 下的样音、
     voice_designs 下的配方，还要挡重名、失败回滚。原因是当时读音频靠
     `当前参考_{名字}.wav` 拼路径 —— 名字成了路径的一部分，改名自然要动文件。
+    （voice_designs 那份配方 2026-11-19 已移除，配方真源是 personas.json。）
 
     根子上的修法不是把重命名写得更严密，是**不让名字参与路径**：
     参考音频的路径本来就完整存在 ref 字段里（注册音色时写进去的），
