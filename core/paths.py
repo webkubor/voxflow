@@ -70,7 +70,11 @@ OUT_DIR = DATA_DIR / "out"                 # 合成产物：可再生
 MUSIC_DIR = OUT_DIR / "music"              # Suno 下载的歌
 PROMO_DIR = OUT_DIR / "promo"              # 宣推短视频产物 (reel-kit 合成)
 PUBLISH_DIR = DATA_DIR / "publish"         # 发布物料：平台规定的结构
-DESIGNS_DIR = DATA_DIR / "voice_designs"   # 音色设计配方
+
+# 2026-11-19：删掉了 DESIGNS_DIR（DATA_DIR / "voice_designs"）。
+# 音色配方曾在这里存第二份，而整个项目没有一处代码读它 —— 目录至今是空的，
+# personas.json 里的 design 字段因此成了指向不存在文件的悬空指针。
+# 配方真源是 configs/personas.json（见 PERSONAS_FILE）。
 
 # TTS 模型分两代，**当前运行时只用 MLX 那一代**：
 #   models/      PyTorch 原生 —— 2026-09-14 迁移前的下载，**2026-09-29 已删除**。
@@ -102,7 +106,7 @@ BRANDING_DIR = PROJECT_DIR / "assets" / "branding"             # logo
 # 数据搬家之后它拿数据根去找代码目录，报「缺失 6 个目录」。
 # 同一份清单存在两处，就一定会在某次改动后对不上。
 DATA_SUBDIRS = ["configs", "assets", "assets/temp", "assets/reference_audio",
-                "out", "out/music", "out/promo", "publish", "voice_designs",
+                "out", "out/music", "out/promo", "publish",
                 "models", "models-mlx"]
 CODE_SUBDIRS = ["cli", "core", "web", "qwen_tts", "configs", "configs/presets", "scripts"]
 

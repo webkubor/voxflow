@@ -13,7 +13,9 @@ from core import voice_library as vlib
 from core.paths import DATA_DIR as BASE_DIR, PROJECT_DIR  # 数据根 / 代码根
 from cli.output import JSON_OPTION, emit, fail, fail_from, progress_console
 
-GENERATED_DIR = BASE_DIR / "configs" / "generated"
+# 2026-11-19：删掉了 GENERATED_DIR（BASE_DIR / "configs" / "generated"）。
+# 它指向一个「只写不读」的目录 —— 音色配方曾被在这里存第二份，而整个项目
+# 没有一处代码读它。配方真源是 configs/personas.json。
 
 console = Console()
 app = typer.Typer(help="设计模板：列出（含是否已生成）、查看、生成（每个模板只生成一次）、批量。")

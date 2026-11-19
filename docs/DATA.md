@@ -92,8 +92,28 @@ out/
 publish/
   templates/          平台的 Excel 模板（收在项目里，不放 ~/Downloads——那儿随时会被清理）
   YYYYMMDD/<歌名>/    发布物料：Audio/ 歌词/ Cover/
-voice_designs/        音色设计配方（personas.json 的 design 指这里）
+configs/
+  personas.json       音色库 —— **音色数据的唯一真源**
+archive/
+  legacy/             历史归档（v0.11.0 移走的 demo 数据，独有资产）
+  migration-backup/   数据收敛前的备份
 ```
+
+## 音色数据只有一份
+
+`configs/personas.json` 是音色数据的**唯一**真源。一个音色的名字、参考音频
+路径、逐字原文、语气配方，全在这条记录里。
+
+历史上这份事实曾被写到三个地方：`configs/generated/<名字>_generate.json`、
+`voice_designs/<名字>.json`、以及 personas.json 里一个指向
+`voice_designs/` 的 `design` 字段。三处里只有 personas.json 被读取，
+另外两处只写不读 —— 而 `voice_designs/` 目录**至今从未被真正创建过**，
+于是 personas.json 里的 `design` 字段是个悬空指针：指向不存在的路径，
+让人以为「配方丢了」，实际上配方一直好好待在 personas.json 里。
+
+2026-11-19 起这两处副本已删除，写入路径一并收敛（见
+`scripts/migrate_single_source_voices.py`）。`voice doctor` 里有一条
+「音色数据单一真源」检查专门盯这件事：副本目录或悬空指针一出现就报 WARN。
 
 **目录可以重排，资产不能删。** 觉得目录不合理就转移资产，不是删掉重来。
 

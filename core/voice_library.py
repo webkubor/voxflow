@@ -435,7 +435,6 @@ def save_design(filename: str, voice_name: str, instruction: str = "", ref_text:
             str(data_dir), persona_key=voice_key, persona_name=name,
             ref_rel=os.path.relpath(str(seed), str(data_dir)).replace("\\", "/"),
             ref_text=ref_text,
-            design_rel=f"voice_designs/{sanitize_path_component(name, fallback='未命名音色')}.json",
             instruction=instruction or "", create_only=True,
             source_filename=src.name, favorite=True,
         )

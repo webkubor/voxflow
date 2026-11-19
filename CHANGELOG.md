@@ -4,6 +4,40 @@
 
 ## [Unreleased]
 
+### 🧹 音色数据收敛成单一真源（personas.json）
+
+**问题**：同一个音色的事实被写在三个地方，其中两个**只写不读**：
+
+| 位置 | 内容 | 读取方 |
+|---|---|---|
+| `configs/personas.json` | name / ref / ref_text / instruction | 全部业务逻辑 |
+| `configs/generated/<名字>_generate.json` | 同一音色的生成模板 | **无** |
+| `voice_designs/<名字>.json` | 同一音色的设计配方 | **无**（且文件从未被创建） |
+
+而 personas.json 每条记录还带一个 `design` 字段指向 `voice_designs/<名字>.json`
+—— 一个**从来不存在**的路径。悬空指针比没有更糟：它让人以为「配方丢了」，
+实际上配方一直好好待在 personas.json 里。
+
+**改动**：
+- `write_generation_json` 不再落盘（模板改为从 personas.json 导出即得）
+- `log_generation_metadata` 不再写 `voice_designs/`
+- `upsert_persona_mapping` 去掉 `design_rel` 参数，不再写 design 字段
+- 删掉 `DESIGNS_DIR`、`GENERATED_DIR`（定义了但一次都没被用过）
+- `voice doctor` 新增「音色数据单一真源」检查：副本目录或悬空指针出现即 WARN
+- 新增 `scripts/migrate_single_source_voices.py`（默认 dry-run）收敛磁盘数据
+
+**数据处置**（不删任何独有资产）：
+- `configs/generated/` 2 个副本 → 删（内容已在 personas.json）
+- `voice_designs/` 空目录 → 删
+- `_demo_archive/` 77 个文件 → 移到 `archive/legacy/`（MD5 逐文件比对，与主区**零重复**，是独有资产）
+- `assets/temp/` 2 个孤儿参考音频 → 移到 `archive/legacy/orphans/`（附找回说明）
+- `configs/personas.json.bak-20261108` → 移到 `archive/legacy/configs/`（里面只剩已归档的 demo_narrator）
+- 原文件备份在 `archive/migration-backup/`
+
+**验证**：9 个测试文件全 PASS；`voice voice list` 正常；真实克隆出片
+`[克隆]朝朝-元气阳光_20261119_110823.wav`（2.02 秒 / 24 kHz / 峰值 0.989）；
+doctor 新检查 PASS，并做了反向验证（手动造一个副本目录 → 正确报 WARN）。
+
 ### 🐛 顶栏能力徽章：探测期间不再误报「文案 未接 · 点此连接」
 
 **现象**：打开 App 后头 4~7 秒，顶栏「语音」「文案」两个徽章都显示未接，

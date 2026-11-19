@@ -298,6 +298,61 @@ def check_personas():
     return _ok(f"音色库就绪（{count} 个音色）")
 
 
+# ── 9b. 音色数据单一真源 ─────────────────────────────────────
+#
+# 2026-11-19 起 personas.json 是音色数据的**唯一**真源。
+# 这条检查专门盯「分叉」——同一个音色的事实被写到第二个地方。
+#
+# 为什么要盯：2026-11-19 审计发现历史上有三处副本
+# （personas.json / configs/generated/*.json / voice_designs/*.json），
+# 其中两处只写不读，而 personas.json 里的 design 字段还指向一个
+# 从未存在的文件。这类分叉不会报错，只会在某天让人以为「数据丢了」。
+
+@register
+def check_single_source_voices():
+    data_dir = Path(BASE_DIR)
+
+    # 1. 已废弃的副本目录不该再出现
+    forks = []
+    for rel, label in (
+        ("configs/generated", "生成模板副本（只写不读）"),
+        ("voice_designs", "设计配方副本（只写不读）"),
+    ):
+        d = data_dir / rel
+        if d.is_dir():
+            n = len([p for p in d.rglob("*") if p.is_file()])
+            if n:
+                forks.append(f"{rel}/（{n} 个文件，{label}）")
+            else:
+                forks.append(f"{rel}/（空目录，{label}）")
+
+    # 2. personas.json 里不该再有 design 悬空指针
+    persona_file = data_dir / "configs" / "personas.json"
+    dangling = []
+    if persona_file.exists():
+        try:
+            data = json.loads(persona_file.read_text(encoding="utf-8"))
+            for key, val in data.items():
+                if isinstance(val, dict) and val.get("design"):
+                    rel = val["design"]
+                    if not (data_dir / rel).exists():
+                        dangling.append(f"{key} → {rel}")
+        except Exception:  # noqa: BLE001 —— 解析失败由 check_personas 报
+            pass
+
+    if forks or dangling:
+        detail_parts = []
+        if forks:
+            detail_parts.append("多出来的副本目录: " + "、".join(forks))
+        if dangling:
+            detail_parts.append("design 悬空指针: " + "、".join(dangling[:3]))
+        return _warn(
+            "音色数据出现分叉（personas.json 应是唯一真源）",
+            " ｜ ".join(detail_parts) + " ｜ 跑 scripts/migrate_single_source_voices.py 收敛",
+        )
+    return _ok("音色数据单一真源", "personas.json 是唯一真源，无副本目录")
+
+
 # ── 10. CLI 入口 ────────────────────────────────────────────
 
 @register

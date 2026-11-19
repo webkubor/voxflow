@@ -70,13 +70,12 @@ def main():
                 persona_key=voice_key,
                 persona_name=voice_label,
                 ref_rel=ref_rel,
-                design_rel=design_rel,
                 instruction=f"{cfg.get('tone', '')} {cfg.get('emotion', '')}".strip(),
             )
             gen_json_path = write_generation_json(BASE_DIR, voice_key, source="voice_design")
             print(f"🧬 [标准样音] 已沉淀：{os.path.relpath(temp_seed_path, BASE_DIR)}")
             print(f"🧭 [角色映射] 已更新：{os.path.relpath(persona_file, BASE_DIR)} -> {voice_key}")
-            print(f"🧾 [生成配置] 已输出：{os.path.relpath(gen_json_path, BASE_DIR)}")
+            print(f"🧾 [生成配置] 模板：\n{gen_json_path}")
         else:
             print("📝 [待确认] 设计结果已输出到 out/。确认满意后，将 commit_to_temp 设为 true 再执行一次即可落库。")
 

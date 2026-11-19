@@ -374,24 +374,23 @@ def log_generation_metadata(config, audio_path, base_dir):
         persona_cn = resolve_output_persona_label(config)
     
     # --- 分支 A：音色设计配方 ---
+    #
+    # **2026-11-19 起不再落盘。**
+    #
+    # 这里原本往 `voice_designs/{persona}.json` 写一份设计配方，而
+    # `upsert_persona_mapping` 又往 `configs/personas.json` 写同一份事实
+    # （instruction / ref）。两份内容重叠、路径不同、没有任何读取方
+    # —— 结果是 personas.json 里的 `design` 字段指向一个**从来不存在**
+    # 的文件（voice_designs/ 目录至今是空的），一个悬空指针比没有还糟：
+    # 它让人以为「配方丢了」，实际上配方一直好好待在 personas.json 里。
+    #
+    # 音色配方现在只有一份真源：configs/personas.json。
+    # 这个分支保留是为了不打乱调用方的流程，实际动作是打印。
     if mode_type == "VoiceDesign" and not is_dial:
-        design_dir = os.path.join(base_dir, "voice_designs")
-        os.makedirs(design_dir, exist_ok=True)
-        design_file = os.path.join(design_dir, f"{persona_cn}.json")
-        
-        design_data = {
-            "persona": persona_cn,
-            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "model": f"{config.get('model_size', '1.7B')}-VoiceDesign",
-            "instruction_formula": {
-                "full_prompt": config.get("tone", ""),
-                "emotion": config.get("emotion", "")
-            },
-            "reference_seed_audio": f"{persona_cn}_参考.wav"
-        }
-        with open(design_file, 'w', encoding='utf-8') as f:
-            json.dump(design_data, f, ensure_ascii=False, indent=2)
-        print(f"🧪 [设计配方] 已归档：voice_designs/{persona_cn}.json")
+        print(
+            f"🧪 [设计配方] 已归入 configs/personas.json（唯一真源）：{persona_cn}"
+            f" · tone={config.get('tone', '')} emotion={config.get('emotion', '')}"
+        )
 
     # --- 分支 B：生成历史日志 ---
     log_dir = os.path.join(base_dir, "assets/production")
@@ -425,14 +424,31 @@ def log_generation_metadata(config, audio_path, base_dir):
 def write_generation_json(base_dir: str, persona: str, source: str = "design") -> str:
     """生成“可直接用于后续生成”的 JSON 配置模板。
 
-    该文件用于标准化后续生产流程：
-    - 克隆/对话统一基于 assets/temp 中的标准样音
-    - 文案、语气、情绪可按任务修改
+    **2026-11-19 起这个函数不再写文件 —— 它保留的是「生成模板」这件事本身，
+    但不再另存一份配方。**
+
+    ## 为什么不再写文件
+
+    这个文件是音色数据的**第二份副本**，内容全部来自 `configs/personas.json`
+    （persona / standard_seed 对应 ref / title 对应 name）。而整个项目里
+    **没有任何代码读它**：唯一提到 `configs/generated` 的地方是
+    `cli/commands/preset.py` 里的 `GENERATED_DIR` 常量，而那个常量
+    定义了之后一次都没被用过。
+
+    也就是说：一个音色的事实被写在两个地方，其中一个只有写没有读 ——
+    这就是典型的「数据分叉」。personas.json 后来改名或删除音色时，
+    configs/generated/ 里的旧文件还在那儿，看起来像「模型还在」，
+    实际上早就没人认它了。
+
+    音色数据的唯一真源是 `configs/personas.json`（见 core/paths.py
+    的 PERSONAS_FILE）。要拿一份「可直接用于后续生成」的模板，
+    从 personas.json 导出即可，不需要在磁盘上养第二份。
+
+    保留这个函数是为了不打断 main.py 的调用链：它现在把模板内容
+    **打印出来**，调用方拿到的还是同样的信息，只是不再落盘。
     """
     persona_key = str(persona or "").strip() or "unknown_persona"
     persona_cn = sanitize_path_component(get_persona_cn(persona_key), fallback="未命名角色")
-    gen_dir = os.path.join(base_dir, "configs", "generated")
-    os.makedirs(gen_dir, exist_ok=True)
 
     payload = {
         "type": "single",
@@ -451,11 +467,8 @@ def write_generation_json(base_dir: str, persona: str, source: str = "design") -
         }
     }
 
-    file_name = f"{sanitize_path_component(persona_key, fallback='unknown_persona')}_generate.json"
-    file_path = os.path.join(gen_dir, file_name)
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
-    return file_path
+    # 不落盘：模板从 personas.json 导出即可（见 docstring）。
+    return json.dumps(payload, ensure_ascii=False, indent=2)
 
 def upsert_persona_mapping(
     base_dir: str,
@@ -463,7 +476,6 @@ def upsert_persona_mapping(
     persona_name: str,
     ref_rel: str,
     ref_text: str,
-    design_rel: str = "",
     instruction: str = "",
     create_only: bool = False,
     source_filename: str = "",
@@ -473,6 +485,11 @@ def upsert_persona_mapping(
 
     设计模式完成后调用该函数，把角色映射直接指向 temp 标准样音，
     确保后续单人生成/对话统一走 temp 参考链路。
+
+    **2026-11-19 起去掉了 design_rel 参数。**
+    它指向的 voice_designs/*.json 从未被真正创建，是个悬空指针；
+    音色配方就在这条记录里（instruction / ref_text / ref）。
+    留着这个参数，就等于留着一个把数据分叉出去的入口。
     """
     if not isinstance(ref_text, str) or not 1 <= len(ref_text.strip()) <= 1000:
         raise ValueError("参考音频必须附带对应原文（ref_text，1–1000 字）")
@@ -503,8 +520,15 @@ def upsert_persona_mapping(
             if not isinstance(current, dict):
                 current = {}
             current.update(name=name, ref=_normalize_ref_path(ref_rel), ref_text=ref_text.strip())
-            if design_rel:
-                current["design"] = _normalize_ref_path(design_rel)
+            # **2026-11-19 起不再写 design 字段。**
+            #
+            # 它指向 `voice_designs/{名字}.json` —— 那个文件从来没被真正创建过
+            # （voice_designs/ 目录至今是空的），所以这条字段是个**悬空指针**：
+            # 读它的人拿到一个不存在的路径，只能得出「配方丢了」的结论。
+            #
+            # 音色配方（instruction / ref_text / ref）就写在 personas.json 这一条里，
+            # 一条记录读完，不需要跳到第二个文件。旧记录里已有的 design 字段
+            # 由迁移脚本清掉（见 scripts/migrate_single_source_voices.py）。
             if instruction.strip():
                 current["instruction"] = instruction.strip()
             if source_filename:
