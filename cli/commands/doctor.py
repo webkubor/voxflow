@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import typer
@@ -351,6 +352,34 @@ def check_single_source_voices():
             " ｜ ".join(detail_parts) + " ｜ 跑 scripts/migrate_single_source_voices.py 收敛",
         )
     return _ok("音色数据单一真源", "personas.json 是唯一真源，无副本目录")
+
+
+# ── 9c. 备份新鲜度 ─────────────────────────────────────────
+#
+# 2026-11-19 实测：备份脚本存在、桶不存在，于是「有备份脚本」但
+# 从来没有一份备份存在。脚本修好后又发现没有定时任务，只能手动跑。
+# 这条检查盯的就是「备份是不是真的在发生」——
+# 看 launchd 日志里最近一次成功时间，超过 48 小时没成功就报 WARN。
+
+@register
+def check_backup_freshness():
+    log = Path(BASE_DIR) / "logs" / "backup-ledger.log"
+    if not log.is_file():
+        return _warn("备份未运行过",
+                     "launchd: ~/Library/LaunchAgents/com.voxflow.backup-ledger.plist（每天 08:30）")
+
+    latest = None
+    for line in log.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if "已备份" in line and "快照 + latest" in line:
+            latest = line.strip()
+    if not latest:
+        return _warn("备份日志里没有成功记录", str(log))
+
+    age_h = (time.time() - log.stat().st_mtime) / 3600
+    if age_h > 48:
+        return _warn(f"备份已 {age_h:.0f} 小时未更新",
+                     f"最近: {latest} ｜ 检查 launchctl list | grep voxflow")
+    return _ok("备份正常", latest)
 
 
 # ── 10. CLI 入口 ────────────────────────────────────────────
