@@ -4,6 +4,24 @@
 
 ## [Unreleased]
 
+### 🔧 备份从「从未成功过」修成每天自动跑
+
+**问题**：`scripts/backup_ledger.py` 往 R2 的 `voxflow-backup` 桶上传，
+但那个桶**从来不存在** —— Cloudflare 对不存在的桶返回 404，每次备份第一步就失败。
+「有备份脚本」但从来没有一份备份存在，而台账记的是上架记录、平台账号、
+播放量、收益（平台后台只给当前值，不给历史），丢了没法重建。
+
+**改动**：
+- `ensure_bucket()`：桶不存在就自动建（APAC），已存在则跳过
+- `cs` 路径自动探测（原来写死 `dev/gitlab/...`，本机在 `dev/cs/...`，定时任务必炸）
+- **定时任务落地**：`~/Library/LaunchAgents/com.voxflow.backup-ledger.plist`
+  （launchd 每天 08:30，休眠唤醒补跑；这台机器 crontab 注释明确记录过
+  cron 休眠不跑、唤醒不补跑，之前因此全部清理过，不能再走 cron）
+- `voice doctor` 新增「备份正常」检查：超 48 小时没成功就 WARN，给出排查命令
+
+**验证**：launchctl kickstart 实跑：`✓ 已备份 2026-11-19 快照 + latest（2 个仓，共 5 个对象）`；
+doctor 15 项全 PASS。
+
 ### 🧹 音色数据收敛成单一真源（personas.json）
 
 **问题**：同一个音色的事实被写在三个地方，其中两个**只写不读**：
