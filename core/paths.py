@@ -68,7 +68,6 @@ TEMP_DIR = ASSETS_DIR / "temp"             # 当前参考样音
 REF_DIR = ASSETS_DIR / "reference_audio"   # 原始录音素材
 OUT_DIR = DATA_DIR / "out"                 # 合成产物：可再生
 MUSIC_DIR = OUT_DIR / "music"              # Suno 下载的歌
-PROMO_DIR = OUT_DIR / "promo"              # 宣推短视频产物 (reel-kit 合成)
 PUBLISH_DIR = DATA_DIR / "publish"         # 发布物料：平台规定的结构
 
 # 2026-11-19：删掉了 DESIGNS_DIR（DATA_DIR / "voice_designs"）。
@@ -106,7 +105,7 @@ BRANDING_DIR = PROJECT_DIR / "assets" / "branding"             # logo
 # 数据搬家之后它拿数据根去找代码目录，报「缺失 6 个目录」。
 # 同一份清单存在两处，就一定会在某次改动后对不上。
 DATA_SUBDIRS = ["configs", "assets", "assets/temp", "assets/reference_audio",
-                "out", "out/music", "out/promo", "publish",
+                "out", "out/music", "publish",
                 "models", "models-mlx"]
 CODE_SUBDIRS = ["cli", "core", "web", "qwen_tts", "configs", "configs/presets", "scripts"]
 
